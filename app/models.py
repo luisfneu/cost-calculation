@@ -66,6 +66,7 @@ class Peca(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
+    tipo = db.Column(db.String(60), default="")      # tipo de peça (vestido, blusa, saia...)
     colecao = db.Column(db.String(120), default="")  # coleção a que a peça pertence
     tags = db.Column(db.String(255), default="")     # etiquetas livres, separadas por vírgula
     descricao = db.Column(db.Text, default="")
@@ -83,8 +84,12 @@ class Peca(db.Model):
     preco_etiqueta = db.Column(db.Float, nullable=False, default=0.0)
     # Preço promocional (de/por). Quando > 0, vira o preço efetivo de venda.
     preco_promocional = db.Column(db.Float, nullable=False, default=0.0)
-    # Código/SKU para busca e leitura (código de barras/QR).
-    sku = db.Column(db.String(40), default="")
+    # Código/SKU único, gerado automaticamente no padrão SH-00000000 (id da peça).
+    sku = db.Column(db.String(40), unique=True, default="")
+
+    @staticmethod
+    def gerar_sku(peca_id) -> str:
+        return f"SH-{peca_id:08d}"
 
     # Dados de envio (para cálculo de frete): peso em gramas e dimensões em cm.
     peso_g = db.Column(db.Float, nullable=False, default=0.0)
@@ -968,3 +973,25 @@ class FotoPeca(db.Model):
     arquivo = db.Column(db.String(255), nullable=False)
 
     peca = db.relationship("Peca", back_populates="fotos")
+
+
+class Colecao(db.Model):
+    """Coleção do atelier: agrupa peças e tem identidade própria (slogan, foto)."""
+
+    __tablename__ = "colecoes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), unique=True, nullable=False)
+    slogan = db.Column(db.String(255), default="")
+    foto = db.Column(db.String(255))  # arquivo em static/uploads
+    ativa = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    @staticmethod
+    def por_nome(nome):
+        """Busca uma coleção pelo nome (case-insensitive). None se não houver."""
+        if not nome:
+            return None
+        return Colecao.query.filter(
+            db.func.lower(Colecao.nome) == nome.strip().lower()
+        ).first()

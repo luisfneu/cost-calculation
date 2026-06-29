@@ -28,6 +28,7 @@ from ..models import (
     TAMANHOS,
     Auditoria,
     Cliente,
+    Colecao,
     Cupom,
     Despesa,
     EstoquePeca,
@@ -62,7 +63,9 @@ def vitrine():
     grupos = {}
     for p in pecas:
         grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
-    return render_template("vitrine.html", grupos=grupos)
+    # Foto principal de cada coleção cadastrada (para compor o carrossel das peças).
+    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
+    return render_template("vitrine.html", grupos=grupos, colecao_fotos=colecao_fotos)
 
 
 @bp.route("/insumos")
@@ -170,6 +173,21 @@ def movimentar_estoque(insumo_id):
     return redirect(url_for("main.listar_insumos"))
 
 
+@bp.route("/insumos/<int:insumo_id>/movimentos")
+def movimentos_insumo(insumo_id):
+    """Fragmento HTML (para modal) com a movimentação do insumo, paginada em 15."""
+    insumo = Insumo.query.get_or_404(insumo_id)
+    movs = (
+        MovimentoEstoque.query.filter_by(insumo_id=insumo_id)
+        .order_by(MovimentoEstoque.criado_em.desc()).all()
+    )
+    movs, pagina, total_paginas = _paginar(movs, por_pagina=15)
+    return render_template(
+        "_movimentos_insumo.html", insumo=insumo, movs=movs,
+        pagina=pagina, total_paginas=total_paginas,
+    )
+
+
 @bp.route("/pecas")
 def listar_pecas():
     q = request.args.get("q", "").strip()
@@ -188,12 +206,17 @@ def form_peca(peca_id=None):
     peca = Peca.query.get_or_404(peca_id) if peca_id else None
     insumos = Insumo.query.order_by(Insumo.nome).all()
     is_nova = peca is None
+    # Coleções ativas (select) + tipos já usados (datalist).
+    colecoes = [c.nome for c in Colecao.query.filter_by(ativa=True).order_by(Colecao.nome).all()]
+    tipos = [r[0] for r in db.session.query(Peca.tipo)
+             .filter(Peca.tipo.isnot(None), Peca.tipo != "")
+             .distinct().order_by(Peca.tipo).all()]
 
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         if not nome:
             flash("O nome da peça é obrigatório.", "erro")
-            return render_template("peca_form.html", peca=peca, insumos=insumos)
+            return render_template("peca_form.html", peca=peca, insumos=insumos, colecoes=colecoes, tipos=tipos)
 
         # Na criação: lê os insumos selecionados para montar a ficha técnica.
         # (Não dá baixa no estoque — isso só acontece ao Produzir.)
@@ -225,6 +248,7 @@ def form_peca(peca_id=None):
             return _to_float(request.form.get(campo)) if campo in request.form else atual
 
         peca.nome = nome
+        peca.tipo = _txt("tipo", peca.tipo)
         peca.colecao = _txt("colecao", peca.colecao)
         peca.tags = _txt("tags", peca.tags)
         peca.descricao = _txt("descricao", peca.descricao)
@@ -233,7 +257,6 @@ def form_peca(peca_id=None):
         peca.margem_percentual = _num("margem_percentual", peca.margem_percentual)
         peca.preco_etiqueta = _num("preco_etiqueta", peca.preco_etiqueta)
         peca.preco_promocional = _num("preco_promocional", peca.preco_promocional)
-        peca.sku = _txt("sku", peca.sku)
         peca.peso_g = _num("peso_g", peca.peso_g)
         peca.altura_cm = _num("altura_cm", peca.altura_cm)
         peca.largura_cm = _num("largura_cm", peca.largura_cm)
@@ -259,11 +282,15 @@ def form_peca(peca_id=None):
             for insumo, qtd in linhas:
                 db.session.add(PecaInsumo(peca=peca, insumo=insumo, quantidade=qtd))
 
+        # SKU único gerado a partir do id (padrão SH-00000000). Garante o id via flush.
+        db.session.flush()
+        peca.sku = Peca.gerar_sku(peca.id)
+
         db.session.commit()
         flash("Peça salva. Use 'Produzir' para fabricar e dar entrada no estoque.", "sucesso")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
-    return render_template("peca_form.html", peca=peca, insumos=insumos)
+    return render_template("peca_form.html", peca=peca, insumos=insumos, colecoes=colecoes, tipos=tipos)
 
 
 @bp.route("/pecas/<int:peca_id>")
@@ -480,7 +507,12 @@ def vitrine_publica():
     grupos = {}
     for p in pecas:
         grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
-    return render_template("vitrine_publica.html", grupos=grupos)
+    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
+    whatsapp = Parametro.obter("whatsapp", "")
+    return render_template(
+        "vitrine_publica.html", grupos=grupos,
+        colecao_fotos=colecao_fotos, whatsapp=whatsapp,
+    )
 
 
 @bp.route("/kits")
@@ -535,3 +567,89 @@ def excluir_kit(kit_id):
     db.session.commit()
     flash("Kit excluído.", "sucesso")
     return redirect(url_for("main.listar_kits"))
+
+
+# --------------------------------------------------------------------------- #
+# Coleções
+# --------------------------------------------------------------------------- #
+@bp.route("/colecoes")
+def listar_colecoes():
+    colecoes = Colecao.query.order_by(Colecao.nome).all()
+    # Quantidade de peças por coleção (casada pelo nome, case-insensitive).
+    contagem = {}
+    for c in colecoes:
+        contagem[c.id] = Peca.query.filter(
+            db.func.lower(Peca.colecao) == c.nome.lower()
+        ).count()
+    return render_template("colecoes.html", colecoes=colecoes, contagem=contagem)
+
+
+@bp.route("/colecoes/nova", methods=["GET", "POST"])
+@bp.route("/colecoes/<int:colecao_id>/editar", methods=["GET", "POST"])
+def form_colecao(colecao_id=None):
+    colecao = Colecao.query.get_or_404(colecao_id) if colecao_id else None
+
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        if not nome:
+            flash("O nome da coleção é obrigatório.", "erro")
+            return render_template("colecao_form.html", colecao=colecao)
+
+        # Nome único (case-insensitive), ignorando a própria coleção em edição.
+        existente = Colecao.por_nome(nome)
+        if existente and (colecao is None or existente.id != colecao.id):
+            flash("Já existe uma coleção com esse nome.", "erro")
+            return render_template("colecao_form.html", colecao=colecao)
+
+        nome_antigo = colecao.nome if colecao else None
+        if colecao is None:
+            colecao = Colecao()
+            db.session.add(colecao)
+
+        colecao.nome = nome
+        colecao.slogan = request.form.get("slogan", "").strip()
+        colecao.ativa = request.form.get("ativa") == "on"
+
+        nova_foto = _salvar_foto(request.files.get("foto"))
+        if nova_foto:
+            _remover_foto(colecao.foto)
+            colecao.foto = nova_foto
+
+        # Se o nome mudou, mantém as peças vinculadas (casadas por nome).
+        if nome_antigo and nome_antigo != nome:
+            Peca.query.filter(
+                db.func.lower(Peca.colecao) == nome_antigo.lower()
+            ).update({Peca.colecao: nome}, synchronize_session=False)
+
+        db.session.commit()
+        flash("Coleção salva com sucesso.", "sucesso")
+        return redirect(url_for("main.listar_colecoes"))
+
+    return render_template("colecao_form.html", colecao=colecao)
+
+
+@bp.route("/colecoes/<int:colecao_id>/toggle", methods=["POST"])
+def toggle_colecao(colecao_id):
+    colecao = Colecao.query.get_or_404(colecao_id)
+    colecao.ativa = not colecao.ativa
+    db.session.commit()
+    return redirect(url_for("main.listar_colecoes"))
+
+
+@bp.route("/colecoes/<int:colecao_id>/pecas")
+def pecas_colecao(colecao_id):
+    colecao = Colecao.query.get_or_404(colecao_id)
+    pecas = Peca.query.filter(
+        db.func.lower(Peca.colecao) == colecao.nome.lower()
+    ).order_by(Peca.nome).all()
+    return render_template("colecao_pecas.html", colecao=colecao, pecas=pecas, tamanhos_glob=TAMANHOS)
+
+
+@bp.route("/colecoes/<int:colecao_id>/excluir", methods=["POST"])
+def excluir_colecao(colecao_id):
+    colecao = Colecao.query.get_or_404(colecao_id)
+    _remover_foto(colecao.foto)
+    db.session.delete(colecao)
+    db.session.commit()
+    flash("Coleção excluída. As peças mantêm o nome da coleção.", "sucesso")
+    return redirect(url_for("main.listar_colecoes"))

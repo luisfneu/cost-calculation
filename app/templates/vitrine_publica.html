@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="pt-br">
+{% import "_macros.html" as ui %}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,16 +9,14 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   <style>
     body { background: #b89a78; font-family: 'Jost', sans-serif; }
     .topo { text-align: center; padding: 28px 0 10px; }
     .mono { font-family: 'Parisienne', cursive; font-size: 3rem; color: #fff; line-height: 1; }
     .marca { font-family: 'Cormorant Garamond', serif; letter-spacing: 5px; text-transform: uppercase; color: #fff; }
-    .colecao { font-family: 'Cormorant Garamond', serif; color: #fff; border-bottom: 1px solid rgba(255,255,255,.4); padding-bottom: 4px; margin: 24px 0 14px; }
-    .card { border: none; border-radius: 10px; overflow: hidden; }
-    .foto { width: 100%; height: 300px; object-fit: cover; background: #f7f1e6; }
-    .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; }
-    .preco { color: #b08a4f; font-weight: 500; }
+    .colecao-tit { font-family: 'Cormorant Garamond', serif; color: #fff; border-bottom: 1px solid rgba(255,255,255,.4); padding-bottom: 4px; margin: 24px 0 14px; }
   </style>
 </head>
 <body>
@@ -30,22 +29,27 @@
     {% set total = grupos.values() | map('length') | sum %}
     {% if total %}
       {% for colecao, pecas in grupos.items() %}
-        <h2 class="h5 colecao">{{ colecao }}</h2>
+        <h2 class="h5 colecao-tit">{{ colecao }}</h2>
         <div class="row g-4 mb-4">
           {% for peca in pecas %}
           <div class="col-6 col-md-4 col-lg-3">
             <div class="card h-100 text-center">
-              {% if peca.foto %}
-                <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto" alt="{{ peca.nome }}">
-              {% else %}
-                <div class="foto d-flex align-items-center justify-content-center text-muted">sem foto</div>
-              {% endif %}
+              {{ ui.carrossel(peca, colecao_fotos) }}
               <div class="card-body">
-                <div class="nome">{{ peca.nome }}</div>
+                <div class="vitrine-nome">{{ peca.nome }}</div>
                 {% if peca.em_promocao %}
-                  <div class="preco"><s style="color:#b7b0a5;font-weight:400">{{ peca.preco_base | moeda }}</s> {{ peca.preco_etiqueta_efetivo | moeda }}</div>
+                  <div class="vitrine-preco">
+                    <span class="preco-de">{{ peca.preco_base | moeda }}</span>
+                    <span class="preco-por">{{ peca.preco_etiqueta_efetivo | moeda }}</span>
+                    <span class="badge-promo">promo</span>
+                  </div>
                 {% else %}
-                  <div class="preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+                  <div class="vitrine-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+                {% endif %}
+                {% if whatsapp %}
+                  {% set msg = 'Olá! Tenho interesse na peça ' ~ peca.nome ~ ' (' ~ (peca.preco_etiqueta_efetivo | moeda) ~ ').' %}
+                  <a href="https://wa.me/{{ whatsapp }}?text={{ msg | urlencode }}" target="_blank"
+                     class="btn btn-success btn-sm mt-2"><i class="bi bi-whatsapp"></i> Pedir por WhatsApp</a>
                 {% endif %}
               </div>
             </div>
@@ -57,5 +61,6 @@
       <p class="text-center text-white">Em breve novas peças.</p>
     {% endif %}
   </div>
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
 </body>
 </html>

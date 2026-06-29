@@ -6,50 +6,47 @@
   <a href="{{ url_for('main.form_insumo') }}" class="btn btn-primary">+ Novo insumo</a>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-  <div class="col-md-4">
-    <input type="text" name="q" class="form-control" placeholder="Buscar por nome" value="{{ q }}">
-  </div>
-  <div class="col-md-3">
-    <select name="tipo" class="form-select" onchange="this.form.submit()">
-      <option value="">Todos os tipos</option>
-      <option value="materia_prima" {{ 'selected' if tipo == 'materia_prima' }}>Matéria-prima</option>
-      <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
-    </select>
-  </div>
-  <div class="col-md-3">
-    <select name="situacao" class="form-select" onchange="this.form.submit()">
-      <option value="">Todas as situações</option>
-      <option value="ativo" {{ 'selected' if situacao == 'ativo' }}>Ocultar inativos</option>
-      <option value="baixo" {{ 'selected' if situacao == 'baixo' }}>Estoque baixo</option>
-      <option value="inativo" {{ 'selected' if situacao == 'inativo' }}>Somente inativos</option>
-    </select>
-  </div>
-  <div class="col-md-2 d-flex gap-1">
-    <button class="btn btn-outline-secondary flex-grow-1">Buscar</button>
-    {% if q or tipo or situacao %}<a href="{{ url_for('main.listar_insumos') }}" class="btn btn-outline-secondary">×</a>{% endif %}
-  </div>
-</form>
+<div class="card bg-white">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h2 class="h5 mb-0">Estoque de insumos</h2>
+      <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+        <input type="text" name="q" class="form-control form-control-sm" placeholder="nome" value="{{ q }}" style="width:150px">
+        <select name="tipo" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+          <option value="">Todos os tipos</option>
+          <option value="materia_prima" {{ 'selected' if tipo == 'materia_prima' }}>Matéria-prima</option>
+          <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
+        </select>
+        <select name="situacao" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+          <option value="">Todas as situações</option>
+          <option value="ativo" {{ 'selected' if situacao == 'ativo' }}>Ocultar inativos</option>
+          <option value="baixo" {{ 'selected' if situacao == 'baixo' }}>Estoque baixo</option>
+          <option value="inativo" {{ 'selected' if situacao == 'inativo' }}>Somente inativos</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+        {% if q or tipo or situacao %}<a href="{{ url_for('main.listar_insumos') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+      </form>
+    </div>
 
-{% if insumos %}
-<div class="table-responsive">
-<table class="table table-hover align-middle bg-white">
-  <thead class="table-light">
-    <tr>
-      <th></th><th>Insumo</th><th>Custo médio</th><th>Estoque</th><th>Mín.</th>
-      <th style="width:34%">Movimentar estoque</th><th></th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for insumo in insumos %}
-    <tr class="{{ 'table-warning' if insumo.estoque_baixo }}">
-      <td>
-        {% if insumo.foto %}
-          <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb" alt="">
-        {% else %}
-          <div class="foto-thumb sem-foto">—</div>
-        {% endif %}
-      </td>
+    {% if insumos %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th></th><th>Insumo</th><th>Custo médio</th><th>Estoque</th><th>Mín.</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for insumo in insumos %}
+        {% set zerado = insumo.estoque <= 0 %}
+        <tr class="{{ 'linha-zerada' if zerado else ('table-warning' if insumo.estoque_baixo) }}">
+          <td>
+            {% if insumo.foto %}
+              <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb" alt="">
+            {% else %}
+              <div class="foto-thumb sem-foto">—</div>
+            {% endif %}
+          </td>
       <td>
         <strong>{{ insumo.nome }}</strong>
         <span class="badge {{ 'badge-embalagem' if insumo.tipo == 'embalagem' else 'badge-materia' }}">{{ insumo.tipo_label }}</span>
@@ -59,22 +56,22 @@
       <td>{{ insumo.custo_unitario | moeda }}</td>
       <td>
         {{ insumo.estoque | num }} {{ insumo.unidade }}
-        {% if insumo.estoque_baixo %}<span class="badge text-bg-danger">baixo</span>{% endif %}
+        {% if zerado %}<span class="badge text-bg-secondary">zerado</span>
+        {% elif insumo.estoque_baixo %}<span class="badge text-bg-danger">baixo</span>{% endif %}
       </td>
       <td>{{ insumo.estoque_minimo | num }}</td>
-      <td>
-        <form method="post" action="{{ url_for('main.movimentar_estoque', insumo_id=insumo.id) }}" class="d-flex gap-1">
-          <select name="tipo" class="form-select form-select-sm" style="width:auto">
-            <option value="entrada">Entrada</option>
-            <option value="saida">Saída</option>
-          </select>
-          <input type="text" name="quantidade" class="form-control form-control-sm" placeholder="qtd" style="width:70px">
-          <input type="text" name="custo_unitario" class="form-control form-control-sm" placeholder="custo un. (compra)" style="width:110px" title="Custo unitário na compra — atualiza o custo médio (só entrada)">
-          <input type="text" name="observacao" class="form-control form-control-sm" placeholder="obs">
-          <button class="btn btn-sm btn-outline-primary">OK</button>
-        </form>
-      </td>
       <td class="text-end text-nowrap">
+        <button type="button" class="btn btn-sm btn-outline-primary btn-mov"
+                data-bs-toggle="modal" data-bs-target="#modal-mov"
+                data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}"
+                data-unidade="{{ insumo.unidade }}" data-estoque="{{ insumo.estoque | num }}">
+          <i class="bi bi-arrow-down-up"></i> Movimentar
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary btn-hist"
+                data-bs-toggle="modal" data-bs-target="#modal-hist"
+                data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}" title="Ver movimentação">
+          <i class="bi bi-clock-history"></i>
+        </button>
         <a href="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
         <form method="post" action="{{ url_for('main.excluir_insumo', insumo_id=insumo.id) }}" class="d-inline"
               onsubmit="return confirm('Excluir este insumo?')">
@@ -83,10 +80,121 @@
       </td>
     </tr>
   {% endfor %}
-  </tbody>
-</table>
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    {{ ui.vazio('bi-box-seam', 'Nenhum insumo cadastrado', 'Comece cadastrando tecidos, etiquetas, linhas, botões etc.', '+ Novo insumo', url_for('main.form_insumo')) }}
+    {% endif %}
+  </div>
 </div>
-{% else %}
-{{ ui.vazio('bi-box-seam', 'Nenhum insumo cadastrado', 'Comece cadastrando tecidos, etiquetas, linhas, botões etc.', '+ Novo insumo', url_for('main.form_insumo')) }}
-{% endif %}
+
+<!-- Modal: movimentar estoque -->
+<div class="modal fade" id="modal-mov" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" id="form-mov" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Movimentar estoque</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3"><strong id="mov-nome"></strong> <span class="text-muted small" id="mov-estoque"></span></p>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label small">Tipo</label>
+            <select name="tipo" id="mov-tipo" class="form-select">
+              <option value="entrada">Entrada</option>
+              <option value="saida">Saída</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Quantidade</label>
+            <input type="text" name="quantidade" class="form-control" placeholder="0" autocomplete="off">
+          </div>
+          <div class="col-12" id="mov-custo-campo">
+            <label class="form-label small">Custo unitário na compra (opcional)</label>
+            <input type="text" name="custo_unitario" class="form-control" placeholder="0,00"
+                   title="Atualiza o custo médio do insumo (só entrada)">
+          </div>
+          <div class="col-12">
+            <label class="form-label small">Observação</label>
+            <input type="text" name="observacao" class="form-control" placeholder="Ex.: compra fornecedor X">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary">Registrar movimento</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const modal = document.getElementById('modal-mov');
+    if (!modal) return;
+    const form = document.getElementById('form-mov');
+    const nome = document.getElementById('mov-nome');
+    const estoque = document.getElementById('mov-estoque');
+    const tipo = document.getElementById('mov-tipo');
+    const custoCampo = document.getElementById('mov-custo-campo');
+
+    function alternarCusto() {
+      custoCampo.style.display = tipo.value === 'entrada' ? '' : 'none';
+    }
+    tipo.addEventListener('change', alternarCusto);
+
+    modal.addEventListener('show.bs.modal', function (ev) {
+      const b = ev.relatedTarget;
+      form.action = `/insumos/${b.dataset.id}/movimentar`;
+      nome.textContent = b.dataset.nome;
+      estoque.textContent = `· estoque atual: ${b.dataset.estoque} ${b.dataset.unidade}`;
+      // Limpa os campos manualmente (form.reset() apagaria o token CSRF injetado).
+      form.querySelectorAll('input[name="quantidade"],input[name="custo_unitario"],input[name="observacao"]')
+        .forEach(i => i.value = '');
+      tipo.value = 'entrada';
+      alternarCusto();
+    });
+  })();
+</script>
+
+<!-- Modal: histórico de movimentação (carregado via fetch, paginado 15) -->
+<div class="modal fade" id="modal-hist" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Movimentação · <span id="hist-nome"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="hist-body">
+        <div class="text-center text-muted py-4">Carregando…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const modal = document.getElementById('modal-hist');
+    if (!modal) return;
+    const body = document.getElementById('hist-body');
+    const nome = document.getElementById('hist-nome');
+
+    function carregar(url) {
+      body.innerHTML = '<div class="text-center text-muted py-4">Carregando…</div>';
+      fetch(url).then(r => r.text()).then(html => { body.innerHTML = html; });
+    }
+    modal.addEventListener('show.bs.modal', function (ev) {
+      const b = ev.relatedTarget;
+      nome.textContent = b.dataset.nome;
+      carregar(`/insumos/${b.dataset.id}/movimentos`);
+    });
+    // Paginação dentro do modal (intercepta os links do fragmento).
+    body.addEventListener('click', function (e) {
+      const a = e.target.closest('a.hist-page');
+      if (a) { e.preventDefault(); carregar(a.getAttribute('href')); }
+    });
+  })();
+</script>
 {% endblock %}

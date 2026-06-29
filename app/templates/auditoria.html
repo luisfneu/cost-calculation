@@ -8,9 +8,35 @@
 </div>
 <p class="text-muted">Registro de acessos e ações de venda e estoque (mais recentes primeiro).</p>
 
+<form method="get" class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <select name="usuario" class="form-select" onchange="this.form.submit()">
+      <option value="">Todos os usuários</option>
+      {% for u in usuarios %}<option value="{{ u }}" {{ 'selected' if f_usuario == u }}>{{ u }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-6 col-md-3">
+    <select name="acao" class="form-select" onchange="this.form.submit()">
+      <option value="">Todas as ações</option>
+      {% for a in acoes %}<option value="{{ a }}" {{ 'selected' if f_acao == a }}>{{ a }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-6 col-md-2">
+    <input type="date" name="de" class="form-control" value="{{ de }}" title="De">
+  </div>
+  <div class="col-6 col-md-2">
+    <input type="date" name="ate" class="form-control" value="{{ ate }}" title="Até">
+  </div>
+  <div class="col-md-2 d-flex gap-1">
+    <button class="btn btn-outline-secondary flex-grow-1">Filtrar</button>
+    {% if f_usuario or f_acao or de or ate %}<a href="{{ url_for('main.auditoria') }}" class="btn btn-outline-secondary">×</a>{% endif %}
+  </div>
+</form>
+
 <div class="card bg-white">
   <div class="card-body">
     {% if registros %}
+    <div class="d-flex justify-content-end mb-2">{{ ui.por_pagina() }}</div>
     <table class="table table-sm align-middle tabela-cartao">
       <thead class="table-light"><tr><th style="width:170px">Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead>
       <tbody>
@@ -27,6 +53,7 @@
       {% endfor %}
       </tbody>
     </table>
+    {% include "_paginacao.html" %}
     {% else %}
     {{ ui.vazio('bi-shield-check', 'Nenhum registro de auditoria ainda', 'Ações de login, vendas e estoque aparecem aqui.') }}
     {% endif %}

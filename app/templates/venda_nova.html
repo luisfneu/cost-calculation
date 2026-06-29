@@ -421,6 +421,14 @@
   // ---- Pagamentos ----
   const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto'];
   const corpoPag = document.getElementById('linhas-pagamentos');
+  // Parcelas e taxa % só fazem sentido no cartão (crédito/débito).
+  function ehCartao(forma) { return /Cart[ãa]o/.test(forma || ''); }
+  function aplicarCartao(tr) {
+    const cartao = ehCartao(tr.querySelector('.pg-forma').value);
+    tr.querySelectorAll('.pg-parc, .pg-taxa').forEach(i => i.style.display = cartao ? '' : 'none');
+    tr.querySelectorAll('.pg-na').forEach(s => s.style.display = cartao ? 'none' : '');
+    if (!cartao) { tr.querySelector('.pg-parc').value = '1'; tr.querySelector('.pg-taxa').value = '0'; }
+  }
   function linhaPagamento(forma, valor) {
     const tr = document.createElement('tr');
     tr.className = 'pag-row';
@@ -428,10 +436,11 @@
       <td><select name="pag_forma" class="form-select form-select-sm pg-forma">
         ${FORMAS.map(f => `<option ${f===forma?'selected':''}>${f}</option>`).join('')}</select></td>
       <td><input type="text" name="pag_valor" class="form-control form-control-sm pg-valor" value="${valor||''}" style="width:110px"></td>
-      <td><input type="text" name="pag_parcelas" class="form-control form-control-sm pg-parc" value="1" style="width:60px"></td>
-      <td><input type="text" name="pag_taxa" class="form-control form-control-sm pg-taxa" value="0" style="width:70px"></td>
+      <td><input type="text" name="pag_parcelas" class="form-control form-control-sm pg-parc" value="1" style="width:60px"><span class="pg-na text-muted">—</span></td>
+      <td><input type="text" name="pag_taxa" class="form-control form-control-sm pg-taxa" value="0" style="width:70px"><span class="pg-na text-muted">—</span></td>
       <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
     corpoPag.appendChild(tr);
+    aplicarCartao(tr);
   }
   function recalcPagamentos() {
     if (!corpoPag) return;  // venda não tem pagamento no cadastro
@@ -468,7 +477,10 @@
       recalcPagamentos();
     });
     corpoPag.addEventListener('input', recalcPagamentos);
-    corpoPag.addEventListener('change', recalcPagamentos);
+    corpoPag.addEventListener('change', e => {
+      if (e.target.classList.contains('pg-forma')) aplicarCartao(e.target.closest('.pag-row'));
+      recalcPagamentos();
+    });
     corpoPag.addEventListener('click', e => { if (e.target.classList.contains('pg-rem')) { e.target.closest('.pag-row').remove(); recalcPagamentos(); } });
     document.getElementById('in-recebido').addEventListener('input', recalcPagamentos);
   }

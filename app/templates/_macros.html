@@ -7,3 +7,48 @@
   {% if link_texto %}<div class="acao"><a href="{{ link_url }}" class="btn btn-primary btn-sm">{{ link_texto }}</a></div>{% endif %}
 </div>
 {% endmacro %}
+
+{# Seletor "itens por página". Lê o valor atual da URL e preserva os demais filtros. #}
+{% macro por_pagina(opcoes=[15, 30, 60]) %}
+  {% set atual = request.args.get('por_pagina', '15') | int %}
+<form method="get" class="d-flex align-items-center gap-1 mb-0">
+  {% for k, v in request.args.items() %}
+    {% if k not in ['por_pagina', 'pagina'] %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}
+  {% endfor %}
+  <label class="small text-muted mb-0">por página</label>
+  <select name="por_pagina" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+    {% for o in opcoes %}<option value="{{ o }}" {{ 'selected' if atual == o }}>{{ o }}</option>{% endfor %}
+    <option value="0" {{ 'selected' if atual == 0 }}>Todos</option>
+  </select>
+</form>
+{% endmacro %}
+
+{# Carrossel de fotos de uma peça (foto principal + galeria + foto da coleção). #}
+{% macro carrossel(peca, colecao_fotos={}, img_class='vitrine-foto') %}
+  {% set imgs = [] %}
+  {% if peca.foto %}{% set _ = imgs.append(peca.foto) %}{% endif %}
+  {% for f in peca.fotos %}{% set _ = imgs.append(f.arquivo) %}{% endfor %}
+  {% set col_foto = colecao_fotos.get(peca.colecao) %}
+  {% if col_foto and col_foto not in imgs %}{% set _ = imgs.append(col_foto) %}{% endif %}
+  {% if imgs | length > 1 %}
+    <div id="carousel-p{{ peca.id }}" class="carousel slide vitrine-carrossel" data-bs-ride="false">
+      <div class="carousel-inner">
+        {% for img in imgs %}
+        <div class="carousel-item {{ 'active' if loop.first }}">
+          <img src="{{ url_for('static', filename='uploads/' ~ img) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}">
+          {% if col_foto and img == col_foto %}<span class="carrossel-tag">coleção</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <button class="carousel-control-prev" type="button" data-bs-target="#carousel-p{{ peca.id }}" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span></button>
+      <button class="carousel-control-next" type="button" data-bs-target="#carousel-p{{ peca.id }}" data-bs-slide="next"><span class="carousel-control-next-icon"></span></button>
+      <div class="carousel-indicators">
+        {% for img in imgs %}<button type="button" data-bs-target="#carousel-p{{ peca.id }}" data-bs-slide-to="{{ loop.index0 }}" class="{{ 'active' if loop.first }}"></button>{% endfor %}
+      </div>
+    </div>
+  {% elif imgs | length == 1 %}
+    <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}">
+  {% else %}
+    <div class="{{ img_class }} sem-foto d-flex align-items-center justify-content-center text-muted">sem foto</div>
+  {% endif %}
+{% endmacro %}

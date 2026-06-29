@@ -14,16 +14,24 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
       <h2 class="h5 mb-0">Histórico de vendas</h2>
       <div class="d-flex gap-2">
-        <form method="get" class="d-flex gap-2">
+        <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
           <input type="text" name="q" class="form-control form-control-sm" placeholder="cliente" value="{{ q }}" style="width:140px">
+          <div class="d-flex align-items-center gap-1">
+            <label class="small text-muted mb-0">de</label>
+            <input type="date" name="de" class="form-control form-control-sm" value="{{ de }}" style="width:auto">
+            <label class="small text-muted mb-0">até</label>
+            <input type="date" name="ate" class="form-control form-control-sm" value="{{ ate }}" style="width:auto">
+          </div>
           <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
             <option value="">Todas</option>
             <option value="pago" {{ 'selected' if status == 'pago' }}>Pagas</option>
             <option value="pendente" {{ 'selected' if status == 'pendente' }}>Pendentes</option>
           </select>
           <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+          {% if q or de or ate or status %}<a href="{{ url_for('main.listar_vendas') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
         </form>
         <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ CSV</a>
+        {{ ui.por_pagina() }}
       </div>
     </div>
     {% if vendas %}
