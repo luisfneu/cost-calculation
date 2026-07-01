@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Vendas</h1>
+
+<!-- Registrar venda -->
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Registrar venda</h2>
+    {% if pecas %}
+    <form method="post" action="{{ url_for('main.registrar_venda') }}" class="row g-3 align-items-end" id="form-venda">
+      <div class="col-md-4">
+        <label class="form-label">Peça</label>
+        <select name="peca_id" id="sel-peca" class="form-select" required>
+          <option value="">Selecione...</option>
+          {% for p in pecas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Tamanho</label>
+        <select name="tamanho" id="sel-tamanho" class="form-select" required>
+          <option value="">—</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Quantidade</label>
+        <input type="text" name="quantidade" id="in-qtd" class="form-control" value="1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Preço unit. (R$)</label>
+        <input type="text" name="preco_unitario" id="in-preco" class="form-control" placeholder="0,00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Frete (R$) <span class="text-muted">opc.</span></label>
+        <input type="text" name="frete" id="in-frete" class="form-control" placeholder="0,00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">% Marketplace <span class="text-muted">opc.</span></label>
+        <input type="text" name="marketplace_pct" id="in-mkt" class="form-control" placeholder="Ex.: 12">
+      </div>
+      <div class="col-md-6">
+        <div class="small text-muted" id="resumo-venda">Selecione a peça e o tamanho.</div>
+      </div>
+      <div class="col-md-4 text-end">
+        <button class="btn btn-primary">Registrar venda</button>
+      </div>
+    </form>
+
+    <script id="dados-pecas" type="application/json">
+      [{% for p in pecas %}{"id": {{ p.id }}, "preco": {{ p.preco_venda }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho | tojson }}}{{ "," if not loop.last }}{% endfor %}]
+    </script>
+    {% else %}
+    <p class="text-muted">Cadastre e produza peças antes de registrar vendas.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Totais -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card text-bg-secondary"><div class="card-body">
+    <div class="h4 mb-0">{{ totais.qtd | num }}</div><div class="small">Peças vendidas</div></div></div></div>
+  <div class="col-md-3"><div class="card text-bg-primary"><div class="card-body">
+    <div class="h4 mb-0">{{ totais.receita | moeda }}</div><div class="small">Receita</div></div></div></div>
+  <div class="col-md-3"><div class="card text-bg-danger"><div class="card-body">
+    <div class="h4 mb-0">{{ totais.custo | moeda }}</div><div class="small">Custos (prod.+frete+mkt)</div></div></div></div>
+  <div class="col-md-3"><div class="card text-bg-success"><div class="card-body">
+    <div class="h4 mb-0">{{ totais.lucro | moeda }}</div><div class="small">Lucro</div></div></div></div>
+</div>
+
+<!-- Histórico de vendas -->
+<div class="card bg-white">
+  <div class="card-body">
+    <h2 class="h5">Histórico de vendas</h2>
+    {% if vendas %}
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <thead class="table-light">
+        <tr><th>Data</th><th>Peça</th><th>Tam.</th><th>Qtd</th><th>Preço un.</th>
+            <th>Receita</th><th>Frete</th><th>Comissão</th><th>Custo total</th><th>Lucro</th></tr>
+      </thead>
+      <tbody>
+      {% for v in vendas %}
+        <tr>
+          <td class="small text-muted">{{ v.criado_em | dt }}</td>
+          <td>{{ v.peca.nome }}</td>
+          <td><span class="badge text-bg-light">{{ v.tamanho }}</span></td>
+          <td>{{ v.quantidade | num }}</td>
+          <td>{{ v.preco_unitario | moeda }}</td>
+          <td class="fw-bold">{{ v.receita | moeda }}</td>
+          <td>{{ v.frete | moeda }}</td>
+          <td>{{ v.comissao_marketplace | moeda }}{% if v.marketplace_pct %} <span class="small text-muted">({{ v.marketplace_pct | num }}%)</span>{% endif %}</td>
+          <td>{{ v.custo_total | moeda }}</td>
+          <td class="fw-bold {{ 'text-success' if v.lucro >= 0 else 'text-danger' }}">{{ v.lucro | moeda }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="text-muted">Nenhuma venda registrada ainda.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if pecas %}
+<script>
+(function () {
+  const pecas = JSON.parse(document.getElementById('dados-pecas').textContent);
+  const selPeca = document.getElementById('sel-peca');
+  const selTam = document.getElementById('sel-tamanho');
+  const inPreco = document.getElementById('in-preco');
+  const inQtd = document.getElementById('in-qtd');
+  const inFrete = document.getElementById('in-frete');
+  const inMkt = document.getElementById('in-mkt');
+  const resumo = document.getElementById('resumo-venda');
+  const brl = v => 'R$ ' + (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const num = t => t ? (parseFloat(String(t).replace('.', '').replace(',', '.')) || 0) : 0;
+
+  function pecaAtual() { return pecas.find(p => String(p.id) === selPeca.value); }
+
+  function preencherTamanhos() {
+    const p = pecaAtual();
+    selTam.innerHTML = '<option value="">—</option>';
+    if (!p) return;
+    Object.entries(p.estoque).forEach(([tam, q]) => {
+      if (q > 0) selTam.innerHTML += `<option value="${tam}">${tam} (estoque: ${q})</option>`;
+    });
+    if (inPreco.value === '') inPreco.value = String(p.preco.toFixed(2)).replace('.', ',');
+  }
+
+  function calcular() {
+    const p = pecaAtual();
+    if (!p || !selTam.value) { resumo.textContent = 'Selecione a peça e o tamanho.'; return; }
+    const qtd = num(inQtd.value), preco = num(inPreco.value), frete = num(inFrete.value), mkt = num(inMkt.value);
+    const receita = preco * qtd;
+    const comissao = receita * mkt / 100;
+    const custo = p.custo * qtd + frete + comissao;
+    const lucro = receita - custo;
+    resumo.innerHTML = `Receita <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
+      `Lucro <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b>`;
+  }
+
+  selPeca.addEventListener('change', () => { preencherTamanhos(); calcular(); });
+  [selTam, inQtd, inPreco, inFrete, inMkt].forEach(el => el.addEventListener('input', calcular));
+})();
+</script>
+{% endif %}
+{% endblock %}

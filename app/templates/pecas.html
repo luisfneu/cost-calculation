@@ -9,7 +9,7 @@
 <div class="table-responsive">
 <table class="table table-hover align-middle bg-white">
   <thead class="table-light">
-    <tr><th></th><th>Peça</th><th>Custo total</th><th>Margem</th><th>Preço de venda</th><th>Lucro</th><th></th></tr>
+    <tr><th></th><th>Peça</th><th>Estoque</th><th>Custo total</th><th>Margem</th><th>Preço de venda</th><th>Lucro</th><th></th></tr>
   </thead>
   <tbody>
   {% for peca in pecas %}
@@ -22,6 +22,14 @@
         {% endif %}
       </td>
       <td><strong>{{ peca.nome }}</strong></td>
+      <td>
+        <span class="fw-bold">{{ peca.estoque_total | num }}</span>
+        <div class="small text-muted">
+          {%- for t in ['PP','P','M','G','GG'] if peca.estoque_por_tamanho[t] > 0 -%}
+            {{ t }}:{{ peca.estoque_por_tamanho[t] | num }}{{ ' ' }}
+          {%- endfor -%}
+        </div>
+      </td>
       <td>{{ peca.custo_total | moeda }}</td>
       <td>{{ peca.margem_percentual | num }}%</td>
       <td class="fw-bold text-success">{{ peca.preco_venda | moeda }}</td>
