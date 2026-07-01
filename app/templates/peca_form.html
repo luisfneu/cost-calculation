@@ -39,20 +39,11 @@
   </div>
 
   {% if not peca %}
-  {# ---- Seleção de insumos + produção (somente na criação) ---- #}
+  {# ---- Ficha técnica: insumos por peça (somente na criação) ---- #}
   <hr class="my-4">
-  <h2 class="h5">Insumos gastos na peça</h2>
+  <h2 class="h5">Insumos da peça (ficha técnica)</h2>
+  <p class="text-muted small">Defina a quantidade de cada insumo <strong>por peça</strong>. A baixa no estoque só acontece ao <strong>Produzir</strong>.</p>
   {% if insumos %}
-  <div class="row align-items-end mb-3">
-    <div class="col-sm-4">
-      <label class="form-label">Quantas peças produzir agora?</label>
-      <input type="text" name="quantidade_pecas" id="qtd-pecas" class="form-control" value="1">
-    </div>
-    <div class="col-sm-8">
-      <small class="text-muted">A baixa no estoque = quantidade por peça × nº de peças produzidas.</small>
-    </div>
-  </div>
-
   <table class="table align-middle" id="tabela-insumos">
     <thead class="table-light">
       <tr><th style="width:50%">Insumo</th><th>Qtd por peça</th><th>Subtotal/peça</th><th></th></tr>

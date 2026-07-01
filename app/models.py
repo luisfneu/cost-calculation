@@ -12,6 +12,9 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+# Tamanhos padrão para o estoque das peças.
+TAMANHOS = ["PP", "P", "M", "G", "GG"]
+
 
 def _agora():
     return datetime.now(timezone.utc)
@@ -74,6 +77,23 @@ class Peca(db.Model):
     insumos = db.relationship(
         "PecaInsumo", back_populates="peca", cascade="all, delete-orphan"
     )
+    estoques = db.relationship(
+        "EstoquePeca", back_populates="peca", cascade="all, delete-orphan"
+    )
+    movimentos = db.relationship(
+        "MovimentoPeca", back_populates="peca", cascade="all, delete-orphan"
+    )
+
+    # ----- Estoque por tamanho -----
+    @property
+    def estoque_por_tamanho(self) -> dict:
+        """Dicionário {tamanho: quantidade} cobrindo todos os TAMANHOS."""
+        atual = {e.tamanho: e.quantidade for e in self.estoques}
+        return {t: atual.get(t, 0.0) for t in TAMANHOS}
+
+    @property
+    def estoque_total(self) -> float:
+        return sum(e.quantidade for e in self.estoques)
 
     # ----- Cálculos -----
     @property
@@ -117,6 +137,73 @@ class PecaInsumo(db.Model):
     @property
     def subtotal(self) -> float:
         return self.quantidade * self.insumo.custo_unitario
+
+
+class EstoquePeca(db.Model):
+    """Quantidade em estoque de uma peça em um determinado tamanho."""
+
+    __tablename__ = "estoque_pecas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    tamanho = db.Column(db.String(5), nullable=False)  # PP, P, M, G, GG
+    quantidade = db.Column(db.Float, nullable=False, default=0.0)
+
+    peca = db.relationship("Peca", back_populates="estoques")
+
+
+class MovimentoPeca(db.Model):
+    """Histórico de movimentações do estoque de peças (produção, ajuste, saída)."""
+
+    __tablename__ = "movimentos_peca"
+
+    id = db.Column(db.Integer, primary_key=True)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    tamanho = db.Column(db.String(5), nullable=False)
+    tipo = db.Column(db.String(12), nullable=False)  # "producao", "ajuste", "saida"
+    quantidade = db.Column(db.Float, nullable=False, default=0.0)
+    observacao = db.Column(db.String(255), default="")
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    peca = db.relationship("Peca", back_populates="movimentos")
+
+
+class Venda(db.Model):
+    """Venda de peças produzidas. Frete e comissão de marketplace entram como
+    custos da venda (reduzem o lucro), ambos opcionais."""
+
+    __tablename__ = "vendas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    tamanho = db.Column(db.String(5), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False, default=1.0)
+
+    preco_unitario = db.Column(db.Float, nullable=False, default=0.0)   # preço de venda por peça
+    frete = db.Column(db.Float, nullable=False, default=0.0)            # opcional (custo)
+    marketplace_pct = db.Column(db.Float, nullable=False, default=0.0)  # opcional (% sobre a receita)
+    custo_unitario = db.Column(db.Float, nullable=False, default=0.0)   # snapshot do custo da peça
+
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    peca = db.relationship("Peca")
+
+    @property
+    def receita(self) -> float:
+        return self.preco_unitario * self.quantidade
+
+    @property
+    def comissao_marketplace(self) -> float:
+        return self.receita * (self.marketplace_pct / 100.0)
+
+    @property
+    def custo_total(self) -> float:
+        """Custo de produção + frete + comissão de marketplace."""
+        return self.custo_unitario * self.quantidade + self.frete + self.comissao_marketplace
+
+    @property
+    def lucro(self) -> float:
+        return self.receita - self.custo_total
 
 
 class MovimentoEstoque(db.Model):

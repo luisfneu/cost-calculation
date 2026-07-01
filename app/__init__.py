@@ -30,6 +30,14 @@ def create_app(config_class=Config):
         texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
         return f"R$ {texto}"
 
+    @app.template_filter("dt")
+    def dt(valor):
+        """Formata data/hora: dd/mm/aaaa HH:MM."""
+        try:
+            return valor.strftime("%d/%m/%Y %H:%M")
+        except (TypeError, ValueError, AttributeError):
+            return ""
+
     @app.template_filter("num")
     def num(valor):
         """Número enxuto: 2 casas, sem zeros à direita desnecessários."""

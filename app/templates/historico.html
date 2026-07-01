@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Histórico de movimentações</h1>
+
+<div class="row g-4">
+  <!-- Produção / estoque de peças -->
+  <div class="col-lg-6">
+    <div class="card bg-white h-100">
+      <div class="card-body">
+        <h2 class="h5">Peças (produção)</h2>
+        {% if mov_pecas %}
+        <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr><th>Data</th><th>Peça</th><th>Tam.</th><th>Tipo</th><th class="text-end">Qtd</th></tr>
+          </thead>
+          <tbody>
+          {% for m in mov_pecas %}
+            <tr>
+              <td class="small text-muted">{{ m.criado_em | dt }}</td>
+              <td>{{ m.peca.nome }}</td>
+              <td><span class="badge text-bg-light">{{ m.tamanho }}</span></td>
+              <td>{{ m.tipo }}</td>
+              <td class="text-end fw-bold text-success">+{{ m.quantidade | num }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="text-muted">Nenhuma produção registrada ainda.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Movimentações de insumos -->
+  <div class="col-lg-6">
+    <div class="card bg-white h-100">
+      <div class="card-body">
+        <h2 class="h5">Insumos (entradas / saídas)</h2>
+        {% if mov_insumos %}
+        <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr><th>Data</th><th>Insumo</th><th>Tipo</th><th class="text-end">Qtd</th><th>Observação</th></tr>
+          </thead>
+          <tbody>
+          {% for m in mov_insumos %}
+            <tr>
+              <td class="small text-muted">{{ m.criado_em | dt }}</td>
+              <td>{{ m.insumo.nome }}</td>
+              <td>
+                {% if m.tipo == 'entrada' %}
+                  <span class="badge text-bg-info">entrada</span>
+                {% else %}
+                  <span class="badge text-bg-danger">saída</span>
+                {% endif %}
+              </td>
+              <td class="text-end fw-bold {{ 'text-success' if m.tipo == 'entrada' else 'text-danger' }}">
+                {{ '+' if m.tipo == 'entrada' else '−' }}{{ m.quantidade | num }}
+              </td>
+              <td class="small text-muted">{{ m.observacao }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="text-muted">Nenhuma movimentação de insumo ainda.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

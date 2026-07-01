@@ -38,17 +38,37 @@
       </div>
     </div>
 
-    <form method="post" action="{{ url_for('main.produzir_peca', peca_id=peca.id) }}" class="card bg-white mt-3">
+    <div class="card bg-white mt-3">
       <div class="card-body">
-        <h2 class="h6 text-muted">Produzir (baixa estoque)</h2>
-        <div class="input-group">
-          <input type="text" name="unidades" class="form-control" value="1">
-          <span class="input-group-text">un.</span>
-          <button class="btn btn-primary">Produzir</button>
-        </div>
-        <small class="text-muted">Dá baixa nos insumos da ficha técnica conforme a quantidade produzida.</small>
+        <h2 class="h6 text-muted">Estoque da peça</h2>
+        <table class="table table-sm mb-3 text-center">
+          <thead class="table-light"><tr>
+            {% for t in ['PP','P','M','G','GG'] %}<th>{{ t }}</th>{% endfor %}
+            <th>Total</th>
+          </tr></thead>
+          <tbody><tr>
+            {% for t in ['PP','P','M','G','GG'] %}
+              <td class="{{ 'fw-bold' if peca.estoque_por_tamanho[t] > 0 }}">{{ peca.estoque_por_tamanho[t] | num }}</td>
+            {% endfor %}
+            <td class="fw-bold">{{ peca.estoque_total | num }}</td>
+          </tr></tbody>
+        </table>
+        <h3 class="h6 text-muted">Ajustar estoque</h3>
+        <form method="post" action="{{ url_for('main.ajustar_estoque_peca', peca_id=peca.id) }}" class="row g-2">
+          <div class="col-5">
+            <select name="tamanho" class="form-select form-select-sm" required>
+              {% for t in ['PP','P','M','G','GG'] %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-4">
+            <input type="text" name="quantidade" class="form-control form-control-sm" placeholder="nova qtd" required>
+          </div>
+          <div class="col-3">
+            <button class="btn btn-sm btn-outline-secondary w-100">Definir</button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   </div>
 
   <!-- Coluna direita: ficha técnica -->
@@ -114,6 +134,32 @@
         {% endif %}
       </div>
     </div>
+
+    <!-- Produzir: abaixo da ficha técnica -->
+    <form method="post" action="{{ url_for('main.produzir_peca', peca_id=peca.id) }}" class="card bg-white mt-4">
+      <div class="card-body">
+        <h2 class="h5">Produzir peça</h2>
+        <p class="text-muted small">Baixa os insumos da ficha técnica acima e dá entrada no estoque da peça no tamanho escolhido.</p>
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-4">
+            <label class="form-label">Tamanho</label>
+            <select name="tamanho" class="form-select" required>
+              {% for t in ['PP','P','M','G','GG'] %}<option value="{{ t }}" {{ 'selected' if t == 'M' }}>{{ t }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">Quantidade</label>
+            <div class="input-group">
+              <input type="text" name="unidades" class="form-control" value="1">
+              <span class="input-group-text">un.</span>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <button class="btn btn-primary w-100">Produzir</button>
+          </div>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}

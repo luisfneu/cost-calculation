@@ -13,7 +13,17 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-from .models import Insumo, MovimentoEstoque, Peca, PecaInsumo, db
+from .models import (
+    TAMANHOS,
+    EstoquePeca,
+    Insumo,
+    MovimentoEstoque,
+    MovimentoPeca,
+    Peca,
+    PecaInsumo,
+    Venda,
+    db,
+)
 
 bp = Blueprint("main", __name__)
 
@@ -182,11 +192,10 @@ def form_peca(peca_id=None):
             flash("O nome da peça é obrigatório.", "erro")
             return render_template("peca_form.html", peca=peca, insumos=insumos)
 
-        # Na criação: lê os insumos selecionados e o nº de peças a produzir.
+        # Na criação: lê os insumos selecionados para montar a ficha técnica.
+        # (Não dá baixa no estoque — isso só acontece ao Produzir.)
         linhas = []          # [(insumo, qtd_por_peca), ...]
-        num_pecas = 1
         if is_nova:
-            num_pecas = _to_float(request.form.get("quantidade_pecas"), padrao=1) or 1
             ids = request.form.getlist("insumo_id")
             qtds = request.form.getlist("quantidade_insumo")
             vistos = set()
@@ -199,16 +208,6 @@ def form_peca(peca_id=None):
                     continue
                 vistos.add(insumo.id)
                 linhas.append((insumo, qtd))
-
-            # Valida estoque ANTES de gravar qualquer coisa.
-            faltando = [
-                f"{ins.nome} (precisa {qtd * num_pecas:g}, tem {ins.estoque:g} {ins.unidade})"
-                for ins, qtd in linhas
-                if qtd * num_pecas > ins.estoque
-            ]
-            if faltando:
-                flash("Estoque insuficiente para produzir: " + "; ".join(faltando), "erro")
-                return render_template("peca_form.html", peca=peca, insumos=insumos)
 
         if peca is None:
             peca = Peca()
@@ -226,23 +225,13 @@ def form_peca(peca_id=None):
             _remover_foto(peca.foto)
             peca.foto = nova_foto
 
-        # Na criação: monta a ficha técnica e dá baixa no estoque (qtd × nº peças).
+        # Na criação: monta a ficha técnica (quantidade por peça).
         if is_nova and linhas:
             for insumo, qtd in linhas:
                 db.session.add(PecaInsumo(peca=peca, insumo=insumo, quantidade=qtd))
-                _registrar_movimento(
-                    insumo, "saida", qtd * num_pecas,
-                    observacao=f"Produção inicial de {num_pecas:g}x '{peca.nome}'",
-                )
 
         db.session.commit()
-        if is_nova and linhas:
-            flash(
-                f"Peça criada. Produzidas {num_pecas:g} unidade(s) e estoque de "
-                f"{len(linhas)} insumo(s) baixado.", "sucesso",
-            )
-        else:
-            flash("Peça salva.", "sucesso")
+        flash("Peça salva. Use 'Produzir' para fabricar e dar entrada no estoque.", "sucesso")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
     return render_template("peca_form.html", peca=peca, insumos=insumos)
@@ -301,31 +290,156 @@ def remover_insumo_peca(item_id):
 
 @bp.route("/pecas/<int:peca_id>/produzir", methods=["POST"])
 def produzir_peca(peca_id):
-    """Baixa do estoque os insumos necessários para produzir N unidades da peça."""
+    """Produz N unidades de um tamanho: baixa os insumos da ficha e dá
+    entrada no estoque da peça naquele tamanho (com histórico)."""
     peca = Peca.query.get_or_404(peca_id)
+    tamanho = request.form.get("tamanho", "").strip().upper()
     unidades = _to_float(request.form.get("unidades"), padrao=1) or 1
 
-    if not peca.insumos:
-        flash("Adicione insumos à ficha técnica antes de produzir.", "erro")
+    if tamanho not in TAMANHOS:
+        flash("Selecione um tamanho válido (PP, P, M, G ou GG).", "erro")
+        return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+    if unidades <= 0:
+        flash("Informe uma quantidade maior que zero.", "erro")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
-    # Verifica se há estoque suficiente para todos os insumos.
+    # Verifica estoque de insumos suficiente para a produção.
     faltando = [
-        item.insumo.nome
+        f"{item.insumo.nome} (precisa {item.quantidade * unidades:g}, tem {item.insumo.estoque:g})"
         for item in peca.insumos
         if item.quantidade * unidades > item.insumo.estoque
     ]
     if faltando:
-        flash("Estoque insuficiente para: " + ", ".join(faltando), "erro")
+        flash("Estoque de insumos insuficiente para: " + "; ".join(faltando), "erro")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
+    # 1) Baixa os insumos da ficha técnica (com histórico de insumos).
     for item in peca.insumos:
         _registrar_movimento(
             item.insumo,
             "saida",
             item.quantidade * unidades,
-            observacao=f"Produção de {unidades:g}x '{peca.nome}'",
+            observacao=f"Produção de {unidades:g}x '{peca.nome}' tam {tamanho}",
         )
+
+    # 2) Dá entrada no estoque da peça no tamanho escolhido.
+    linha = next((e for e in peca.estoques if e.tamanho == tamanho), None)
+    if linha is None:
+        linha = EstoquePeca(peca=peca, tamanho=tamanho, quantidade=0.0)
+        db.session.add(linha)
+    linha.quantidade += unidades
+
+    # 3) Registra o movimento no histórico de peças.
+    db.session.add(
+        MovimentoPeca(
+            peca=peca,
+            tamanho=tamanho,
+            tipo="producao",
+            quantidade=unidades,
+            observacao=f"Produção de {unidades:g} un.",
+        )
+    )
+
     db.session.commit()
-    flash(f"Produção registrada: {unidades:g} unidade(s) de '{peca.nome}'. Estoque atualizado.", "sucesso")
+    flash(
+        f"Produzidas {unidades:g} un. de '{peca.nome}' tam {tamanho}. "
+        f"Estoque da peça e dos insumos atualizados.", "sucesso",
+    )
     return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+
+@bp.route("/pecas/<int:peca_id>/estoque/ajustar", methods=["POST"])
+def ajustar_estoque_peca(peca_id):
+    """Define manualmente a quantidade em estoque de um tamanho da peça."""
+    peca = Peca.query.get_or_404(peca_id)
+    tamanho = request.form.get("tamanho", "").strip().upper()
+    nova_qtd = _to_float(request.form.get("quantidade"), padrao=-1)
+
+    if tamanho not in TAMANHOS or nova_qtd < 0:
+        flash("Selecione um tamanho válido e uma quantidade (0 ou mais).", "erro")
+        return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+    linha = next((e for e in peca.estoques if e.tamanho == tamanho), None)
+    anterior = linha.quantidade if linha else 0.0
+    if linha is None:
+        linha = EstoquePeca(peca=peca, tamanho=tamanho, quantidade=0.0)
+        db.session.add(linha)
+    linha.quantidade = nova_qtd
+
+    delta = nova_qtd - anterior
+    db.session.add(
+        MovimentoPeca(
+            peca=peca, tamanho=tamanho, tipo="ajuste", quantidade=delta,
+            observacao=f"Ajuste manual: {anterior:g} → {nova_qtd:g}",
+        )
+    )
+    db.session.commit()
+    flash(f"Estoque do tamanho {tamanho} ajustado para {nova_qtd:g}.", "sucesso")
+    return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+
+@bp.route("/historico")
+def historico():
+    mov_pecas = MovimentoPeca.query.order_by(MovimentoPeca.criado_em.desc()).limit(300).all()
+    mov_insumos = MovimentoEstoque.query.order_by(MovimentoEstoque.criado_em.desc()).limit(300).all()
+    return render_template("historico.html", mov_pecas=mov_pecas, mov_insumos=mov_insumos)
+
+
+# --------------------------------------------------------------------------- #
+# Vendas
+# --------------------------------------------------------------------------- #
+@bp.route("/vendas")
+def listar_vendas():
+    vendas = Venda.query.order_by(Venda.criado_em.desc()).all()
+    pecas = Peca.query.order_by(Peca.nome).all()
+    totais = {
+        "receita": sum(v.receita for v in vendas),
+        "custo": sum(v.custo_total for v in vendas),
+        "lucro": sum(v.lucro for v in vendas),
+        "qtd": sum(v.quantidade for v in vendas),
+    }
+    return render_template("vendas.html", vendas=vendas, pecas=pecas, totais=totais)
+
+
+@bp.route("/vendas/nova", methods=["POST"])
+def registrar_venda():
+    peca_id = request.form.get("peca_id", type=int)
+    peca = Peca.query.get(peca_id) if peca_id else None
+    tamanho = request.form.get("tamanho", "").strip().upper()
+    quantidade = _to_float(request.form.get("quantidade"), padrao=1) or 1
+    preco_unitario = _to_float(request.form.get("preco_unitario"))
+    frete = _to_float(request.form.get("frete"))
+    marketplace_pct = _to_float(request.form.get("marketplace_pct"))
+
+    if not peca or tamanho not in TAMANHOS or quantidade <= 0:
+        flash("Selecione a peça, um tamanho válido e a quantidade.", "erro")
+        return redirect(url_for("main.listar_vendas"))
+
+    linha = next((e for e in peca.estoques if e.tamanho == tamanho), None)
+    disponivel = linha.quantidade if linha else 0.0
+    if quantidade > disponivel:
+        flash(
+            f"Estoque insuficiente de '{peca.nome}' tam {tamanho} "
+            f"(disponível: {disponivel:g}).", "erro",
+        )
+        return redirect(url_for("main.listar_vendas"))
+
+    # Baixa o estoque da peça e registra no histórico.
+    linha.quantidade -= quantidade
+    db.session.add(
+        MovimentoPeca(
+            peca=peca, tamanho=tamanho, tipo="saida", quantidade=quantidade,
+            observacao=f"Venda de {quantidade:g} un.",
+        )
+    )
+    # Registra a venda (com snapshot do custo atual da peça).
+    db.session.add(
+        Venda(
+            peca=peca, tamanho=tamanho, quantidade=quantidade,
+            preco_unitario=preco_unitario, frete=frete,
+            marketplace_pct=marketplace_pct, custo_unitario=peca.custo_total,
+        )
+    )
+    db.session.commit()
+    flash(f"Venda registrada: {quantidade:g}x '{peca.nome}' tam {tamanho}.", "sucesso")
+    return redirect(url_for("main.listar_vendas"))
