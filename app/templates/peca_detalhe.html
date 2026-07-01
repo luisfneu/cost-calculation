@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ peca.nome }}</h1>
+    {% if peca.descricao %}<p class="text-muted mb-0">{{ peca.descricao }}</p>{% endif %}
+  </div>
+  <div class="text-nowrap">
+    <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+    <form method="post" action="{{ url_for('main.excluir_peca', peca_id=peca.id) }}" class="d-inline"
+          onsubmit="return confirm('Excluir esta peça?')">
+      <button class="btn btn-sm btn-outline-danger">Excluir</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Coluna esquerda: foto + resumo financeiro -->
+  <div class="col-lg-4">
+    {% if peca.foto %}
+      <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-peca-detalhe rounded mb-3" alt="{{ peca.nome }}">
+    {% else %}
+      <div class="foto-peca-detalhe sem-foto rounded mb-3">sem foto</div>
+    {% endif %}
+
+    <div class="card bg-white">
+      <div class="card-body">
+        <h2 class="h6 text-muted">Resumo financeiro</h2>
+        <table class="table table-sm mb-0">
+          <tr><td>Insumos</td><td class="text-end">{{ peca.custo_insumos | moeda }}</td></tr>
+          <tr><td>Mão de obra</td><td class="text-end">{{ peca.custo_mao_de_obra | moeda }}</td></tr>
+          <tr><td>Custos extras</td><td class="text-end">{{ peca.custos_extras | moeda }}</td></tr>
+          <tr class="fw-bold border-top"><td>Custo total</td><td class="text-end">{{ peca.custo_total | moeda }}</td></tr>
+          <tr><td>Margem</td><td class="text-end">{{ peca.margem_percentual | num }}%</td></tr>
+          <tr class="fw-bold text-success"><td>Preço de venda</td><td class="text-end">{{ peca.preco_venda | moeda }}</td></tr>
+          <tr class="text-success"><td>Lucro por peça</td><td class="text-end">{{ peca.lucro | moeda }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('main.produzir_peca', peca_id=peca.id) }}" class="card bg-white mt-3">
+      <div class="card-body">
+        <h2 class="h6 text-muted">Produzir (baixa estoque)</h2>
+        <div class="input-group">
+          <input type="text" name="unidades" class="form-control" value="1">
+          <span class="input-group-text">un.</span>
+          <button class="btn btn-primary">Produzir</button>
+        </div>
+        <small class="text-muted">Dá baixa nos insumos da ficha técnica conforme a quantidade produzida.</small>
+      </div>
+    </form>
+  </div>
+
+  <!-- Coluna direita: ficha técnica -->
+  <div class="col-lg-8">
+    <div class="card bg-white">
+      <div class="card-body">
+        <h2 class="h5">Ficha técnica (insumos)</h2>
+
+        {% if peca.insumos %}
+        <table class="table align-middle">
+          <thead class="table-light">
+            <tr><th>Insumo</th><th>Qtd</th><th>Custo unit.</th><th>Subtotal</th><th></th></tr>
+          </thead>
+          <tbody>
+          {% for item in peca.insumos %}
+            <tr>
+              <td>{{ item.insumo.nome }}
+                <span class="badge {{ 'text-bg-info' if item.insumo.tipo == 'embalagem' else 'text-bg-light' }}">{{ item.insumo.tipo_label }}</span>
+                {% if item.quantidade > item.insumo.estoque %}
+                  <span class="badge text-bg-warning">estoque: {{ item.insumo.estoque | num }}</span>
+                {% endif %}
+              </td>
+              <td>{{ item.quantidade | num }} {{ item.insumo.unidade }}</td>
+              <td>{{ item.insumo.custo_unitario | moeda }}</td>
+              <td>{{ item.subtotal | moeda }}</td>
+              <td class="text-end">
+                <form method="post" action="{{ url_for('main.remover_insumo_peca', item_id=item.id) }}">
+                  <button class="btn btn-sm btn-outline-danger">remover</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fw-bold"><td colspan="3" class="text-end">Total insumos</td><td>{{ peca.custo_insumos | moeda }}</td><td></td></tr>
+          </tfoot>
+        </table>
+        {% else %}
+        <p class="text-muted">Nenhum insumo na ficha ainda.</p>
+        {% endif %}
+
+        <hr>
+        <h3 class="h6">Adicionar insumo</h3>
+        {% if insumos_disponiveis %}
+        <form method="post" action="{{ url_for('main.adicionar_insumo_peca', peca_id=peca.id) }}" class="row g-2">
+          <div class="col-sm-6">
+            <select name="insumo_id" class="form-select" required>
+              <option value="">Selecione um insumo...</option>
+              {% for insumo in insumos_disponiveis %}
+                <option value="{{ insumo.id }}">{{ insumo.nome }} ({{ insumo.tipo_label }}) — {{ insumo.custo_unitario | moeda }}/{{ insumo.unidade }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-3">
+            <input type="text" name="quantidade" class="form-control" placeholder="quantidade" required>
+          </div>
+          <div class="col-sm-3">
+            <button class="btn btn-outline-primary w-100">Adicionar</button>
+          </div>
+        </form>
+        {% else %}
+        <p class="text-muted">Nenhum insumo cadastrado. <a href="{{ url_for('main.form_insumo') }}">Cadastre insumos primeiro</a>.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

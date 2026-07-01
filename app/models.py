@@ -1,0 +1,134 @@
+"""Modelos de dados (SQLAlchemy).
+
+Domínio:
+- Insumo: matéria-prima/aviamento (tecido, etiqueta, linha, botão...) com custo e estoque.
+- Peca: peça de vestuário composta por vários insumos + mão de obra + custos extras.
+- PecaInsumo: quantidade de cada insumo usada em uma peça (ficha técnica / BOM).
+- MovimentoEstoque: histórico de entradas/saídas de estoque dos insumos.
+"""
+from datetime import datetime, timezone
+
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+
+def _agora():
+    return datetime.now(timezone.utc)
+
+
+class Insumo(db.Model):
+    __tablename__ = "insumos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    # Categoria do insumo: "materia_prima" ou "embalagem".
+    tipo = db.Column(db.String(20), nullable=False, default="materia_prima")
+    # Unidade de medida: un, m, cm, kg, g, rolo, etc.
+    unidade = db.Column(db.String(20), nullable=False, default="un")
+    # Custo por unidade de medida (R$).
+    custo_unitario = db.Column(db.Float, nullable=False, default=0.0)
+    # Onde o insumo foi comprado (fornecedor/loja).
+    fornecedor = db.Column(db.String(160), default="")
+    # Foto do insumo (nome do arquivo em static/uploads).
+    foto = db.Column(db.String(255))
+    # Quantidade atual em estoque.
+    estoque = db.Column(db.Float, nullable=False, default=0.0)
+    # Alerta quando o estoque fica abaixo deste valor.
+    estoque_minimo = db.Column(db.Float, nullable=False, default=0.0)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    usos = db.relationship("PecaInsumo", back_populates="insumo", cascade="all, delete-orphan")
+    movimentos = db.relationship(
+        "MovimentoEstoque", back_populates="insumo", cascade="all, delete-orphan"
+    )
+
+    @property
+    def estoque_baixo(self) -> bool:
+        return self.estoque <= self.estoque_minimo
+
+    @property
+    def tipo_label(self) -> str:
+        return {"embalagem": "Embalagem", "materia_prima": "Matéria-prima"}.get(
+            self.tipo, "Matéria-prima"
+        )
+
+
+class Peca(db.Model):
+    __tablename__ = "pecas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    descricao = db.Column(db.Text, default="")
+    foto = db.Column(db.String(255))  # nome do arquivo salvo em static/uploads
+
+    # Custos além dos insumos.
+    custo_mao_de_obra = db.Column(db.Float, nullable=False, default=0.0)
+    custos_extras = db.Column(db.Float, nullable=False, default=0.0)  # energia, frete, embalagem...
+
+    # Margem de lucro desejada sobre o preço de venda (em %). Ex: 40 => 40%.
+    margem_percentual = db.Column(db.Float, nullable=False, default=0.0)
+
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    insumos = db.relationship(
+        "PecaInsumo", back_populates="peca", cascade="all, delete-orphan"
+    )
+
+    # ----- Cálculos -----
+    @property
+    def custo_insumos(self) -> float:
+        return sum(item.subtotal for item in self.insumos)
+
+    @property
+    def custo_total(self) -> float:
+        """Custo de produção da peça."""
+        return self.custo_insumos + self.custo_mao_de_obra + self.custos_extras
+
+    @property
+    def preco_venda(self) -> float:
+        """Preço de venda aplicando a margem sobre o preço final.
+
+        preço = custo / (1 - margem%).  Margem >= 100% é inválida (retorna 0).
+        """
+        m = self.margem_percentual / 100.0
+        if m >= 1:
+            return 0.0
+        return self.custo_total / (1 - m)
+
+    @property
+    def lucro(self) -> float:
+        return self.preco_venda - self.custo_total
+
+
+class PecaInsumo(db.Model):
+    """Linha da ficha técnica: qual insumo e quanto é usado em uma peça."""
+
+    __tablename__ = "peca_insumos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    insumo_id = db.Column(db.Integer, db.ForeignKey("insumos.id"), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False, default=0.0)
+
+    peca = db.relationship("Peca", back_populates="insumos")
+    insumo = db.relationship("Insumo", back_populates="usos")
+
+    @property
+    def subtotal(self) -> float:
+        return self.quantidade * self.insumo.custo_unitario
+
+
+class MovimentoEstoque(db.Model):
+    """Registro de entrada (compra) ou saída (produção/ajuste) de um insumo."""
+
+    __tablename__ = "movimentos_estoque"
+
+    id = db.Column(db.Integer, primary_key=True)
+    insumo_id = db.Column(db.Integer, db.ForeignKey("insumos.id"), nullable=False)
+    tipo = db.Column(db.String(10), nullable=False)  # "entrada" ou "saida"
+    quantidade = db.Column(db.Float, nullable=False, default=0.0)
+    observacao = db.Column(db.String(255), default="")
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    insumo = db.relationship("Insumo", back_populates="movimentos")

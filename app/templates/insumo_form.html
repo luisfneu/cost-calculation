@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">{{ 'Editar insumo' if insumo else 'Novo insumo' }}</h1>
+
+<form method="post" enctype="multipart/form-data" class="card card-body bg-white" style="max-width:620px">
+  <div class="mb-3">
+    <label class="form-label">Nome *</label>
+    <input type="text" name="nome" class="form-control" required
+           value="{{ insumo.nome if insumo else '' }}" placeholder="Ex.: Etiqueta bordada, Tecido malha...">
+  </div>
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Tipo de insumo</label>
+      <select name="tipo" class="form-select">
+        <option value="materia_prima" {{ 'selected' if not insumo or insumo.tipo == 'materia_prima' }}>Matéria-prima</option>
+        <option value="embalagem" {{ 'selected' if insumo and insumo.tipo == 'embalagem' }}>Embalagem</option>
+      </select>
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Onde foi comprado (fornecedor)</label>
+      <input type="text" name="fornecedor" class="form-control"
+             value="{{ insumo.fornecedor if insumo else '' }}" placeholder="Ex.: Armarinho Central...">
+    </div>
+  </div>
+  <div class="mb-3 foto-campo">
+    <label class="form-label">Foto do insumo</label>
+    <input type="file" name="foto" class="form-control" accept="image/*">
+    <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
+    {% if insumo and insumo.foto %}
+      <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
+    {% endif %}
+  </div>
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Unidade de medida</label>
+      <input type="text" name="unidade" class="form-control"
+             value="{{ insumo.unidade if insumo else 'un' }}" placeholder="un, m, kg, rolo...">
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Custo por unidade (R$)</label>
+      <input type="text" name="custo_unitario" class="form-control"
+             value="{{ insumo.custo_unitario if insumo else '' }}" placeholder="0,00">
+    </div>
+  </div>
+  <div class="row">
+    {% if not insumo %}
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Estoque inicial</label>
+      <input type="text" name="estoque" class="form-control" placeholder="0">
+    </div>
+    {% endif %}
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Estoque mínimo (alerta)</label>
+      <input type="text" name="estoque_minimo" class="form-control"
+             value="{{ insumo.estoque_minimo if insumo else '' }}" placeholder="0">
+    </div>
+  </div>
+  {% if insumo %}
+  <p class="small text-muted">O estoque atual ({{ insumo.estoque | num }} {{ insumo.unidade }}) é ajustado pelos movimentos de entrada/saída na lista de insumos.</p>
+  {% endif %}
+  <div>
+    <button class="btn btn-primary">Salvar</button>
+    <a href="{{ url_for('main.listar_insumos') }}" class="btn btn-link">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

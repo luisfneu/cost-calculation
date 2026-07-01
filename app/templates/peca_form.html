@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">{{ 'Editar peça' if peca else 'Nova peça' }}</h1>
+
+<form method="post" enctype="multipart/form-data" class="card card-body bg-white" style="max-width:820px">
+  <div class="mb-3">
+    <label class="form-label">Nome *</label>
+    <input type="text" name="nome" class="form-control" required
+           value="{{ peca.nome if peca else '' }}" placeholder="Ex.: Camiseta básica gola redonda">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Descrição</label>
+    <textarea name="descricao" class="form-control" rows="2">{{ peca.descricao if peca else '' }}</textarea>
+  </div>
+  <div class="row">
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Mão de obra (R$)</label>
+      <input type="text" name="custo_mao_de_obra" class="form-control"
+             value="{{ peca.custo_mao_de_obra if peca else '' }}" placeholder="0,00">
+    </div>
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Custos extras (R$)</label>
+      <input type="text" name="custos_extras" class="form-control"
+             value="{{ peca.custos_extras if peca else '' }}" placeholder="embalagem, frete...">
+    </div>
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Margem de lucro (%)</label>
+      <input type="text" name="margem_percentual" class="form-control"
+             value="{{ peca.margem_percentual if peca else '' }}" placeholder="Ex.: 40">
+    </div>
+  </div>
+  <div class="mb-3 foto-campo">
+    <label class="form-label">Foto da peça</label>
+    <input type="file" name="foto" class="form-control" accept="image/*">
+    <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
+    {% if peca and peca.foto %}
+      <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
+    {% endif %}
+  </div>
+
+  {% if not peca %}
+  {# ---- Seleção de insumos + produção (somente na criação) ---- #}
+  <hr class="my-4">
+  <h2 class="h5">Insumos gastos na peça</h2>
+  {% if insumos %}
+  <div class="row align-items-end mb-3">
+    <div class="col-sm-4">
+      <label class="form-label">Quantas peças produzir agora?</label>
+      <input type="text" name="quantidade_pecas" id="qtd-pecas" class="form-control" value="1">
+    </div>
+    <div class="col-sm-8">
+      <small class="text-muted">A baixa no estoque = quantidade por peça × nº de peças produzidas.</small>
+    </div>
+  </div>
+
+  <table class="table align-middle" id="tabela-insumos">
+    <thead class="table-light">
+      <tr><th style="width:50%">Insumo</th><th>Qtd por peça</th><th>Subtotal/peça</th><th></th></tr>
+    </thead>
+    <tbody id="linhas-insumos"></tbody>
+    <tfoot>
+      <tr class="fw-bold">
+        <td class="text-end" colspan="2">Custo de insumos por peça</td>
+        <td id="total-insumos">R$ 0,00</td><td></td>
+      </tr>
+    </tfoot>
+  </table>
+  <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="add-linha">+ Adicionar insumo</button>
+
+  {# Dados dos insumos disponíveis para o JS calcular subtotais #}
+  <script id="dados-insumos" type="application/json">
+    [{% for i in insumos %}{"id": {{ i.id }}, "nome": "{{ i.nome|e }}", "custo": {{ i.custo_unitario }}, "unidade": "{{ i.unidade|e }}", "estoque": {{ i.estoque }}}{{ "," if not loop.last }}{% endfor %}]
+  </script>
+  {% else %}
+  <p class="text-muted">Nenhum insumo cadastrado ainda. <a href="{{ url_for('main.form_insumo') }}">Cadastre insumos</a> para poder selecioná-los aqui.</p>
+  {% endif %}
+  {% endif %}
+
+  <div class="mt-3">
+    <button class="btn btn-primary">Salvar</button>
+    <a href="{{ url_for('main.listar_pecas') }}" class="btn btn-link">Cancelar</a>
+  </div>
+</form>
+
+{% if not peca and insumos %}
+<script>
+(function () {
+  const insumos = JSON.parse(document.getElementById('dados-insumos').textContent);
+  const corpo = document.getElementById('linhas-insumos');
+  const brl = v => 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+  function opcoes() {
+    return '<option value="">Selecione...</option>' +
+      insumos.map(i => `<option value="${i.id}">${i.nome} — ${brl(i.custo)}/${i.unidade}</option>`).join('');
+  }
+
+  function novaLinha() {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><select name="insumo_id" class="form-select sel-insumo">${opcoes()}</select></td>
+      <td><input type="text" name="quantidade_insumo" class="form-control qtd-insumo" value="1"></td>
+      <td class="subtotal">R$ 0,00</td>
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-linha">×</button></td>`;
+    corpo.appendChild(tr);
+    recalcular();
+  }
+
+  function num(txt) {
+    if (!txt) return 0;
+    return parseFloat(String(txt).replace('.', '').replace(',', '.')) || 0;
+  }
+
+  function recalcular() {
+    let total = 0;
+    corpo.querySelectorAll('tr').forEach(tr => {
+      const id = tr.querySelector('.sel-insumo').value;
+      const ins = insumos.find(i => String(i.id) === id);
+      const qtd = num(tr.querySelector('.qtd-insumo').value);
+      const sub = ins ? ins.custo * qtd : 0;
+      tr.querySelector('.subtotal').textContent = brl(sub);
+      total += sub;
+    });
+    document.getElementById('total-insumos').textContent = brl(total);
+  }
+
+  document.getElementById('add-linha').addEventListener('click', () => { novaLinha(); });
+  corpo.addEventListener('input', recalcular);
+  corpo.addEventListener('click', e => {
+    if (e.target.classList.contains('rem-linha')) { e.target.closest('tr').remove(); recalcular(); }
+  });
+
+  novaLinha();  // começa com uma linha
+})();
+</script>
+{% endif %}
+{% endblock %}

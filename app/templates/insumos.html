@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Insumos / Estoque</h1>
+  <a href="{{ url_for('main.form_insumo') }}" class="btn btn-primary">+ Novo insumo</a>
+</div>
+
+{% if insumos %}
+<div class="table-responsive">
+<table class="table table-hover align-middle bg-white">
+  <thead class="table-light">
+    <tr>
+      <th></th><th>Insumo</th><th>Custo unit.</th><th>Estoque</th><th>Mín.</th>
+      <th style="width:34%">Movimentar estoque</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for insumo in insumos %}
+    <tr class="{{ 'table-warning' if insumo.estoque_baixo }}">
+      <td>
+        {% if insumo.foto %}
+          <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb" alt="">
+        {% else %}
+          <div class="foto-thumb sem-foto">—</div>
+        {% endif %}
+      </td>
+      <td>
+        <strong>{{ insumo.nome }}</strong>
+        <span class="badge {{ 'text-bg-info' if insumo.tipo == 'embalagem' else 'text-bg-light' }}">{{ insumo.tipo_label }}</span>
+        <div class="small text-muted">por {{ insumo.unidade }}{% if insumo.fornecedor %} · {{ insumo.fornecedor }}{% endif %}</div>
+      </td>
+      <td>{{ insumo.custo_unitario | moeda }}</td>
+      <td>
+        {{ insumo.estoque | num }} {{ insumo.unidade }}
+        {% if insumo.estoque_baixo %}<span class="badge text-bg-danger">baixo</span>{% endif %}
+      </td>
+      <td>{{ insumo.estoque_minimo | num }}</td>
+      <td>
+        <form method="post" action="{{ url_for('main.movimentar_estoque', insumo_id=insumo.id) }}" class="d-flex gap-1">
+          <select name="tipo" class="form-select form-select-sm" style="width:auto">
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+          </select>
+          <input type="text" name="quantidade" class="form-control form-control-sm" placeholder="qtd" style="width:80px">
+          <input type="text" name="observacao" class="form-control form-control-sm" placeholder="obs (opcional)">
+          <button class="btn btn-sm btn-outline-primary">OK</button>
+        </form>
+      </td>
+      <td class="text-end text-nowrap">
+        <a href="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+        <form method="post" action="{{ url_for('main.excluir_insumo', insumo_id=insumo.id) }}" class="d-inline"
+              onsubmit="return confirm('Excluir este insumo?')">
+          <button class="btn btn-sm btn-outline-danger">Excluir</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="text-muted">Nenhum insumo cadastrado. Comece cadastrando tecidos, etiquetas, linhas, botões etc.</p>
+{% endif %}
+{% endblock %}

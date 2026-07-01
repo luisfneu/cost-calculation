@@ -1,0 +1,209 @@
+/* ==========================================================================
+   Identidade visual — Sabrina Hansen Atelier
+   Paleta: fundo mocha, cartões creme, detalhes em dourado, texto grafite.
+   ========================================================================== */
+:root {
+  --mocha:      #b89a78;   /* fundo quente (como o da etiqueta) */
+  --mocha-dark: #a07f5e;
+  --cream:      #f7f1e6;   /* cartões / superfícies */
+  --cream-soft: #fbf7ef;
+  --gold:       #b08a4f;
+  --gold-soft:  #c9a96a;
+  --ink:        #2c2620;   /* texto principal (quase preto) */
+  --ink-soft:   #6b5f52;
+  --line:       #e5dcc9;
+}
+
+body {
+  background-color: var(--mocha);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+}
+
+/* Títulos em serifada elegante */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  letter-spacing: .3px;
+  color: var(--ink);
+}
+
+/* ---------- Navbar / marca ------------------------------------------------ */
+.atelier-nav {
+  background-color: var(--cream);
+  border-bottom: 1px solid var(--gold-soft);
+  box-shadow: 0 1px 12px rgba(44, 38, 32, .08);
+}
+.navbar-brand { display: flex; align-items: center; gap: .7rem; }
+.brand-monogram {
+  font-family: 'Parisienne', cursive;
+  font-size: 2.4rem;
+  line-height: 1;
+  color: var(--gold);
+}
+.brand-name { display: flex; flex-direction: column; line-height: 1.1; }
+.brand-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.15rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.brand-sub {
+  font-family: 'Jost', sans-serif;
+  font-size: .62rem;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.atelier-nav .nav-link {
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: .8rem;
+  margin-left: .4rem;
+}
+.atelier-nav .nav-link:hover { color: var(--gold); }
+
+/* ---------- Superfícies --------------------------------------------------- */
+.card {
+  background-color: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(44, 38, 32, .06);
+}
+.bg-white { background-color: var(--cream) !important; }
+main.container { max-width: 1100px; }
+
+/* Cartões-resumo do painel */
+.card.text-bg-primary   { background: linear-gradient(135deg, var(--gold), var(--gold-soft)) !important; color: var(--cream) !important; border: none; }
+.card.text-bg-secondary { background-color: var(--ink) !important; color: var(--cream) !important; border: none; }
+.card.text-bg-success   { background-color: #6d7a5c !important; color: var(--cream) !important; border: none; }
+.card.text-bg-danger    { background-color: #a5624f !important; color: var(--cream) !important; border: none; }
+.card.text-bg-primary .h2,
+.card.text-bg-secondary .h2,
+.card.text-bg-success .h2,
+.card.text-bg-danger .h2 { font-family: 'Cormorant Garamond', serif; color: inherit; }
+
+/* ---------- Botões -------------------------------------------------------- */
+.btn {
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-size: .78rem;
+  border-radius: 6px;
+}
+.btn-primary {
+  --bs-btn-bg: var(--gold);            --bs-btn-border-color: var(--gold);
+  --bs-btn-hover-bg: var(--mocha-dark);--bs-btn-hover-border-color: var(--mocha-dark);
+  --bs-btn-active-bg: var(--mocha-dark);
+  --bs-btn-color: var(--cream);        --bs-btn-hover-color: var(--cream);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--gold);          --bs-btn-border-color: var(--gold);
+  --bs-btn-hover-bg: var(--gold);       --bs-btn-hover-border-color: var(--gold);
+  --bs-btn-hover-color: var(--cream);
+}
+.btn-outline-secondary {
+  --bs-btn-color: var(--ink-soft);      --bs-btn-border-color: var(--line);
+  --bs-btn-hover-bg: var(--ink);        --bs-btn-hover-border-color: var(--ink);
+}
+.btn-link { color: var(--ink-soft); text-transform: none; letter-spacing: normal; }
+
+/* ---------- Tabelas ------------------------------------------------------- */
+.table { --bs-table-bg: transparent; color: var(--ink); }
+.table > :not(caption) > * > * { border-bottom-color: var(--line); }
+.table thead.table-light th {
+  background-color: var(--cream-soft);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: .72rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--gold-soft);
+}
+.table-hover > tbody > tr:hover > * { background-color: rgba(176, 138, 79, .07); }
+
+/* ---------- Formulários --------------------------------------------------- */
+.form-label { color: var(--ink-soft); text-transform: uppercase; letter-spacing: 1px; font-size: .72rem; }
+.form-control, .form-select {
+  border-color: var(--line);
+  background-color: var(--cream-soft);
+  color: var(--ink);
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--gold-soft);
+  box-shadow: 0 0 0 .2rem rgba(176, 138, 79, .18);
+  background-color: #fff;
+}
+
+/* ---------- Utilidades / texto ------------------------------------------- */
+.text-success { color: #6d7a5c !important; }
+.text-muted   { color: var(--ink-soft) !important; }
+.badge.text-bg-danger  { background-color: #a5624f !important; }
+.badge.text-bg-warning { background-color: var(--gold-soft) !important; color: var(--ink) !important; }
+.alert-success { background-color: #eef0e6; border-color: #cdd4b8; color: #4e5a3d; }
+.alert-warning { background-color: #f4ead2; border-color: var(--gold-soft); color: #7a5a25; }
+.alert-danger  { background-color: #f3e0d9; border-color: #d8a894; color: #8a4433; }
+
+/* ---------- Imagens de peças --------------------------------------------- */
+.foto-peca {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+}
+/* Foto na tela de detalhe da peça: mais alta e sem cortar (peça inteira). */
+.foto-peca-detalhe {
+  width: 100%;
+  height: 520px;
+  object-fit: contain;
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+}
+.foto-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+}
+/* Miniatura retrato (foto de peça na listagem) — maior na vertical. */
+.foto-thumb-vert {
+  width: 72px;
+  height: 104px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+}
+/* Zona de colar imagem do clipboard. */
+.foto-paste-zone {
+  margin-top: .4rem;
+  padding: .5rem .75rem;
+  border: 1px dashed var(--gold-soft);
+  border-radius: 6px;
+  background: var(--cream-soft);
+  color: var(--ink-soft);
+  font-size: .8rem;
+}
+.foto-paste-zone kbd {
+  background: var(--ink);
+  color: var(--cream);
+  border-radius: 3px;
+  padding: 0 .3rem;
+}
+.foto-colada-ok { display: none; color: #6d7a5c; font-weight: 500; margin-left: .3rem; }
+.badge.text-bg-info  { background-color: #6d7a5c !important; color: var(--cream) !important; }
+.badge.text-bg-light { background-color: var(--cream-soft) !important; color: var(--ink-soft) !important; border: 1px solid var(--line); }
+.sem-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-soft);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: .95rem;
+}

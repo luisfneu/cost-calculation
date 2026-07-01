@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Banco de dados / uploads (dados locais)
+instance/
+app/static/uploads/*
+!app/static/uploads/.gitkeep
+
+# Sistema
+.DS_Store
