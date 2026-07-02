@@ -48,7 +48,7 @@
       <div class="card-body">
         <h3 class="h6">{{ peca.nome }}</h3>
         <div class="small text-muted">Custo: {{ peca.custo_total | moeda }}</div>
-        <div class="fw-bold text-success">Venda: {{ peca.preco_venda | moeda }}</div>
+        <div class="fw-bold text-success">Venda (etiqueta): {{ peca.preco_etiqueta_efetivo | moeda }}</div>
         <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="stretched-link"></a>
       </div>
     </div>

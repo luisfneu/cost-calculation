@@ -47,6 +47,69 @@ def create_app(config_class=Config):
             return valor
 
     with app.app_context():
-        db.create_all()
+        legado = _preparar_migracao_vendas()  # renomeia vendas antigas (single-item)
+        db.create_all()                        # cria vendas (pedido) e venda_itens
+        if legado:
+            _copiar_vendas_legadas()           # move dados p/ o novo formato
+        _migrar_colunas()                      # ADD COLUMN idempotente
 
     return app
+
+
+def _preparar_migracao_vendas():
+    """Se a tabela 'vendas' ainda for do formato antigo (single-item, marcada
+    pela coluna peca_id), renomeia para 'vendas_legacy' antes do create_all.
+
+    A presença de peca_id é o marcador definitivo do schema antigo — não
+    dependemos de 'venda_itens' (que pode ter sido criado antes)."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(db.engine)
+    tabelas = insp.get_table_names()
+    if "vendas" in tabelas and "peca_id" in {c["name"] for c in insp.get_columns("vendas")}:
+        db.session.execute(text("ALTER TABLE vendas RENAME TO vendas_legacy"))
+        db.session.commit()
+        return True
+    return False
+
+
+def _copiar_vendas_legadas():
+    """Copia cada venda antiga para o novo formato: um pedido + um item.
+    Idempotente: não duplica itens já existentes."""
+    from sqlalchemy import text
+
+    db.session.execute(text(
+        "INSERT INTO vendas (id, frete, frete_cortesia, marketplace_pct, "
+        "comprador, forma_pagamento, pago, criado_em) "
+        "SELECT id, frete, frete_cortesia, marketplace_pct, comprador, "
+        "forma_pagamento, pago, criado_em FROM vendas_legacy"
+    ))
+    db.session.execute(text(
+        "INSERT INTO venda_itens (venda_id, peca_id, tamanho, quantidade, "
+        "preco_unitario, custo_unitario) "
+        "SELECT id, peca_id, tamanho, quantidade, preco_unitario, custo_unitario "
+        "FROM vendas_legacy "
+        "WHERE id NOT IN (SELECT venda_id FROM venda_itens)"
+    ))
+    db.session.execute(text("DROP TABLE vendas_legacy"))
+    db.session.commit()
+
+
+def _migrar_colunas():
+    """Adiciona colunas novas em tabelas existentes (idempotente)."""
+    from sqlalchemy import inspect, text
+
+    esperado = {
+        "pecas": {"preco_etiqueta": "FLOAT DEFAULT 0"},
+        "vendas": {"desconto_total": "FLOAT DEFAULT 0"},
+        "venda_itens": {"desconto": "FLOAT DEFAULT 0"},
+    }
+    insp = inspect(db.engine)
+    for tabela, colunas in esperado.items():
+        if not insp.has_table(tabela):
+            continue
+        existentes = {c["name"] for c in insp.get_columns(tabela)}
+        for coluna, ddl in colunas.items():
+            if coluna not in existentes:
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
+    db.session.commit()

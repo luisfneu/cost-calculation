@@ -16,12 +16,21 @@
           </thead>
           <tbody>
           {% for m in mov_pecas %}
+            {% set saida = m.tipo == 'saida' %}
             <tr>
               <td class="small text-muted">{{ m.criado_em | dt }}</td>
               <td>{{ m.peca.nome }}</td>
               <td><span class="badge text-bg-light">{{ m.tamanho }}</span></td>
               <td>{{ m.tipo }}</td>
-              <td class="text-end fw-bold text-success">+{{ m.quantidade | num }}</td>
+              <td class="text-end fw-bold {{ 'text-danger' if saida else 'text-success' }}">
+                {%- if m.tipo == 'ajuste' -%}
+                  {{ '+' if m.quantidade >= 0 else '' }}{{ m.quantidade | num }}
+                {%- elif saida -%}
+                  −{{ m.quantidade | num }}
+                {%- else -%}
+                  +{{ m.quantidade | num }}
+                {%- endif -%}
+              </td>
             </tr>
           {% endfor %}
           </tbody>

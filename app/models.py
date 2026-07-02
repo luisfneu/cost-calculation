@@ -72,6 +72,10 @@ class Peca(db.Model):
     # Margem de lucro desejada sobre o preço de venda (em %). Ex: 40 => 40%.
     margem_percentual = db.Column(db.Float, nullable=False, default=0.0)
 
+    # Preço "de etiqueta": preço comercial ajustado manualmente. Quando definido,
+    # é usado como preço de venda padrão (em vez do preço calculado pela margem).
+    preco_etiqueta = db.Column(db.Float, nullable=False, default=0.0)
+
     criado_em = db.Column(db.DateTime, default=_agora)
 
     insumos = db.relationship(
@@ -119,6 +123,11 @@ class Peca(db.Model):
     @property
     def lucro(self) -> float:
         return self.preco_venda - self.custo_total
+
+    @property
+    def preco_etiqueta_efetivo(self) -> float:
+        """Preço comercial usado como padrão na venda (etiqueta, ou o calculado)."""
+        return self.preco_etiqueta if self.preco_etiqueta and self.preco_etiqueta > 0 else self.preco_venda
 
 
 class PecaInsumo(db.Model):
@@ -169,41 +178,105 @@ class MovimentoPeca(db.Model):
 
 
 class Venda(db.Model):
-    """Venda de peças produzidas. Frete e comissão de marketplace entram como
-    custos da venda (reduzem o lucro), ambos opcionais."""
+    """Pedido de venda com um ou mais itens (peças/tamanhos).
+
+    - Comissão de marketplace: custo da venda (% sobre os produtos do pedido).
+    - Frete: se "cortesia" (marcado), é custo da venda; se não, é somado à
+      receita (o cliente paga).
+    Dados de comprador/pagamento e frete/marketplace são do pedido (não do item).
+    """
 
     __tablename__ = "vendas"
 
     id = db.Column(db.Integer, primary_key=True)
-    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
-    tamanho = db.Column(db.String(5), nullable=False)
-    quantidade = db.Column(db.Float, nullable=False, default=1.0)
 
-    preco_unitario = db.Column(db.Float, nullable=False, default=0.0)   # preço de venda por peça
-    frete = db.Column(db.Float, nullable=False, default=0.0)            # opcional (custo)
-    marketplace_pct = db.Column(db.Float, nullable=False, default=0.0)  # opcional (% sobre a receita)
-    custo_unitario = db.Column(db.Float, nullable=False, default=0.0)   # snapshot do custo da peça
+    frete = db.Column(db.Float, nullable=False, default=0.0)            # opcional
+    frete_cortesia = db.Column(db.Boolean, nullable=False, default=False)  # frete é cortesia (custo)?
+    marketplace_pct = db.Column(db.Float, nullable=False, default=0.0)  # opcional (% sobre os produtos)
+    desconto_total = db.Column(db.Float, nullable=False, default=0.0)   # desconto no pedido (R$)
+
+    # Dados do comprador / pagamento.
+    comprador = db.Column(db.String(160), default="")        # opcional
+    forma_pagamento = db.Column(db.String(40), default="")   # Pix, Dinheiro, Cartão...
+    pago = db.Column(db.Boolean, nullable=False, default=False)
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
-    peca = db.relationship("Peca")
+    itens = db.relationship(
+        "VendaItem", back_populates="venda", cascade="all, delete-orphan"
+    )
+
+    @property
+    def quantidade_total(self) -> float:
+        return sum(i.quantidade for i in self.itens)
+
+    @property
+    def receita_itens(self) -> float:
+        """Soma dos itens já com o desconto de cada item."""
+        return sum(i.subtotal_receita for i in self.itens)
+
+    @property
+    def receita_produtos(self) -> float:
+        """Receita dos produtos após descontos de item e desconto total."""
+        return self.receita_itens - self.desconto_total
+
+    @property
+    def desconto_itens(self) -> float:
+        return sum(i.desconto for i in self.itens)
+
+    @property
+    def custo_producao(self) -> float:
+        return sum(i.subtotal_custo for i in self.itens)
 
     @property
     def receita(self) -> float:
-        return self.preco_unitario * self.quantidade
+        """Receita total: produtos + frete quando o cliente paga (não cortesia)."""
+        return self.receita_produtos + (0.0 if self.frete_cortesia else self.frete)
 
     @property
     def comissao_marketplace(self) -> float:
-        return self.receita * (self.marketplace_pct / 100.0)
+        return self.receita_produtos * (self.marketplace_pct / 100.0)
 
     @property
     def custo_total(self) -> float:
-        """Custo de produção + frete + comissão de marketplace."""
-        return self.custo_unitario * self.quantidade + self.frete + self.comissao_marketplace
+        """Produção + comissão + frete (só quando cortesia)."""
+        frete_custo = self.frete if self.frete_cortesia else 0.0
+        return self.custo_producao + self.comissao_marketplace + frete_custo
 
     @property
     def lucro(self) -> float:
         return self.receita - self.custo_total
+
+
+class VendaItem(db.Model):
+    """Item de um pedido de venda: uma peça em um tamanho, com quantidade."""
+
+    __tablename__ = "venda_itens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    venda_id = db.Column(db.Integer, db.ForeignKey("vendas.id"), nullable=False)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    tamanho = db.Column(db.String(5), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False, default=1.0)
+    preco_unitario = db.Column(db.Float, nullable=False, default=0.0)
+    desconto = db.Column(db.Float, nullable=False, default=0.0)  # desconto do item (R$)
+    custo_unitario = db.Column(db.Float, nullable=False, default=0.0)  # snapshot
+
+    venda = db.relationship("Venda", back_populates="itens")
+    peca = db.relationship("Peca")
+
+    @property
+    def subtotal_bruto(self) -> float:
+        return self.preco_unitario * self.quantidade
+
+    @property
+    def subtotal_receita(self) -> float:
+        """Subtotal do item já com o desconto do item."""
+        return self.subtotal_bruto - self.desconto
+
+    @property
+    def subtotal_custo(self) -> float:
+        return self.custo_unitario * self.quantidade
 
 
 class MovimentoEstoque(db.Model):

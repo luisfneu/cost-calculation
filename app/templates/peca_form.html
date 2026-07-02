@@ -29,6 +29,14 @@
              value="{{ peca.margem_percentual if peca else '' }}" placeholder="Ex.: 40">
     </div>
   </div>
+  <div class="row">
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Preço etiqueta (R$)</label>
+      <input type="text" name="preco_etiqueta" class="form-control"
+             value="{{ '%.2f'|format(peca.preco_etiqueta) if peca and peca.preco_etiqueta else '' }}" placeholder="preço comercial">
+      <small class="text-muted">Preço comercial usado como padrão na venda. Deixe vazio para usar o calculado.</small>
+    </div>
+  </div>
   <div class="mb-3 foto-campo">
     <label class="form-label">Foto da peça</label>
     <input type="file" name="foto" class="form-control" accept="image/*">

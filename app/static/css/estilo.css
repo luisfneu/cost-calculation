@@ -81,10 +81,14 @@ main.container { max-width: 1100px; }
 .card.text-bg-secondary { background-color: var(--ink) !important; color: var(--cream) !important; border: none; }
 .card.text-bg-success   { background-color: #6d7a5c !important; color: var(--cream) !important; border: none; }
 .card.text-bg-danger    { background-color: #a5624f !important; color: var(--cream) !important; border: none; }
-.card.text-bg-primary .h2,
-.card.text-bg-secondary .h2,
-.card.text-bg-success .h2,
-.card.text-bg-danger .h2 { font-family: 'Cormorant Garamond', serif; color: inherit; }
+/* Títulos/números dentro dos cards coloridos herdam a cor clara do card */
+.card.text-bg-primary :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
+.card.text-bg-secondary :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
+.card.text-bg-success :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
+.card.text-bg-danger :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6) {
+  font-family: 'Cormorant Garamond', serif;
+  color: inherit;
+}
 
 /* ---------- Botões -------------------------------------------------------- */
 .btn {
@@ -196,8 +200,51 @@ main.container { max-width: 1100px; }
   padding: 0 .3rem;
 }
 .foto-colada-ok { display: none; color: #6d7a5c; font-weight: 500; margin-left: .3rem; }
+
+/* Seletor de peça com foto (tela de vendas) */
+.peca-picker { position: relative; }
+.picker-toggle { display: flex; align-items: center; gap: .25rem; }
+.picker-menu {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--gold-soft);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(44, 38, 32, .15);
+  margin-top: 2px;
+}
+.picker-menu.aberto { display: block; }
+.picker-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: .4rem .6rem;
+  border-bottom: 1px solid var(--line);
+}
+.picker-option:hover { background: rgba(176, 138, 79, .1); }
+.picker-option .ms-auto { margin-left: auto; }
+
+/* Impressão do pedido */
+@media print {
+  .navbar, .no-print, .alert { display: none !important; }
+  body { background: #fff !important; }
+  main.container { max-width: 100% !important; padding: 0 !important; }
+  .area-impressao { box-shadow: none !important; border: none !important; max-width: 100% !important; }
+}
 .badge.text-bg-info  { background-color: #6d7a5c !important; color: var(--cream) !important; }
 .badge.text-bg-light { background-color: var(--cream-soft) !important; color: var(--ink-soft) !important; border: 1px solid var(--line); }
+/* Badges de tipo de insumo */
+.badge.badge-materia   { background-color: #e6c14a !important; color: #4a3c12 !important; }
+.badge.badge-embalagem { background-color: #6d7a5c !important; color: var(--cream) !important; }
 .sem-foto {
   display: flex;
   align-items: center;
