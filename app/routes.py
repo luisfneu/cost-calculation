@@ -28,6 +28,8 @@ from .models import (
     EstoquePeca,
     FotoPeca,
     Insumo,
+    Kit,
+    KitItem,
     MovimentoEstoque,
     MovimentoPeca,
     Pagamento,
@@ -446,6 +448,8 @@ def form_peca(peca_id=None):
         peca.custos_extras = _num("custos_extras", peca.custos_extras)
         peca.margem_percentual = _num("margem_percentual", peca.margem_percentual)
         peca.preco_etiqueta = _num("preco_etiqueta", peca.preco_etiqueta)
+        peca.preco_promocional = _num("preco_promocional", peca.preco_promocional)
+        peca.sku = _txt("sku", peca.sku)
         peca.peso_g = _num("peso_g", peca.peso_g)
         peca.altura_cm = _num("altura_cm", peca.altura_cm)
         peca.largura_cm = _num("largura_cm", peca.largura_cm)
@@ -894,8 +898,9 @@ def _pecas_com_estoque():
 def _render_form_pedido(modo, prefill_itens=None, prefill_pedido=None):
     # Venda: só peças com estoque. Encomenda: todas.
     pecas = _pecas_com_estoque() if modo == "venda" else Peca.query.order_by(Peca.nome).all()
+    kits = Kit.query.filter_by(ativo=True).order_by(Kit.nome).all()
     return render_template(
-        "venda_nova.html", modo=modo, pecas=pecas,
+        "venda_nova.html", modo=modo, pecas=pecas, kits=kits,
         clientes=Cliente.query.order_by(Cliente.nome).all(),
         prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
     )
@@ -1731,3 +1736,76 @@ def devolucao_venda(venda_id):
     db.session.commit()
     flash(f"Devolução registrada. Vale-troca {vale.codigo} gerado: R$ {total_credito:.2f}.", "sucesso")
     return redirect(url_for("main.listar_vales"))
+
+
+# --------------------------------------------------------------------------- #
+# Kits / combos
+# --------------------------------------------------------------------------- #
+@bp.route("/kits")
+def listar_kits():
+    kits = Kit.query.order_by(Kit.ativo.desc(), Kit.nome).all()
+    pecas = Peca.query.order_by(Peca.nome).all()
+    return render_template("kits.html", kits=kits, pecas=pecas)
+
+
+def _salvar_itens_kit(kit):
+    """Lê os campos peca_id[]/quantidade[] do form e regrava os itens do kit."""
+    for it in list(kit.itens):
+        db.session.delete(it)
+    peca_ids = request.form.getlist("peca_id")
+    quantidades = request.form.getlist("quantidade")
+    for i, pid in enumerate(peca_ids):
+        pid = int(pid) if pid else 0
+        if not pid:
+            continue
+        qtd = _to_float(quantidades[i]) if i < len(quantidades) else 1.0
+        if qtd <= 0:
+            qtd = 1.0
+        kit.itens.append(KitItem(peca_id=pid, quantidade=qtd))
+
+
+@bp.route("/kits/novo", methods=["POST"])
+def salvar_kit():
+    nome = request.form.get("nome", "").strip()
+    if not nome:
+        flash("Informe o nome do kit.", "erro")
+        return redirect(url_for("main.listar_kits"))
+    kit = Kit(nome=nome, preco=_to_float(request.form.get("preco")))
+    _salvar_itens_kit(kit)
+    if not kit.itens:
+        flash("Adicione ao menos uma peça ao kit.", "erro")
+        return redirect(url_for("main.listar_kits"))
+    db.session.add(kit)
+    db.session.commit()
+    flash("Kit criado.", "sucesso")
+    return redirect(url_for("main.listar_kits"))
+
+
+@bp.route("/kits/<int:kit_id>/editar", methods=["POST"])
+def editar_kit(kit_id):
+    kit = Kit.query.get_or_404(kit_id)
+    nome = request.form.get("nome", "").strip()
+    if nome:
+        kit.nome = nome
+    kit.preco = _to_float(request.form.get("preco"))
+    _salvar_itens_kit(kit)
+    db.session.commit()
+    flash("Kit atualizado.", "sucesso")
+    return redirect(url_for("main.listar_kits"))
+
+
+@bp.route("/kits/<int:kit_id>/toggle", methods=["POST"])
+def toggle_kit(kit_id):
+    kit = Kit.query.get_or_404(kit_id)
+    kit.ativo = not kit.ativo
+    db.session.commit()
+    return redirect(url_for("main.listar_kits"))
+
+
+@bp.route("/kits/<int:kit_id>/excluir", methods=["POST"])
+def excluir_kit(kit_id):
+    kit = Kit.query.get_or_404(kit_id)
+    db.session.delete(kit)
+    db.session.commit()
+    flash("Kit excluído.", "sucesso")
+    return redirect(url_for("main.listar_kits"))

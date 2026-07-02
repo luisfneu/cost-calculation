@@ -49,6 +49,18 @@
              value="{{ '%.2f'|format(peca.preco_etiqueta) if peca and peca.preco_etiqueta else '' }}" placeholder="preço comercial">
       <small class="text-muted">Preço comercial usado como padrão na venda. Deixe vazio para usar o calculado.</small>
     </div>
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Preço promocional (R$) <span class="text-muted small">(de/por)</span></label>
+      <input type="text" name="preco_promocional" class="form-control"
+             value="{{ '%.2f'|format(peca.preco_promocional) if peca and peca.preco_promocional else '' }}" placeholder="preço em promoção">
+      <small class="text-muted">Se preenchido, vira o preço da venda e mostra o preço cheio riscado.</small>
+    </div>
+    <div class="col-md-4 mb-3">
+      <label class="form-label">SKU / código de barras</label>
+      <input type="text" name="sku" class="form-control"
+             value="{{ peca.sku if peca else '' }}" placeholder="Ex.: SH-0001">
+      <small class="text-muted">Usado na busca e leitura por câmera na venda.</small>
+    </div>
   </div>
   <div class="mb-3 foto-campo">
     <label class="form-label">Foto principal</label>

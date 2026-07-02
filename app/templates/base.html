@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}Calculadora de Custos{% endblock %} · Sabrina Hansen Atelier</title>
+  <title>{% block titulo %}CRM{% endblock %} · Sabrina Hansen Atelier</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,6 +46,7 @@
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Mais</a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item" href="{{ url_for('main.listar_cupons') }}">Cupons</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_kits') }}">Kits / combos</a></li>
               <li><a class="dropdown-item" href="{{ url_for('main.listar_vales') }}">Vales / crédito</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{{ url_for('main.historico') }}">Histórico</a></li>

@@ -41,7 +41,13 @@
           <tr class="fw-bold"><td colspan="5" class="text-end">Total dos itens</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
         </tfoot>
       </table>
-      <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-item">+ Adicionar item</button>
+      <div class="d-flex flex-wrap gap-2 mb-4">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-scan" title="Escanear código / QR"><i class="bi bi-upc-scan"></i></button>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="add-item">+ Adicionar item</button>
+        {% if kits %}
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btn-kit"><i class="bi bi-box-seam"></i> Adicionar kit/combo</button>
+        {% endif %}
+      </div>
 
       <!-- Frete, taxas e descontos -->
       <div class="section-titulo">Frete, taxas e descontos</div>
@@ -125,7 +131,10 @@
     </form>
 
     <script id="dados-pecas" type="application/json">
-      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "sku": {{ p.sku|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+    </script>
+    <script id="dados-kits" type="application/json">
+      [{% for k in kits %}{"id": {{ k.id }}, "nome": {{ k.nome|tojson }}, "preco": {{ k.preco }}, "itens": [{% for i in k.itens %}{"peca_id": {{ i.peca_id }}, "quantidade": {{ i.quantidade }}}{{ "," if not loop.last }}{% endfor %}]}{{ "," if not loop.last }}{% endfor %}]
     </script>
     <script id="dados-clientes" type="application/json">
       [{% for c in clientes %}{"id": {{ c.id }}, "nome": {{ c.nome|tojson }}, "instagram": {{ c.instagram_handle|tojson }}, "whatsapp": {{ c.whatsapp_numero|tojson }}, "telefone": {{ c.telefone|tojson }}, "endereco": {{ c.endereco_completo|tojson }}, "cep": {{ c.cep|tojson }}}{{ "," if not loop.last }}{% endfor %}]
@@ -143,6 +152,37 @@
       </div>
     {% endif %}
     {% endif %}
+  </div>
+</div>
+
+<!-- Modal: leitor de código de barras / QR -->
+<div class="modal fade" id="modal-scan" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Escanear código / QR</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div id="reader" style="width:100%"></div>
+        <div class="small text-muted mt-2" id="scan-msg">Aponte a câmera para o código de barras ou QR da etiqueta.</div>
+        <div class="input-group input-group-sm mt-3">
+          <input type="text" id="scan-manual" class="form-control" placeholder="Digitar/ler código (SKU) e Enter" autocomplete="off">
+          <button type="button" class="btn btn-outline-secondary" id="scan-manual-ok">Adicionar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: escolher kit / combo -->
+<div class="modal fade" id="modal-kit" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Adicionar kit / combo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="list-group" id="lista-kits"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -250,6 +290,7 @@
 </script>
 
 {% if pecas %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 (function () {
   const MODO = "{{ modo }}";
@@ -268,7 +309,7 @@
   function opcoesMenu() {
     return PECAS.map(p => `
       <button type="button" class="picker-option" data-id="${p.id}">
-        ${thumb(p)} <span>${p.nome}</span>
+        ${thumb(p)} <span>${p.nome}${p.sku ? ` <small class="text-muted">${p.sku}</small>` : ''}</span>
         <span class="small text-muted ms-auto">estoque ${Object.entries(p.estoque).filter(([t,q])=>q>0).map(([t,q])=>t+':'+q).join(' ') || '0'}</span>
       </button>`).join('');
   }
@@ -312,6 +353,10 @@
     // Encomenda pode vender sem estoque: mostra todos os tamanhos.
     if (MODO === 'encomenda') {
       ['PP','P','M','G','GG'].forEach(t => { if (!vistos.has(t)) sel.innerHTML += `<option value="${t}">${t} (0)</option>`; });
+    }
+    // Tamanho vindo do QR: garante a opção mesmo se estiver sem estoque.
+    if (tamAtual && !sel.querySelector(`option[value="${tamAtual}"]`)) {
+      sel.innerHTML += `<option value="${tamAtual}">${tamAtual} (0)</option>`;
     }
     if (tamAtual) sel.value = tamAtual;
   }
@@ -463,6 +508,143 @@
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.peca-picker')) document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
   });
+
+  // Remove linhas ainda sem peça selecionada (ex.: a linha vazia inicial).
+  function limparLinhasVazias() {
+    corpo.querySelectorAll('.item-row').forEach(tr => {
+      if (!tr.querySelector('.picker-value').value) tr.remove();
+    });
+  }
+
+  // ---- Adicionar peça avulsa (busca/scan) ----
+  function adicionarPeca(p, tamanho) {
+    if (!p) return;
+    limparLinhasVazias();
+    novaLinha({peca_id: p.id, nome: p.nome, estoque: p.estoque, quantidade: 1,
+               preco: p.preco.toFixed(2), desconto: 0, tamanho: (tamanho || '').toUpperCase()});
+    recalcular();
+  }
+
+  // ---- Adicionar kit: distribui o preço do kit entre as peças componentes ----
+  function adicionarKit(kit) {
+    const comps = kit.itens.map(i => ({qtd: i.quantidade, peca: acha(i.peca_id)})).filter(c => c.peca);
+    if (!comps.length) return;
+    limparLinhasVazias();
+    const base = comps.reduce((s, c) => s + c.peca.preco * c.qtd, 0) || 1;
+    let acumulado = 0;
+    comps.forEach((c, idx) => {
+      let totalLinha = (idx === comps.length - 1)
+        ? kit.preco - acumulado
+        : Math.round(kit.preco * (c.peca.preco * c.qtd) / base * 100) / 100;
+      acumulado += totalLinha;
+      const precoUnit = c.qtd ? totalLinha / c.qtd : totalLinha;
+      novaLinha({peca_id: c.peca.id, nome: c.peca.nome, estoque: c.peca.estoque,
+                 quantidade: c.qtd, preco: precoUnit.toFixed(2), desconto: 0});
+    });
+    recalcular();
+  }
+
+  // Adicionar kit/combo via modal.
+  const btnKit = document.getElementById('btn-kit');
+  if (btnKit) {
+    const KITS = JSON.parse(document.getElementById('dados-kits').textContent);
+    const lista = document.getElementById('lista-kits');
+    const modalKitEl = document.getElementById('modal-kit');
+    const nomesKit = k => k.itens.map(i => {
+      const p = acha(i.peca_id);
+      return p ? (i.quantidade > 1 ? i.quantidade + '× ' : '') + p.nome : null;
+    }).filter(Boolean).join(', ');
+    function pintarKits() {
+      lista.innerHTML = KITS.length ? KITS.map(k => `
+        <button type="button" class="list-group-item list-group-item-action" data-id="${k.id}">
+          <div class="d-flex justify-content-between align-items-center">
+            <strong>${k.nome}</strong><span class="text-success">${brl(k.preco)}</span>
+          </div>
+          <div class="small text-muted">${nomesKit(k) || '—'}</div>
+        </button>`).join('') : '<div class="text-muted small">Nenhum kit ativo.</div>';
+    }
+    btnKit.addEventListener('click', () => { pintarKits(); bootstrap.Modal.getOrCreateInstance(modalKitEl).show(); });
+    lista.addEventListener('click', e => {
+      const b = e.target.closest('[data-id]');
+      if (!b) return;
+      const k = KITS.find(x => String(x.id) === b.dataset.id);
+      if (k) adicionarKit(k);
+      bootstrap.Modal.getOrCreateInstance(modalKitEl).hide();
+    });
+  }
+
+  // Leitor de câmera (html5-qrcode).
+  const btnScan = document.getElementById('btn-scan');
+  if (btnScan) {
+    const modalEl = document.getElementById('modal-scan');
+    const modalObj = () => bootstrap.Modal.getOrCreateInstance(modalEl);
+    const msg = document.getElementById('scan-msg');
+    let leitor = null;
+    let travado = false;  // evita adicionar o mesmo item várias vezes por leitura
+    const diz = (t, cor) => { msg.innerHTML = cor ? `<span class="text-${cor}">${t}</span>` : t; };
+
+    function achaPorCodigo(cod) {
+      cod = String(cod).trim().toLowerCase();
+      return PECAS.find(x => (x.sku || '').toLowerCase() === cod)
+          || PECAS.find(x => x.nome.toLowerCase() === cod);
+    }
+    function usarCodigo(raw) {
+      if (travado) return false;
+      // Formato do QR: SKU--TAMANHO (ex.: SH-00001--P). O tamanho é opcional.
+      const partes = String(raw).trim().split('--');
+      const codigo = partes[0].trim();
+      const tamanho = (partes[1] || '').trim().toUpperCase();
+      const p = achaPorCodigo(codigo);
+      if (p) { travado = true; pararScan(); adicionarPeca(p, tamanho); fechar(); return true; }
+      diz(`Nenhuma peça com o código “${codigo}”.`, 'danger');
+      return false;
+    }
+    function fechar() { modalObj().hide(); }
+    function pararScan() {
+      if (leitor) { const l = leitor; leitor = null; l.stop().then(() => l.clear()).catch(() => {}); }
+    }
+    async function iniciar() {
+      if (!window.Html5Qrcode) { diz('Leitor não carregou. Verifique a conexão e recarregue a página.', 'danger'); return; }
+      if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+        diz('Este navegador/endereço não permite acessar a câmera. Use https ou localhost, ou digite o código abaixo.', 'danger');
+        return;
+      }
+      travado = false;
+      diz('Iniciando câmera…');
+      leitor = new Html5Qrcode('reader');
+      const config = { fps: 10, qrbox: { width: 250, height: 160 } };
+      const onOk = texto => usarCodigo(texto);
+      try {
+        await leitor.start({ facingMode: 'environment' }, config, onOk, () => {});
+        diz('Aponte a câmera para o código de barras ou QR da etiqueta.');
+      } catch (e1) {
+        // fallback: tenta pela lista de câmeras
+        try {
+          const cams = await Html5Qrcode.getCameras();
+          if (!cams || !cams.length) throw new Error('sem câmeras');
+          await leitor.start(cams[cams.length - 1].id, config, onOk, () => {});
+          diz('Aponte a câmera para o código de barras ou QR da etiqueta.');
+        } catch (e2) {
+          leitor = null;
+          diz('Não foi possível acessar a câmera (permissão negada ou indisponível). Digite o código abaixo.', 'danger');
+        }
+      }
+    }
+    btnScan.addEventListener('click', () => modalObj().show());
+    modalEl.addEventListener('shown.bs.modal', iniciar);
+    modalEl.addEventListener('hidden.bs.modal', pararScan);
+
+    // Entrada manual (fallback e leitores USB que "digitam" o código).
+    const inManual = document.getElementById('scan-manual');
+    if (inManual) {
+      inManual.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); if (inManual.value.trim()) { usarCodigo(inManual.value); inManual.value = ''; } }
+      });
+      document.getElementById('scan-manual-ok').addEventListener('click', () => {
+        if (inManual.value.trim()) { usarCodigo(inManual.value); inManual.value = ''; }
+      });
+    }
+  }
 
   if (PREFILL.length) PREFILL.forEach(novaLinha); else novaLinha();
   if (corpoPag) linhaPagamento('Dinheiro', '');  // pagamento inicial (só encomenda)

@@ -105,6 +105,7 @@ def _migrar_colunas():
             "tags": "VARCHAR(255) DEFAULT ''",
             "peso_g": "FLOAT DEFAULT 0", "altura_cm": "FLOAT DEFAULT 0",
             "largura_cm": "FLOAT DEFAULT 0", "comprimento_cm": "FLOAT DEFAULT 0",
+            "preco_promocional": "FLOAT DEFAULT 0", "sku": "VARCHAR(40) DEFAULT ''",
         },
         "insumos": {"ativo": "BOOLEAN DEFAULT 1"},
         "vendas": {

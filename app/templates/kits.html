@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Kits / combos</h1>
+
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Novo kit</h2>
+    <form method="post" action="{{ url_for('main.salvar_kit') }}">
+      <div class="row g-3 align-items-end mb-3">
+        <div class="col-md-6">
+          <label class="form-label">Nome *</label>
+          <input type="text" name="nome" class="form-control" required placeholder="Ex.: Combo verão (2 peças)">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Preço do kit (R$) *</label>
+          <input type="text" name="preco" class="form-control kit-preco" required placeholder="0,00">
+        </div>
+      </div>
+      {% if pecas %}
+      <div class="section-titulo">Peças do kit</div>
+      <table class="table table-sm align-middle">
+        <thead class="table-light"><tr><th style="width:60%">Peça</th><th>Qtd</th><th></th></tr></thead>
+        <tbody class="kit-linhas"></tbody>
+      </table>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-2 kit-add">+ Adicionar peça</button>
+      <div class="small text-muted mb-3 kit-economia"></div>
+      <div class="text-end"><button class="btn btn-primary">Criar kit</button></div>
+      {% else %}
+      <p class="text-muted">Cadastre peças antes de montar kits.</p>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<div class="card bg-white">
+  <div class="card-body">
+    {% if kits %}
+    <table class="table align-middle">
+      <thead class="table-light"><tr><th>Kit</th><th>Peças</th><th>Preço normal</th><th>Preço do kit</th><th>Economia</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for k in kits %}
+        <tr class="{{ '' if k.ativo else 'text-muted' }}">
+          <td><strong>{{ k.nome }}</strong></td>
+          <td class="small">{% for i in k.itens %}{{ i.peca.nome }}{% if i.quantidade != 1 %} ×{{ i.quantidade|int }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</td>
+          <td>{{ k.preco_normal | moeda }}</td>
+          <td><strong>{{ k.preco | moeda }}</strong></td>
+          <td>{% if k.preco_normal > k.preco %}<span class="text-success">− {{ (k.preco_normal - k.preco) | moeda }}</span>{% else %}—{% endif %}</td>
+          <td>{% if k.ativo %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">inativo</span>{% endif %}</td>
+          <td class="text-end text-nowrap">
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-{{ k.id }}">Editar</button>
+            <form method="post" action="{{ url_for('main.toggle_kit', kit_id=k.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if k.ativo else 'Ativar' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('main.excluir_kit', kit_id=k.id) }}" class="d-inline" onsubmit="return confirm('Excluir kit?')">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        <tr class="collapse" id="edit-{{ k.id }}">
+          <td colspan="7">
+            <form method="post" action="{{ url_for('main.editar_kit', kit_id=k.id) }}">
+              <div class="row g-2 align-items-end mb-2">
+                <div class="col-md-6"><label class="form-label small">Nome</label><input type="text" name="nome" class="form-control" value="{{ k.nome }}"></div>
+                <div class="col-md-3"><label class="form-label small">Preço (R$)</label><input type="text" name="preco" class="form-control kit-preco" value="{{ '%.2f'|format(k.preco) }}"></div>
+              </div>
+              <table class="table table-sm align-middle">
+                <thead class="table-light"><tr><th style="width:60%">Peça</th><th>Qtd</th><th></th></tr></thead>
+                <tbody class="kit-linhas" data-itens='[{% for i in k.itens %}{"peca_id": {{ i.peca_id }}, "quantidade": {{ i.quantidade }}}{{ "," if not loop.last }}{% endfor %}]'></tbody>
+              </table>
+              <button type="button" class="btn btn-outline-primary btn-sm mb-2 kit-add">+ Adicionar peça</button>
+              <div class="small text-muted mb-2 kit-economia"></div>
+              <div class="text-end"><button class="btn btn-primary btn-sm">Salvar alterações</button></div>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="text-muted">Nenhum kit cadastrado.</p>{% endif %}
+  </div>
+</div>
+
+{% if pecas %}
+<script id="dados-pecas-kit" type="application/json">
+  [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}}{{ "," if not loop.last }}{% endfor %}]
+</script>
+<script>
+(function () {
+  const PECAS = JSON.parse(document.getElementById('dados-pecas-kit').textContent);
+  const UPLOADS = "{{ url_for('static', filename='uploads/') }}";
+  const brl = v => 'R$ ' + (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
+  const acha = id => PECAS.find(p => String(p.id) === String(id));
+  const thumb = p => p.foto
+    ? `<img src="${UPLOADS}${p.foto}" class="foto-thumb me-2" alt="">`
+    : `<span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>`;
+
+  function opcoesMenu() {
+    return PECAS.map(p => `
+      <button type="button" class="picker-option" data-id="${p.id}">
+        ${thumb(p)} <span>${p.nome}</span>
+        <span class="small text-muted ms-auto">${brl(p.preco)}</span>
+      </button>`).join('');
+  }
+
+  function novaLinha(tbody, inicial) {
+    const tr = document.createElement('tr');
+    tr.className = 'kit-row';
+    tr.innerHTML = `
+      <td>
+        <div class="peca-picker">
+          <input type="hidden" name="peca_id" class="picker-value">
+          <button type="button" class="form-select text-start picker-toggle">Selecione a peça...</button>
+          <div class="picker-menu">${opcoesMenu()}</div>
+        </div>
+      </td>
+      <td><input type="text" name="quantidade" class="form-control form-control-sm in-qtd" value="1" style="width:70px"></td>
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger kit-rem">×</button></td>`;
+    tbody.appendChild(tr);
+    if (inicial) {
+      const p = acha(inicial.peca_id);
+      if (p) {
+        tr.querySelector('.picker-value').value = p.id;
+        tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${p.nome} <span class="text-muted ms-1">${brl(p.preco)}</span>`;
+      }
+      tr.querySelector('.in-qtd').value = String(inicial.quantidade).replace('.', ',');
+    }
+  }
+
+  function atualiza(form) {
+    const box = form.querySelector('.kit-economia');
+    if (!box) return;
+    let normal = 0;
+    form.querySelectorAll('.kit-row').forEach(tr => {
+      const p = acha(tr.querySelector('.picker-value').value);
+      const q = num(tr.querySelector('.in-qtd').value);
+      if (p) normal += p.preco * q;
+    });
+    const preco = num(form.querySelector('.kit-preco').value);
+    const eco = normal - preco;
+    box.innerHTML = normal
+      ? `Preço normal das peças: <b>${brl(normal)}</b>` + (eco > 0 ? ` · economia de <b class="text-success">${brl(eco)}</b>` : '')
+      : '';
+  }
+
+  // Monta as linhas iniciais (edição) ou uma linha vazia (criação).
+  document.querySelectorAll('.kit-linhas').forEach(tbody => {
+    const dados = tbody.dataset.itens;
+    if (dados) {
+      try { JSON.parse(dados).forEach(it => novaLinha(tbody, it)); } catch (e) {}
+    }
+    if (!tbody.children.length) novaLinha(tbody);
+    atualiza(tbody.closest('form'));
+  });
+
+  // Botão "adicionar peça".
+  document.querySelectorAll('.kit-add').forEach(btn => {
+    const form = btn.closest('form');
+    btn.addEventListener('click', () => { novaLinha(form.querySelector('.kit-linhas'), null); atualiza(form); });
+  });
+
+  // Interações do picker + qtd (delegado por formulário).
+  document.querySelectorAll('.kit-linhas').forEach(tbody => {
+    const form = tbody.closest('form');
+    tbody.addEventListener('click', e => {
+      const toggle = e.target.closest('.picker-toggle');
+      if (toggle) {
+        const menu = toggle.nextElementSibling;
+        document.querySelectorAll('.picker-menu.aberto').forEach(m => { if (m !== menu) m.classList.remove('aberto'); });
+        menu.classList.toggle('aberto');
+        return;
+      }
+      const opt = e.target.closest('.picker-option');
+      if (opt) {
+        const tr = opt.closest('.kit-row');
+        const p = acha(opt.dataset.id);
+        tr.querySelector('.picker-value').value = p.id;
+        tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${p.nome} <span class="text-muted ms-1">${brl(p.preco)}</span>`;
+        tr.querySelector('.picker-menu').classList.remove('aberto');
+        atualiza(form);
+        return;
+      }
+      if (e.target.classList.contains('kit-rem')) { e.target.closest('.kit-row').remove(); atualiza(form); }
+    });
+    tbody.addEventListener('input', () => atualiza(form));
+  });
+
+  document.querySelectorAll('.kit-preco').forEach(inp => inp.addEventListener('input', () => atualiza(inp.closest('form'))));
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.peca-picker')) document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

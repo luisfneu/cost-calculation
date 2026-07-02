@@ -42,7 +42,11 @@
               {% endif %}
               <div class="card-body">
                 <div class="nome">{{ peca.nome }}</div>
-                <div class="preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+                {% if peca.em_promocao %}
+                  <div class="preco"><s style="color:#b7b0a5;font-weight:400">{{ peca.preco_base | moeda }}</s> {{ peca.preco_etiqueta_efetivo | moeda }}</div>
+                {% else %}
+                  <div class="preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+                {% endif %}
               </div>
             </div>
           </div>
