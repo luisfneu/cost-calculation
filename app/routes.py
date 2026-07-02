@@ -15,6 +15,7 @@ from werkzeug.utils import secure_filename
 
 from .models import (
     TAMANHOS,
+    Cliente,
     EstoquePeca,
     Insumo,
     MovimentoEstoque,
@@ -94,8 +95,28 @@ def _registrar_movimento(insumo, tipo, quantidade, observacao=""):
 def index():
     pecas = Peca.query.order_by(Peca.criado_em.desc()).all()
     insumos = Insumo.query.order_by(Insumo.nome).all()
-    alertas = [i for i in insumos if i.estoque_baixo]
-    return render_template("index.html", pecas=pecas, insumos=insumos, alertas=alertas)
+    alertas = [i for i in insumos if i.ativo and i.estoque_baixo]
+    vendas = Venda.query.all()
+    totais_venda = {
+        "receita": sum(v.receita for v in vendas),
+        "lucro": sum(v.lucro for v in vendas),
+        "qtd": sum(v.quantidade_total for v in vendas),
+        "a_receber": sum(v.receita for v in vendas if not v.pago),
+    }
+    return render_template(
+        "index.html", pecas=pecas, insumos=insumos, alertas=alertas,
+        totais_venda=totais_venda, n_clientes=Cliente.query.count(),
+    )
+
+
+@bp.route("/vitrine")
+def vitrine():
+    """Vitrine para mostrar ao cliente: foto + preço de etiqueta, por coleção."""
+    pecas = Peca.query.order_by(Peca.colecao, Peca.nome).all()
+    grupos = {}
+    for p in pecas:
+        grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
+    return render_template("vitrine.html", grupos=grupos)
 
 
 # --------------------------------------------------------------------------- #
@@ -128,10 +149,17 @@ def form_insumo(insumo_id=None):
         insumo.unidade = request.form.get("unidade", "un").strip() or "un"
         insumo.custo_unitario = _to_float(request.form.get("custo_unitario"))
         insumo.estoque_minimo = _to_float(request.form.get("estoque_minimo"))
+        insumo.ativo = request.form.get("ativo") == "on"
         insumo.fornecedor = request.form.get("fornecedor", "").strip()
         # Estoque inicial só é definido na criação; depois é alterado por movimentos.
         if insumo_id is None:
             insumo.estoque = _to_float(request.form.get("estoque"))
+            # Registra a compra inicial (aparece como saída de caixa na contabilidade).
+            if insumo.estoque > 0:
+                db.session.add(MovimentoEstoque(
+                    insumo=insumo, tipo="entrada", quantidade=insumo.estoque,
+                    observacao="Estoque inicial (cadastro)",
+                ))
 
         # Foto (opcional).
         nova_foto = _salvar_foto(request.files.get("foto"))
@@ -224,6 +252,7 @@ def form_peca(peca_id=None):
             db.session.add(peca)
 
         peca.nome = nome
+        peca.colecao = request.form.get("colecao", "").strip()
         peca.descricao = request.form.get("descricao", "").strip()
         peca.custo_mao_de_obra = _to_float(request.form.get("custo_mao_de_obra"))
         peca.custos_extras = _to_float(request.form.get("custos_extras"))
@@ -407,6 +436,64 @@ def historico():
 
 
 # --------------------------------------------------------------------------- #
+# Clientes
+# --------------------------------------------------------------------------- #
+@bp.route("/clientes")
+def listar_clientes():
+    clientes = Cliente.query.order_by(Cliente.nome).all()
+    return render_template("clientes.html", clientes=clientes)
+
+
+@bp.route("/clientes/novo", methods=["GET", "POST"])
+@bp.route("/clientes/<int:cliente_id>/editar", methods=["GET", "POST"])
+def form_cliente(cliente_id=None):
+    cliente = Cliente.query.get_or_404(cliente_id) if cliente_id else None
+
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        if not nome:
+            flash("O nome do cliente é obrigatório.", "erro")
+            return render_template("cliente_form.html", cliente=cliente)
+        if cliente is None:
+            cliente = Cliente()
+            db.session.add(cliente)
+        cliente.nome = nome
+        cliente.instagram = request.form.get("instagram", "").strip()
+        cliente.telefone = request.form.get("telefone", "").strip()
+        cliente.cep = request.form.get("cep", "").strip()
+        cliente.logradouro = request.form.get("logradouro", "").strip()
+        cliente.numero = request.form.get("numero", "").strip()
+        cliente.complemento = request.form.get("complemento", "").strip()
+        cliente.bairro = request.form.get("bairro", "").strip()
+        cliente.cidade = request.form.get("cidade", "").strip()
+        cliente.uf = request.form.get("uf", "").strip().upper()[:2]
+        db.session.commit()
+        flash("Cliente salvo com sucesso.", "sucesso")
+        return redirect(url_for("main.detalhe_cliente", cliente_id=cliente.id))
+
+    return render_template("cliente_form.html", cliente=cliente)
+
+
+@bp.route("/clientes/<int:cliente_id>")
+def detalhe_cliente(cliente_id):
+    cliente = Cliente.query.get_or_404(cliente_id)
+    vendas = sorted(cliente.vendas, key=lambda v: v.criado_em, reverse=True)
+    return render_template("cliente_detalhe.html", cliente=cliente, vendas=vendas)
+
+
+@bp.route("/clientes/<int:cliente_id>/excluir", methods=["POST"])
+def excluir_cliente(cliente_id):
+    cliente = Cliente.query.get_or_404(cliente_id)
+    if cliente.vendas:
+        flash("Não é possível excluir: o cliente possui vendas registradas.", "erro")
+        return redirect(url_for("main.detalhe_cliente", cliente_id=cliente.id))
+    db.session.delete(cliente)
+    db.session.commit()
+    flash("Cliente excluído.", "sucesso")
+    return redirect(url_for("main.listar_clientes"))
+
+
+# --------------------------------------------------------------------------- #
 # Vendas
 # --------------------------------------------------------------------------- #
 def _pecas_com_estoque():
@@ -415,12 +502,13 @@ def _pecas_com_estoque():
 
 
 def _dados_pedido_do_form():
+    cid = request.form.get("cliente_id", type=int)
     return {
         "frete": _to_float(request.form.get("frete")),
         "frete_cortesia": request.form.get("frete_cortesia") == "on",
         "marketplace_pct": _to_float(request.form.get("marketplace_pct")),
         "desconto_total": _to_float(request.form.get("desconto_total")),
-        "comprador": request.form.get("comprador", "").strip(),
+        "cliente_id": cid if cid else None,
         "forma_pagamento": request.form.get("forma_pagamento", "").strip(),
         "pago": request.form.get("pago") == "on",
     }
@@ -491,6 +579,7 @@ def _render_vendas(prefill_itens=None, prefill_pedido=None):
     }
     return render_template(
         "vendas.html", vendas=vendas, pecas=_pecas_com_estoque(), totais=totais,
+        clientes=Cliente.query.order_by(Cliente.nome).all(),
         prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
     )
 
@@ -552,7 +641,7 @@ def editar_venda(venda_id):
         linhas, erro = _itens_do_form()
         if erro:
             flash(erro, "erro")
-            return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque())
+            return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque(), clientes=Cliente.query.order_by(Cliente.nome).all())
 
         # Estoque que volta ao devolver os itens atuais da venda.
         retornos = {}
@@ -567,7 +656,7 @@ def editar_venda(venda_id):
             disp = (linha.quantidade if linha else 0.0) + retornos.get((pid, tam), 0.0)
             if need > disp:
                 flash(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).", "erro")
-                return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque())
+                return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque(), clientes=Cliente.query.order_by(Cliente.nome).all())
 
         # Aplica só a diferença líquida por peça/tamanho.
         for chave in set(retornos) | set(necessarios):
@@ -600,7 +689,7 @@ def editar_venda(venda_id):
         flash("Venda atualizada e estoque ajustado.", "sucesso")
         return redirect(url_for("main.listar_vendas"))
 
-    return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque())
+    return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque(), clientes=Cliente.query.order_by(Cliente.nome).all())
 
 
 @bp.route("/vendas/<int:venda_id>/excluir", methods=["POST"])
@@ -618,3 +707,104 @@ def excluir_venda(venda_id):
     db.session.commit()
     flash("Venda excluída e estoque devolvido às peças.", "sucesso")
     return redirect(url_for("main.listar_vendas"))
+
+
+@bp.route("/vendas/<int:venda_id>/pagar", methods=["POST"])
+def marcar_pago(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    venda.pago = not venda.pago
+    db.session.commit()
+    flash(
+        f"Venda #{venda.id} marcada como {'paga' if venda.pago else 'pendente'}.", "sucesso"
+    )
+    return redirect(request.referrer or url_for("main.contabilidade"))
+
+
+# --------------------------------------------------------------------------- #
+# Contabilidade
+# --------------------------------------------------------------------------- #
+def _mes_de(dt):
+    return dt.strftime("%Y-%m") if dt else ""
+
+
+def _mes_label(chave):
+    meses = ["", "jan", "fev", "mar", "abr", "mai", "jun",
+             "jul", "ago", "set", "out", "nov", "dez"]
+    try:
+        ano, mes = chave.split("-")
+        return f"{meses[int(mes)]}/{ano}"
+    except (ValueError, IndexError):
+        return chave
+
+
+@bp.route("/contabilidade")
+def contabilidade():
+    mes = request.args.get("mes", "").strip()
+
+    vendas = Venda.query.order_by(Venda.criado_em).all()
+    compras = (
+        MovimentoEstoque.query.filter_by(tipo="entrada")
+        .order_by(MovimentoEstoque.criado_em).all()
+    )
+
+    # Meses disponíveis (dos dados) para o filtro.
+    meses = sorted(
+        {_mes_de(v.criado_em) for v in vendas} | {_mes_de(c.criado_em) for c in compras},
+        reverse=True,
+    )
+
+    def no_mes(dt):
+        return (not mes) or _mes_de(dt) == mes
+
+    vendas_f = [v for v in vendas if no_mes(v.criado_em)]
+    compras_f = [c for c in compras if no_mes(c.criado_em)]
+
+    # Razão (ledger) unificado: vendas = entrada, compras de insumo = saída.
+    ledger = []
+    for v in vendas_f:
+        itens_txt = ", ".join(f"{i.quantidade:g}x {i.peca.nome} ({i.tamanho})" for i in v.itens)
+        ledger.append({
+            "data": v.criado_em, "tipo": "entrada", "categoria": "Venda",
+            "descricao": f"Pedido #{v.id}" + (f" · {v.cliente_nome}" if v.cliente_nome else ""),
+            "detalhe": itens_txt, "valor": v.receita, "pago": v.pago,
+            "forma": v.forma_pagamento, "venda_id": v.id,
+        })
+    for c in compras_f:
+        valor = c.quantidade * c.insumo.custo_unitario
+        ledger.append({
+            "data": c.criado_em, "tipo": "saida", "categoria": "Compra de insumo",
+            "descricao": c.insumo.nome, "detalhe": f"{c.quantidade:g} {c.insumo.unidade} · {c.observacao}",
+            "valor": valor, "pago": True, "forma": "", "venda_id": None,
+        })
+    ledger.sort(key=lambda x: x["data"], reverse=True)
+
+    recebido = sum(v.receita for v in vendas_f if v.pago)
+    a_receber = sum(v.receita for v in vendas_f if not v.pago)
+    saidas_total = sum(c.quantidade * c.insumo.custo_unitario for c in compras_f)
+    lucro = sum(v.lucro for v in vendas_f)
+
+    # Recebido por forma de pagamento.
+    formas = {}
+    for v in vendas_f:
+        if v.pago:
+            k = v.forma_pagamento or "—"
+            formas[k] = formas.get(k, 0.0) + v.receita
+
+    # Contas a receber: todas as vendas pendentes (independente do mês).
+    pendentes = [v for v in vendas if not v.pago]
+
+    kpis = {
+        "recebido": recebido,
+        "a_receber": a_receber,
+        "saidas": saidas_total,
+        "saldo": recebido - saidas_total,
+        "lucro": lucro,
+        "n_vendas": len(vendas_f),
+        "ticket": (sum(v.receita for v in vendas_f) / len(vendas_f)) if vendas_f else 0.0,
+        "a_receber_total": sum(v.receita for v in pendentes),
+    }
+
+    return render_template(
+        "contabilidade.html", ledger=ledger, kpis=kpis, formas=formas,
+        pendentes=pendentes, meses=meses, mes_atual=mes, mes_label=_mes_label,
+    )

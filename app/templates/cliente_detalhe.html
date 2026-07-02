@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ cliente.nome }}</h1>
+    <div class="d-flex gap-3">
+      {% if cliente.instagram_handle %}
+        <a href="https://instagram.com/{{ cliente.instagram_handle }}" target="_blank" class="text-decoration-none">
+          <i class="bi bi-instagram"></i> @{{ cliente.instagram_handle }}
+        </a>
+      {% endif %}
+      {% if cliente.whatsapp_numero %}
+        <a href="https://wa.me/{{ cliente.whatsapp_numero }}" target="_blank" class="text-decoration-none text-success">
+          <i class="bi bi-whatsapp"></i> {{ cliente.telefone }}
+        </a>
+      {% endif %}
+    </div>
+    {% if cliente.tem_endereco %}
+      <div class="text-muted mt-1"><i class="bi bi-geo-alt"></i> {{ cliente.endereco_completo }}</div>
+    {% endif %}
+  </div>
+  <div class="text-nowrap">
+    <a href="{{ url_for('main.form_cliente', cliente_id=cliente.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+    {% if not cliente.vendas %}
+    <form method="post" action="{{ url_for('main.excluir_cliente', cliente_id=cliente.id) }}" class="d-inline"
+          onsubmit="return confirm('Excluir este cliente?')">
+      <button class="btn btn-sm btn-outline-danger">Excluir</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Resumo -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card text-bg-primary"><div class="card-body">
+    <div class="h4 mb-0">{{ cliente.total_compras | moeda }}</div><div class="small">Total em compras</div></div></div></div>
+  <div class="col-md-4"><div class="card text-bg-success"><div class="card-body">
+    <div class="h4 mb-0">{{ cliente.total_pago | moeda }}</div><div class="small">Pago</div></div></div></div>
+  <div class="col-md-4"><div class="card text-bg-danger"><div class="card-body">
+    <div class="h4 mb-0">{{ cliente.total_pendente | moeda }}</div><div class="small">Pendente</div></div></div></div>
+</div>
+
+<!-- Histórico de compras -->
+<div class="card bg-white">
+  <div class="card-body">
+    <h2 class="h5">Histórico de compras e pagamentos</h2>
+    {% if vendas %}
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <thead class="table-light">
+        <tr><th>Data</th><th>Pedido</th><th>Itens</th><th>Pgto</th><th class="text-end">Total</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for v in vendas %}
+        <tr>
+          <td class="small text-muted">{{ v.criado_em | dt }}</td>
+          <td>#{{ v.id }}</td>
+          <td>{% for it in v.itens %}<div class="small">{{ it.quantidade | num }}× {{ it.peca.nome }} <span class="badge text-bg-light">{{ it.tamanho }}</span></div>{% endfor %}</td>
+          <td>
+            {{ v.forma_pagamento or '—' }}
+            {% if v.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}
+          </td>
+          <td class="text-end fw-bold">{{ v.receita | moeda }}</td>
+          <td class="text-end"><a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="text-muted">Nenhuma compra registrada para este cliente.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

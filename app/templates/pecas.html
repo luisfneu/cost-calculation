@@ -21,7 +21,10 @@
           <div class="foto-thumb-vert sem-foto">—</div>
         {% endif %}
       </td>
-      <td><strong>{{ peca.nome }}</strong></td>
+      <td>
+        <strong>{{ peca.nome }}</strong>
+        {% if peca.colecao %}<div class="small text-muted">{{ peca.colecao }}</div>{% endif %}
+      </td>
       <td>
         <span class="fw-bold">{{ peca.estoque_total | num }}</span>
         <div class="small text-muted">

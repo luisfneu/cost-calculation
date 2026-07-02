@@ -100,9 +100,19 @@ def _migrar_colunas():
     from sqlalchemy import inspect, text
 
     esperado = {
-        "pecas": {"preco_etiqueta": "FLOAT DEFAULT 0"},
-        "vendas": {"desconto_total": "FLOAT DEFAULT 0"},
+        "pecas": {"preco_etiqueta": "FLOAT DEFAULT 0", "colecao": "VARCHAR(120) DEFAULT ''"},
+        "insumos": {"ativo": "BOOLEAN DEFAULT 1"},
+        "vendas": {"desconto_total": "FLOAT DEFAULT 0", "cliente_id": "INTEGER"},
         "venda_itens": {"desconto": "FLOAT DEFAULT 0"},
+        "clientes": {
+            "cep": "VARCHAR(12) DEFAULT ''",
+            "logradouro": "VARCHAR(160) DEFAULT ''",
+            "numero": "VARCHAR(20) DEFAULT ''",
+            "complemento": "VARCHAR(80) DEFAULT ''",
+            "bairro": "VARCHAR(80) DEFAULT ''",
+            "cidade": "VARCHAR(80) DEFAULT ''",
+            "uf": "VARCHAR(2) DEFAULT ''",
+        },
     }
     insp = inspect(db.engine)
     for tabela, colunas in esperado.items():

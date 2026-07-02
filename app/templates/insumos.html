@@ -27,6 +27,7 @@
       <td>
         <strong>{{ insumo.nome }}</strong>
         <span class="badge {{ 'badge-embalagem' if insumo.tipo == 'embalagem' else 'badge-materia' }}">{{ insumo.tipo_label }}</span>
+        {% if not insumo.ativo %}<span class="badge text-bg-secondary">inativo</span>{% endif %}
         <div class="small text-muted">por {{ insumo.unidade }}{% if insumo.fornecedor %} · {{ insumo.fornecedor }}{% endif %}</div>
       </td>
       <td>{{ insumo.custo_unitario | moeda }}</td>
