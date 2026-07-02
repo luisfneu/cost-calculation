@@ -80,6 +80,10 @@ class Peca(db.Model):
     # Preço "de etiqueta": preço comercial ajustado manualmente. Quando definido,
     # é usado como preço de venda padrão (em vez do preço calculado pela margem).
     preco_etiqueta = db.Column(db.Float, nullable=False, default=0.0)
+    # Preço promocional (de/por). Quando > 0, vira o preço efetivo de venda.
+    preco_promocional = db.Column(db.Float, nullable=False, default=0.0)
+    # Código/SKU para busca e leitura (código de barras/QR).
+    sku = db.Column(db.String(40), default="")
 
     # Dados de envio (para cálculo de frete): peso em gramas e dimensões em cm.
     peso_g = db.Column(db.Float, nullable=False, default=0.0)
@@ -140,9 +144,18 @@ class Peca(db.Model):
         return self.preco_venda - self.custo_total
 
     @property
-    def preco_etiqueta_efetivo(self) -> float:
-        """Preço comercial usado como padrão na venda (etiqueta, ou o calculado)."""
+    def preco_base(self) -> float:
+        """Preço 'de' (sem promoção): etiqueta ou o calculado pela margem."""
         return self.preco_etiqueta if self.preco_etiqueta and self.preco_etiqueta > 0 else self.preco_venda
+
+    @property
+    def em_promocao(self) -> bool:
+        return bool(self.preco_promocional and self.preco_promocional > 0)
+
+    @property
+    def preco_etiqueta_efetivo(self) -> float:
+        """Preço efetivo de venda: promocional se houver, senão o preço base."""
+        return self.preco_promocional if self.em_promocao else self.preco_base
 
     @property
     def tags_lista(self) -> list:
@@ -194,6 +207,37 @@ class MovimentoPeca(db.Model):
     criado_em = db.Column(db.DateTime, default=_agora)
 
     peca = db.relationship("Peca", back_populates="movimentos")
+
+
+class Kit(db.Model):
+    """Kit/combo: conjunto de peças vendido por um preço especial."""
+
+    __tablename__ = "kits"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    preco = db.Column(db.Float, nullable=False, default=0.0)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    itens = db.relationship("KitItem", back_populates="kit", cascade="all, delete-orphan")
+
+    @property
+    def preco_normal(self) -> float:
+        """Soma dos preços efetivos das peças do kit (para mostrar a economia)."""
+        return sum(i.peca.preco_etiqueta_efetivo * i.quantidade for i in self.itens)
+
+
+class KitItem(db.Model):
+    __tablename__ = "kit_itens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kit_id = db.Column(db.Integer, db.ForeignKey("kits.id"), nullable=False)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False, default=1.0)
+
+    kit = db.relationship("Kit", back_populates="itens")
+    peca = db.relationship("Peca")
 
 
 class Cliente(db.Model):

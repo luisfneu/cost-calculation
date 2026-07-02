@@ -24,7 +24,15 @@
           <div class="card-body">
             <div class="vitrine-nome">{{ peca.nome }}</div>
             {% if peca.colecao %}<div class="small text-muted">{{ peca.colecao }}</div>{% endif %}
-            <div class="vitrine-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+            {% if peca.em_promocao %}
+              <div class="vitrine-preco">
+                <span class="preco-de">{{ peca.preco_base | moeda }}</span>
+                <span class="preco-por">{{ peca.preco_etiqueta_efetivo | moeda }}</span>
+                <span class="badge-promo">promo</span>
+              </div>
+            {% else %}
+              <div class="vitrine-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+            {% endif %}
           </div>
         </div>
       </div>
