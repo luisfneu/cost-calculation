@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Calculadora de Custos{% endblock %} · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500&family=Parisienne&display=swap" rel="stylesheet">
@@ -25,18 +26,34 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse justify-content-end" id="navmenu">
-        <div class="navbar-nav">
+        <div class="navbar-nav align-items-lg-center">
           <a class="nav-link" href="{{ url_for('main.vitrine') }}">Vitrine</a>
           <a class="nav-link" href="{{ url_for('main.index') }}">Painel</a>
           <a class="nav-link" href="{{ url_for('main.listar_pecas') }}">Peças</a>
           <a class="nav-link" href="{{ url_for('main.listar_insumos') }}">Insumos</a>
           <a class="nav-link" href="{{ url_for('main.listar_vendas') }}">Vendas</a>
+          <a class="nav-link" href="{{ url_for('main.listar_encomendas') }}">Encomendas</a>
           <a class="nav-link" href="{{ url_for('main.listar_clientes') }}">Clientes</a>
-          <a class="nav-link" href="{{ url_for('main.contabilidade') }}">Contabilidade</a>
-          <a class="nav-link" href="{{ url_for('main.listar_despesas') }}">Despesas</a>
-          <a class="nav-link" href="{{ url_for('main.relatorio') }}">Relatório</a>
-          <a class="nav-link" href="{{ url_for('main.historico') }}">Histórico</a>
-          <a class="nav-link" href="{{ url_for('main.backup') }}" title="Baixar backup do banco"><i class="bi bi-download"></i></a>
+          <div class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Financeiro</a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="{{ url_for('main.contabilidade') }}">Contabilidade</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_despesas') }}">Despesas</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.relatorio') }}">Relatório</a></li>
+            </ul>
+          </div>
+          <div class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Mais</a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_cupons') }}">Cupons</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_vales') }}">Vales / crédito</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.historico') }}">Histórico</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.backup') }}"><i class="bi bi-download"></i> Backup do banco</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.logout') }}"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>

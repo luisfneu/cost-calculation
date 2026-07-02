@@ -281,6 +281,7 @@ class Venda(db.Model):
     frete_cortesia = db.Column(db.Boolean, nullable=False, default=False)  # frete é cortesia (custo)?
     marketplace_pct = db.Column(db.Float, nullable=False, default=0.0)  # opcional (% sobre os produtos)
     desconto_total = db.Column(db.Float, nullable=False, default=0.0)   # desconto no pedido (R$)
+    cupom_codigo = db.Column(db.String(40), default="")  # cupom aplicado (registro)
 
     # Dados do comprador / pagamento.
     cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))  # opcional
@@ -288,6 +289,12 @@ class Venda(db.Model):
     forma_pagamento = db.Column(db.String(40), default="")   # Pix, Dinheiro, Cartão...
     pago = db.Column(db.Boolean, nullable=False, default=False)
     vencimento = db.Column(db.Date)  # data de vencimento (venda a prazo/pendente)
+    # Tipo: "venda" baixa estoque na criação; "encomenda" não baixa (produz depois).
+    tipo = db.Column(db.String(12), nullable=False, default="venda")
+    # Fluxo do pedido: realizado | pago | enviado | entregue.
+    status = db.Column(db.String(12), nullable=False, default="realizado")
+    # Se o estoque das peças já foi baixado.
+    estoque_baixado = db.Column(db.Boolean, nullable=False, default=True)
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
@@ -295,10 +302,65 @@ class Venda(db.Model):
     itens = db.relationship(
         "VendaItem", back_populates="venda", cascade="all, delete-orphan"
     )
+    pagamentos = db.relationship(
+        "Pagamento", back_populates="venda", cascade="all, delete-orphan"
+    )
 
     @property
     def cliente_nome(self) -> str:
         return self.cliente.nome if self.cliente else (self.comprador or "")
+
+    # Etapas do fluxo do pedido, em ordem.
+    FLUXO = ["realizado", "pago", "enviado", "entregue"]
+
+    # Rótulos das etapas do fluxo (usados no stepper).
+    FLUXO_LABELS = {
+        "realizado": "Pedido feito", "pago": "Pagamento",
+        "enviado": "Enviado", "entregue": "Entregue",
+    }
+
+    @property
+    def status_label(self) -> str:
+        return {
+            "realizado": "Pedido feito", "pago": "Pago",
+            "enviado": "Enviado", "entregue": "Entregue",
+        }.get(self.status, "Pedido feito")
+
+    @property
+    def estado_label(self) -> str:
+        """Rótulo do estado atual do pedido (considera o pagamento)."""
+        if self.status == "entregue":
+            return "Entregue"
+        if self.status == "enviado":
+            return "Enviado"
+        if self.status == "pago":
+            return "Pago · aguardando envio"
+        return "Aguardando pagamento" if self.saldo_receber > 0.01 else "Pago"
+
+    @property
+    def fluxo_etapas(self) -> list:
+        """Etapas para o stepper visual do pedido."""
+        try:
+            atual = Venda.FLUXO.index(self.status)
+        except ValueError:
+            atual = 0
+        return [
+            {"key": k, "label": Venda.FLUXO_LABELS[k], "concluido": i < atual, "atual": i == atual}
+            for i, k in enumerate(Venda.FLUXO)
+        ]
+
+    @property
+    def tipo_label(self) -> str:
+        return "Encomenda" if self.tipo == "encomenda" else "Venda"
+
+    @property
+    def proximo_status(self) -> str:
+        """Próxima etapa do fluxo (ou None se já entregue)."""
+        try:
+            i = Venda.FLUXO.index(self.status)
+            return Venda.FLUXO[i + 1] if i + 1 < len(Venda.FLUXO) else None
+        except ValueError:
+            return "pago"
 
     @property
     def vencida(self) -> bool:
@@ -352,15 +414,56 @@ class Venda(db.Model):
         """Valor final: itens + frete (se o cliente paga) − desconto do pedido."""
         return self.receita_itens + (0.0 if self.frete_cortesia else self.frete) - self.desconto_total
 
+    # ----- Pagamentos -----
+    @property
+    def taxa_maquininha(self) -> float:
+        """Soma das taxas de cartão/maquininha (custo da venda)."""
+        return sum(p.valor_taxa for p in self.pagamentos)
+
+    @property
+    def total_pago(self) -> float:
+        """Soma dos pagamentos recebidos. Sem pagamentos, usa o flag legado 'pago'."""
+        if self.pagamentos:
+            return sum(p.valor for p in self.pagamentos)
+        return self.receita if self.pago else 0.0
+
+    @property
+    def saldo_receber(self) -> float:
+        return max(0.0, round(self.receita - self.total_pago, 2))
+
+    @property
+    def quitado(self) -> bool:
+        return self.total_pago >= self.receita - 0.01
+
     @property
     def custo_total(self) -> float:
-        """Produção + comissão + frete (só quando cortesia)."""
+        """Produção + comissão + frete (só quando cortesia) + taxa de maquininha."""
         frete_custo = self.frete if self.frete_cortesia else 0.0
-        return self.custo_producao + self.comissao_marketplace + frete_custo
+        return self.custo_producao + self.comissao_marketplace + frete_custo + self.taxa_maquininha
 
     @property
     def lucro(self) -> float:
         return self.receita - self.custo_total
+
+
+class Pagamento(db.Model):
+    """Pagamento recebido de uma venda (permite várias formas por venda)."""
+
+    __tablename__ = "pagamentos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    venda_id = db.Column(db.Integer, db.ForeignKey("vendas.id"), nullable=False)
+    forma = db.Column(db.String(40), default="")   # Pix, Dinheiro, Cartão crédito...
+    valor = db.Column(db.Float, nullable=False, default=0.0)
+    parcelas = db.Column(db.Integer, nullable=False, default=1)
+    taxa_pct = db.Column(db.Float, nullable=False, default=0.0)  # taxa da maquininha (%)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    venda = db.relationship("Venda", back_populates="pagamentos")
+
+    @property
+    def valor_taxa(self) -> float:
+        return self.valor * (self.taxa_pct / 100.0)
 
 
 class VendaItem(db.Model):
@@ -392,6 +495,64 @@ class VendaItem(db.Model):
     @property
     def subtotal_custo(self) -> float:
         return self.custo_unitario * self.quantidade
+
+
+class Cupom(db.Model):
+    """Cupom de desconto promocional aplicável na venda."""
+
+    __tablename__ = "cupons"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(40), unique=True, nullable=False)
+    tipo = db.Column(db.String(12), nullable=False, default="percentual")  # percentual | valor
+    valor = db.Column(db.Float, nullable=False, default=0.0)  # % ou R$
+    validade = db.Column(db.Date)  # None = sem validade
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    usos = db.Column(db.Integer, nullable=False, default=0)
+    max_usos = db.Column(db.Integer)  # None = ilimitado
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    @property
+    def valido(self) -> bool:
+        from datetime import date
+        if not self.ativo:
+            return False
+        if self.validade and self.validade < date.today():
+            return False
+        if self.max_usos is not None and self.usos >= self.max_usos:
+            return False
+        return True
+
+    def desconto_para(self, subtotal: float) -> float:
+        if self.tipo == "percentual":
+            return round(subtotal * self.valor / 100.0, 2)
+        return min(self.valor, subtotal)
+
+
+class Vale(db.Model):
+    """Crédito de loja: vale-presente (vendido) ou vale-troca (de devolução)."""
+
+    __tablename__ = "vales"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(40), unique=True, nullable=False)
+    tipo = db.Column(db.String(12), nullable=False, default="presente")  # presente | troca
+    valor_inicial = db.Column(db.Float, nullable=False, default=0.0)
+    saldo = db.Column(db.Float, nullable=False, default=0.0)
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))
+    observacao = db.Column(db.String(200), default="")
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    cliente = db.relationship("Cliente")
+
+    @property
+    def tipo_label(self) -> str:
+        return "Vale-presente" if self.tipo == "presente" else "Vale-troca"
+
+    @property
+    def disponivel(self) -> bool:
+        return self.ativo and self.saldo > 0.01
 
 
 class MovimentoEstoque(db.Model):
@@ -432,6 +593,28 @@ class Despesa(db.Model):
     def vencida(self) -> bool:
         from datetime import date
         return (not self.pago) and self.vencimento is not None and self.vencimento < date.today()
+
+
+class Parametro(db.Model):
+    """Configurações simples chave/valor (ex.: meta mensal de faturamento)."""
+
+    __tablename__ = "parametros"
+
+    chave = db.Column(db.String(60), primary_key=True)
+    valor = db.Column(db.String(255), default="")
+
+    @staticmethod
+    def obter(chave, padrao=""):
+        p = db.session.get(Parametro, chave)
+        return p.valor if p else padrao
+
+    @staticmethod
+    def definir(chave, valor):
+        p = db.session.get(Parametro, chave)
+        if p is None:
+            p = Parametro(chave=chave)
+            db.session.add(p)
+        p.valor = str(valor)
 
 
 class FotoPeca(db.Model):

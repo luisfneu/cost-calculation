@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Vales (crédito de loja)</h1>
+
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Novo vale-presente</h2>
+    <form method="post" action="{{ url_for('main.salvar_vale') }}" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Valor (R$) *</label>
+        <input type="text" name="valor" class="form-control" placeholder="100,00" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Cliente <span class="text-muted small">(opc.)</span></label>
+        <select name="cliente_id" class="form-select">
+          <option value="">— qualquer —</option>
+          {% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Observação</label>
+        <input type="text" name="observacao" class="form-control" placeholder="Ex.: presente de aniversário">
+      </div>
+      <div class="col-md-1 text-end"><button class="btn btn-primary">Gerar</button></div>
+    </form>
+    <small class="text-muted">O código é gerado automaticamente. Vales-troca são criados nas devoluções.</small>
+  </div>
+</div>
+
+<div class="card bg-white">
+  <div class="card-body">
+    {% if vales %}
+    <table class="table align-middle">
+      <thead class="table-light"><tr><th>Código</th><th>Tipo</th><th>Cliente</th><th class="text-end">Valor</th><th class="text-end">Saldo</th><th>Obs.</th><th></th></tr></thead>
+      <tbody>
+      {% for v in vales %}
+        <tr class="{{ '' if v.disponivel else 'text-muted' }}">
+          <td><strong>{{ v.codigo }}</strong></td>
+          <td><span class="badge {{ 'text-bg-info' if v.tipo=='presente' else 'text-bg-warning' }}">{{ v.tipo_label }}</span></td>
+          <td>{{ v.cliente.nome if v.cliente else '—' }}</td>
+          <td class="text-end">{{ v.valor_inicial | moeda }}</td>
+          <td class="text-end fw-bold {{ 'text-success' if v.saldo > 0.01 else 'text-muted' }}">{{ v.saldo | moeda }}</td>
+          <td class="small text-muted">{{ v.observacao }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('main.desativar_vale', vale_id=v.id) }}">
+              <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if v.ativo else 'Ativar' }}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="text-muted">Nenhum vale emitido.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

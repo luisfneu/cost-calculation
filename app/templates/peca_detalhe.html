@@ -10,6 +10,9 @@
   </div>
   <div class="text-nowrap">
     <a href="{{ url_for('main.etiqueta_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-qr-code"></i> Etiqueta</a>
+    <form method="post" action="{{ url_for('main.duplicar_peca', peca_id=peca.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-outline-secondary" title="Criar uma cópia desta peça">Duplicar</button>
+    </form>
     <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
     <form method="post" action="{{ url_for('main.excluir_peca', peca_id=peca.id) }}" class="d-inline"
           onsubmit="return confirm('Excluir esta peça?')">
@@ -119,7 +122,13 @@
                   <span class="badge text-bg-warning">estoque: {{ item.insumo.estoque | num }}</span>
                 {% endif %}
               </td>
-              <td>{{ item.quantidade | num }} {{ item.insumo.unidade }}</td>
+              <td>
+                <form method="post" action="{{ url_for('main.atualizar_qtd_ficha', item_id=item.id) }}" class="input-group input-group-sm" style="width:130px">
+                  <input type="text" name="quantidade" class="form-control" value="{{ item.quantidade | num }}">
+                  <span class="input-group-text">{{ item.insumo.unidade }}</span>
+                  <button class="btn btn-outline-secondary" title="Atualizar">✓</button>
+                </form>
+              </td>
               <td>{{ item.insumo.custo_unitario | moeda }}</td>
               <td>{{ item.subtotal | moeda }}</td>
               <td class="text-end">

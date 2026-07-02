@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Cupons de desconto</h1>
+
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Novo cupom</h2>
+    <form method="post" action="{{ url_for('main.salvar_cupom') }}" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Código *</label>
+        <input type="text" name="codigo" class="form-control text-uppercase" required placeholder="Ex.: VERAO10">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Tipo</label>
+        <select name="tipo" class="form-select">
+          <option value="percentual">% percentual</option>
+          <option value="valor">R$ valor fixo</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Valor</label>
+        <input type="text" name="valor" class="form-control" placeholder="10">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Validade</label>
+        <input type="date" name="validade" class="form-control">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Máx. usos <span class="text-muted small">(opc.)</span></label>
+        <input type="text" name="max_usos" class="form-control" placeholder="ilimitado">
+      </div>
+      <div class="col-md-1 text-end"><button class="btn btn-primary">Criar</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card bg-white">
+  <div class="card-body">
+    {% if cupons %}
+    <table class="table align-middle">
+      <thead class="table-light"><tr><th>Código</th><th>Desconto</th><th>Validade</th><th>Usos</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for c in cupons %}
+        <tr class="{{ '' if c.valido else 'text-muted' }}">
+          <td><strong>{{ c.codigo }}</strong></td>
+          <td>{% if c.tipo == 'percentual' %}{{ c.valor | num }}%{% else %}{{ c.valor | moeda }}{% endif %}</td>
+          <td>{{ c.validade.strftime('%d/%m/%Y') if c.validade else '—' }}</td>
+          <td>{{ c.usos }}{% if c.max_usos %} / {{ c.max_usos }}{% endif %}</td>
+          <td>{% if c.valido %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">inativo/expirado</span>{% endif %}</td>
+          <td class="text-end text-nowrap">
+            <form method="post" action="{{ url_for('main.toggle_cupom', cupom_id=c.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if c.ativo else 'Ativar' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('main.excluir_cupom', cupom_id=c.id) }}" class="d-inline" onsubmit="return confirm('Excluir cupom?')">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="text-muted">Nenhum cupom cadastrado.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

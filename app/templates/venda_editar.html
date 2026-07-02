@@ -44,29 +44,26 @@
     </div>
 
     <div class="col-md-3">
-      <label class="form-label">Forma de pagamento</label>
-      <select name="forma_pagamento" class="form-select">
-        <option value="">—</option>
-        {% for f in ['Pix','Dinheiro','Cartão de crédito','Cartão de débito','Transferência','Boleto'] %}
-          <option {{ 'selected' if f == venda.forma_pagamento }}>{{ f }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Vencimento</label>
+      <label class="form-label">Vencimento do saldo</label>
       <input type="date" name="vencimento" class="form-control" value="{{ venda.vencimento.isoformat() if venda.vencimento else '' }}">
     </div>
-    <div class="col-md-2 d-flex align-items-center">
-      <div class="form-check mt-4">
-        <input class="form-check-input" type="checkbox" name="pago" id="chk-pago" {{ 'checked' if venda.pago }}>
-        <label class="form-check-label" for="chk-pago">Pago</label>
-      </div>
-    </div>
-    <div class="col-md-4"><div class="small text-muted" id="resumo-venda"></div></div>
-    <div class="col-md-3 text-end">
-      <button class="btn btn-primary">Salvar alterações</button>
-      <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-link">Cancelar</a>
-    </div>
+    <div class="col-12"><div class="small text-muted" id="resumo-venda"></div></div>
+  </div>
+
+  <div class="section-titulo mt-3">Pagamentos</div>
+  <table class="table table-sm align-middle">
+    <thead class="table-light"><tr><th>Forma</th><th>Valor (R$)</th><th>Parcelas</th><th>Taxa %</th><th></th></tr></thead>
+    <tbody id="linhas-pagamentos"></tbody>
+  </table>
+  <div class="d-flex gap-2 align-items-center mb-3">
+    <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar pagamento</button>
+    <span class="ms-auto small">Pago: <b id="p-pago">R$ 0,00</b> · Saldo: <b id="p-saldo" class="text-danger">R$ 0,00</b></span>
+  </div>
+  <script id="pag-iniciais" type="application/json">[{% for p in venda.pagamentos %}{"forma": {{ p.forma|tojson }}, "valor": {{ p.valor }}, "parcelas": {{ p.parcelas }}, "taxa": {{ p.taxa_pct }}}{{ "," if not loop.last }}{% endfor %}]</script>
+
+  <div class="text-end">
+    <button class="btn btn-primary">Salvar alterações</button>
+    <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-link">Cancelar</a>
   </div>
   <small class="text-muted mt-2">O estoque das peças é ajustado automaticamente conforme a mudança dos itens.</small>
 </form>
@@ -85,7 +82,7 @@
   const UPLOADS = "{{ url_for('static', filename='uploads/') }}";
   const corpo = document.getElementById('linhas-itens');
   const brl = v => 'R$ ' + (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  const num = t => t ? (parseFloat(String(t).replace('.', '').replace(',', '.')) || 0) : 0;
+  const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
   const fmt2 = v => (num(v)).toFixed(2).replace('.', ',');
   const acha = id => PECAS.find(p => String(p.id) === String(id));
   const thumb = p => p.foto
@@ -165,7 +162,40 @@
     document.getElementById('resumo-venda').innerHTML =
       `Valor total <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
       `Lucro <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b>`;
+    window.__VALOR_TOTAL = receita;
+    recalcPagamentos();
   }
+
+  // ---- Pagamentos ----
+  const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto'];
+  const corpoPag = document.getElementById('linhas-pagamentos');
+  function linhaPagamento(forma, valor, parcelas, taxa) {
+    const tr = document.createElement('tr');
+    tr.className = 'pag-row';
+    tr.innerHTML = `
+      <td><select name="pag_forma" class="form-select form-select-sm pg-forma">
+        ${FORMAS.map(f => `<option ${f===forma?'selected':''}>${f}</option>`).join('')}</select></td>
+      <td><input type="text" name="pag_valor" class="form-control form-control-sm pg-valor" value="${valor||''}" style="width:110px"></td>
+      <td><input type="text" name="pag_parcelas" class="form-control form-control-sm pg-parc" value="${parcelas||1}" style="width:60px"></td>
+      <td><input type="text" name="pag_taxa" class="form-control form-control-sm pg-taxa" value="${taxa||0}" style="width:70px"></td>
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
+    corpoPag.appendChild(tr);
+  }
+  function recalcPagamentos() {
+    let pago = 0;
+    corpoPag.querySelectorAll('.pag-row').forEach(tr => { pago += num(tr.querySelector('.pg-valor').value); });
+    const saldo = Math.max(0, (window.__VALOR_TOTAL || 0) - pago);
+    document.getElementById('p-pago').textContent = brl(pago);
+    const s = document.getElementById('p-saldo');
+    s.textContent = brl(saldo); s.className = saldo > 0.01 ? 'text-danger' : 'text-success';
+  }
+  document.getElementById('add-pagamento').addEventListener('click', () => linhaPagamento('Dinheiro', ''));
+  corpoPag.addEventListener('input', recalcPagamentos);
+  corpoPag.addEventListener('change', recalcPagamentos);
+  corpoPag.addEventListener('click', e => { if (e.target.classList.contains('pg-rem')) { e.target.closest('.pag-row').remove(); recalcPagamentos(); } });
+  JSON.parse(document.getElementById('pag-iniciais').textContent).forEach(p => {
+    linhaPagamento(p.forma, String(p.valor).replace('.', ','), p.parcelas, String(p.taxa).replace('.', ','));
+  });
 
   document.getElementById('add-item').addEventListener('click', () => novaLinha());
   corpo.addEventListener('input', recalcular);

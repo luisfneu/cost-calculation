@@ -253,6 +253,36 @@ main.container { max-width: 1100px; }
   letter-spacing: .5px;
 }
 
+/* Stepper do fluxo do pedido */
+.stepper { display: flex; justify-content: space-between; position: relative; }
+.stepper .step { flex: 1; text-align: center; position: relative; }
+/* linha de conexão entre os passos */
+.stepper .step::before {
+  content: ""; position: absolute; top: 16px; left: -50%; width: 100%; height: 3px;
+  background: var(--line); z-index: 0;
+}
+.stepper .step:first-child::before { display: none; }
+.stepper .step.concluido::before,
+.stepper .step.atual::before { background: var(--gold); }
+.stepper .step-circulo {
+  width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 6px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 3px solid var(--line); color: var(--ink-soft);
+  position: relative; z-index: 1; font-weight: 500;
+}
+.stepper .step.concluido .step-circulo { background: var(--gold); border-color: var(--gold); color: #fff; }
+.stepper .step.atual .step-circulo { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 0 4px rgba(176,138,79,.15); }
+.stepper .step-label { font-size: .8rem; color: var(--ink-soft); }
+.stepper .step.atual .step-label { color: var(--ink); font-weight: 500; }
+
+/* Stepper compacto (linha do histórico) */
+.stepper.mini { max-width: 100%; margin: 0 auto; padding: 4px 24px; }
+.stepper.mini .step-circulo { width: 22px; height: 22px; border-width: 2px; font-size: .7rem; margin-bottom: 3px; }
+.stepper.mini .step::before { top: 10px; height: 2px; }
+.stepper.mini .step-label { font-size: .68rem; }
+.stepper-row td { border-top: 0; padding-top: 0; }
+.stepper-row { border-bottom: 2px solid var(--line); }
+
 /* Opções de frete */
 .frete-op {
   display: flex;

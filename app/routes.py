@@ -15,6 +15,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 from werkzeug.utils import secure_filename
@@ -22,20 +23,54 @@ from werkzeug.utils import secure_filename
 from .models import (
     TAMANHOS,
     Cliente,
+    Cupom,
     Despesa,
     EstoquePeca,
     FotoPeca,
     Insumo,
     MovimentoEstoque,
     MovimentoPeca,
+    Pagamento,
+    Parametro,
     Peca,
     PecaInsumo,
+    Vale,
     Venda,
     VendaItem,
     db,
 )
 
 bp = Blueprint("main", __name__)
+
+# Endpoints acessíveis sem login (público / estáticos).
+_PUBLICOS = {"main.login", "main.vitrine_publica", "static"}
+
+
+@bp.before_app_request
+def _exigir_login():
+    if request.endpoint in _PUBLICOS:
+        return None
+    if not session.get("logado"):
+        return redirect(url_for("main.login", next=request.path))
+    return None
+
+
+@bp.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        if request.form.get("senha", "") == current_app.config["APP_SENHA"]:
+            session["logado"] = True
+            destino = request.args.get("next") or url_for("main.index")
+            return redirect(destino)
+        flash("Senha incorreta.", "erro")
+    return render_template("login.html")
+
+
+@bp.route("/logout")
+def logout():
+    session.pop("logado", None)
+    flash("Você saiu do sistema.", "sucesso")
+    return redirect(url_for("main.login"))
 
 
 # --------------------------------------------------------------------------- #
@@ -74,8 +109,26 @@ def _salvar_foto(arquivo):
         return None
     ext = secure_filename(arquivo.filename).rsplit(".", 1)[1].lower()
     nome = f"{uuid.uuid4().hex}.{ext}"
-    arquivo.save(os.path.join(current_app.config["UPLOAD_FOLDER"], nome))
+    caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
+    arquivo.save(caminho)
+    _otimizar_imagem(caminho)
     return nome
+
+
+def _otimizar_imagem(caminho, lado_max=1200):
+    """Redimensiona a imagem para no máx. `lado_max` px (se Pillow disponível)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    try:
+        with Image.open(caminho) as img:
+            if max(img.size) <= lado_max:
+                return
+            img.thumbnail((lado_max, lado_max))
+            img.save(caminho)
+    except Exception:  # noqa: BLE001 — otimização é best-effort
+        pass
 
 
 def _remover_foto(nome):
@@ -86,6 +139,20 @@ def _remover_foto(nome):
         os.remove(caminho)
 
 
+def _copiar_foto(nome):
+    """Copia um arquivo de foto para um novo nome (para não compartilhar arquivo)."""
+    if not nome:
+        return None
+    origem = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
+    if not os.path.exists(origem):
+        return None
+    ext = nome.rsplit(".", 1)[-1]
+    novo = f"{uuid.uuid4().hex}.{ext}"
+    import shutil
+    shutil.copyfile(origem, os.path.join(current_app.config["UPLOAD_FOLDER"], novo))
+    return novo
+
+
 def _linha_estoque_peca(peca, tamanho, criar=False):
     """Retorna a linha de estoque da peça no tamanho (cria se pedido)."""
     linha = next((e for e in peca.estoques if e.tamanho == tamanho), None)
@@ -93,6 +160,54 @@ def _linha_estoque_peca(peca, tamanho, criar=False):
         linha = EstoquePeca(peca=peca, tamanho=tamanho, quantidade=0.0)
         db.session.add(linha)
     return linha
+
+
+def _paginar(itens, por_pagina=24):
+    """Pagina uma lista em memória. Retorna (itens_da_pagina, pagina, total_paginas)."""
+    try:
+        pagina = max(1, int(request.args.get("pagina", 1)))
+    except (TypeError, ValueError):
+        pagina = 1
+    total = max(1, (len(itens) + por_pagina - 1) // por_pagina)
+    pagina = min(pagina, total)
+    ini = (pagina - 1) * por_pagina
+    return itens[ini:ini + por_pagina], pagina, total
+
+
+def _validar_estoque_pecas(agrupado):
+    """Retorna lista de faltas (strings) para {(peca_id, tamanho): qtd}."""
+    faltando = []
+    for (pid, tam), need in agrupado.items():
+        peca = Peca.query.get(pid)
+        linha = _linha_estoque_peca(peca, tam)
+        disp = linha.quantidade if linha else 0.0
+        if need > disp:
+            faltando.append(f"{peca.nome} tam {tam} (tem {disp:g}, precisa {need:g})")
+    return faltando
+
+
+def _baixar_estoque_venda(venda):
+    """Dá baixa no estoque das peças de uma venda (marca estoque_baixado)."""
+    for it in venda.itens:
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade -= it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="saida", quantidade=it.quantidade,
+            observacao=f"Venda #{venda.id}",
+        ))
+    venda.estoque_baixado = True
+
+
+def _restaurar_estoque_venda(venda):
+    """Devolve ao estoque as peças de uma venda (desfaz a baixa)."""
+    for it in venda.itens:
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade += it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=it.quantidade,
+            observacao=f"Estorno venda #{venda.id}",
+        ))
+    venda.estoque_baixado = False
 
 
 def _registrar_movimento(insumo, tipo, quantidade, observacao="", custo_unitario=None):
@@ -128,10 +243,24 @@ def index():
         "qtd": sum(v.quantidade_total for v in vendas),
         "a_receber": sum(v.receita for v in vendas if not v.pago),
     }
+    # Meta do mês.
+    mes_atual = date.today().strftime("%Y-%m")
+    receita_mes = sum(v.receita for v in vendas if _mes_de(v.criado_em) == mes_atual)
+    meta = _to_float(Parametro.obter("meta_mensal", "0"))
+    meta_pct = (receita_mes / meta * 100) if meta else 0
     return render_template(
         "index.html", pecas=pecas, insumos=insumos, alertas=alertas,
         totais_venda=totais_venda, n_clientes=Cliente.query.count(),
+        meta=meta, receita_mes=receita_mes, meta_pct=meta_pct,
     )
+
+
+@bp.route("/meta", methods=["POST"])
+def salvar_meta():
+    Parametro.definir("meta_mensal", _to_float(request.form.get("meta_mensal")))
+    db.session.commit()
+    flash("Meta mensal atualizada.", "sucesso")
+    return redirect(url_for("main.index"))
 
 
 @bp.route("/vitrine")
@@ -162,6 +291,8 @@ def listar_insumos():
         insumos = [i for i in insumos if i.estoque_baixo]
     elif situacao == "inativo":
         insumos = [i for i in insumos if not i.ativo]
+    elif situacao == "ativo":
+        insumos = [i for i in insumos if i.ativo]
     return render_template("insumos.html", insumos=insumos, q=q, tipo=tipo, situacao=situacao)
 
 
@@ -261,7 +392,8 @@ def listar_pecas():
         like = f"%{q}%"
         query = query.filter(db.or_(Peca.nome.ilike(like), Peca.colecao.ilike(like), Peca.tags.ilike(like)))
     pecas = query.order_by(Peca.criado_em.desc()).all()
-    return render_template("pecas.html", pecas=pecas, q=q)
+    pecas, pagina, total_paginas = _paginar(pecas)
+    return render_template("pecas.html", pecas=pecas, q=q, pagina=pagina, total_paginas=total_paginas)
 
 
 @bp.route("/pecas/nova", methods=["GET", "POST"])
@@ -298,18 +430,26 @@ def form_peca(peca_id=None):
             peca = Peca()
             db.session.add(peca)
 
+        # Atualiza só o que foi enviado — campos ausentes preservam o valor atual
+        # (evita zerar dados numa edição parcial).
+        def _txt(campo, atual):
+            return request.form.get(campo).strip() if campo in request.form else atual
+
+        def _num(campo, atual):
+            return _to_float(request.form.get(campo)) if campo in request.form else atual
+
         peca.nome = nome
-        peca.colecao = request.form.get("colecao", "").strip()
-        peca.tags = request.form.get("tags", "").strip()
-        peca.descricao = request.form.get("descricao", "").strip()
-        peca.custo_mao_de_obra = _to_float(request.form.get("custo_mao_de_obra"))
-        peca.custos_extras = _to_float(request.form.get("custos_extras"))
-        peca.margem_percentual = _to_float(request.form.get("margem_percentual"))
-        peca.preco_etiqueta = _to_float(request.form.get("preco_etiqueta"))
-        peca.peso_g = _to_float(request.form.get("peso_g"))
-        peca.altura_cm = _to_float(request.form.get("altura_cm"))
-        peca.largura_cm = _to_float(request.form.get("largura_cm"))
-        peca.comprimento_cm = _to_float(request.form.get("comprimento_cm"))
+        peca.colecao = _txt("colecao", peca.colecao)
+        peca.tags = _txt("tags", peca.tags)
+        peca.descricao = _txt("descricao", peca.descricao)
+        peca.custo_mao_de_obra = _num("custo_mao_de_obra", peca.custo_mao_de_obra)
+        peca.custos_extras = _num("custos_extras", peca.custos_extras)
+        peca.margem_percentual = _num("margem_percentual", peca.margem_percentual)
+        peca.preco_etiqueta = _num("preco_etiqueta", peca.preco_etiqueta)
+        peca.peso_g = _num("peso_g", peca.peso_g)
+        peca.altura_cm = _num("altura_cm", peca.altura_cm)
+        peca.largura_cm = _num("largura_cm", peca.largura_cm)
+        peca.comprimento_cm = _num("comprimento_cm", peca.comprimento_cm)
 
         # Foto principal (opcional).
         nova_foto = _salvar_foto(request.files.get("foto"))
@@ -400,6 +540,40 @@ def remover_insumo_peca(item_id):
     db.session.commit()
     flash("Insumo removido da ficha técnica.", "sucesso")
     return redirect(url_for("main.detalhe_peca", peca_id=peca_id))
+
+
+@bp.route("/ficha/<int:item_id>/quantidade", methods=["POST"])
+def atualizar_qtd_ficha(item_id):
+    item = PecaInsumo.query.get_or_404(item_id)
+    qtd = _to_float(request.form.get("quantidade"))
+    if qtd > 0:
+        item.quantidade = qtd
+        db.session.commit()
+        flash("Quantidade atualizada.", "sucesso")
+    else:
+        flash("Quantidade inválida.", "erro")
+    return redirect(url_for("main.detalhe_peca", peca_id=item.peca_id))
+
+
+@bp.route("/pecas/<int:peca_id>/duplicar", methods=["POST"])
+def duplicar_peca(peca_id):
+    orig = Peca.query.get_or_404(peca_id)
+    nova = Peca(
+        nome=f"{orig.nome} (cópia)", colecao=orig.colecao, tags=orig.tags,
+        descricao=orig.descricao, foto=_copiar_foto(orig.foto),
+        custo_mao_de_obra=orig.custo_mao_de_obra, custos_extras=orig.custos_extras,
+        margem_percentual=orig.margem_percentual, preco_etiqueta=orig.preco_etiqueta,
+        peso_g=orig.peso_g, altura_cm=orig.altura_cm,
+        largura_cm=orig.largura_cm, comprimento_cm=orig.comprimento_cm,
+    )
+    db.session.add(nova)
+    db.session.flush()
+    # Copia a ficha técnica (não copia estoque nem fotos extras).
+    for it in orig.insumos:
+        db.session.add(PecaInsumo(peca=nova, insumo=it.insumo, quantidade=it.quantidade))
+    db.session.commit()
+    flash("Peça duplicada. Ajuste o nome e os dados.", "sucesso")
+    return redirect(url_for("main.form_peca", peca_id=nova.id))
 
 
 @bp.route("/pecas/<int:peca_id>/produzir", methods=["POST"])
@@ -520,7 +694,8 @@ def listar_clientes():
         like = f"%{q}%"
         query = query.filter(db.or_(Cliente.nome.ilike(like), Cliente.instagram.ilike(like)))
     clientes = query.order_by(Cliente.nome).all()
-    return render_template("clientes.html", clientes=clientes, q=q)
+    clientes, pagina, total_paginas = _paginar(clientes)
+    return render_template("clientes.html", clientes=clientes, q=q, pagina=pagina, total_paginas=total_paginas)
 
 
 @bp.route("/clientes/novo", methods=["GET", "POST"])
@@ -575,9 +750,9 @@ def excluir_cliente(cliente_id):
 # --------------------------------------------------------------------------- #
 # Vendas
 # --------------------------------------------------------------------------- #
-def _pecas_com_estoque():
-    """Peças que têm ao menos 1 unidade em algum tamanho (para vender)."""
-    return [p for p in Peca.query.order_by(Peca.nome).all() if p.estoque_total >= 1]
+def _pecas_para_venda():
+    """Peças disponíveis para venda/encomenda (todas com preço)."""
+    return Peca.query.order_by(Peca.nome).all()
 
 
 def _dados_pedido_do_form():
@@ -588,8 +763,6 @@ def _dados_pedido_do_form():
         "marketplace_pct": _to_float(request.form.get("marketplace_pct")),
         "desconto_total": _to_float(request.form.get("desconto_total")),
         "cliente_id": cid if cid else None,
-        "forma_pagamento": request.form.get("forma_pagamento", "").strip(),
-        "pago": request.form.get("pago") == "on",
         "vencimento": _to_date(request.form.get("vencimento")),
     }
 
@@ -616,6 +789,46 @@ def _itens_do_form():
     if not linhas:
         return [], "Adicione ao menos um item com peça, tamanho e quantidade válidos."
     return linhas, None
+
+
+def _pagamentos_do_form():
+    """Lê as linhas de pagamento do formulário."""
+    formas = request.form.getlist("pag_forma")
+    valores = request.form.getlist("pag_valor")
+    parcelas = request.form.getlist("pag_parcelas")
+    taxas = request.form.getlist("pag_taxa")
+    pags = []
+    for i, forma in enumerate(formas):
+        valor = _to_float(valores[i] if i < len(valores) else 0)
+        if valor <= 0:
+            continue
+        pags.append({
+            "forma": forma.strip() or "—",
+            "valor": valor,
+            "parcelas": int(_to_float(parcelas[i] if i < len(parcelas) else 1) or 1),
+            "taxa_pct": _to_float(taxas[i] if i < len(taxas) else 0),
+        })
+    return pags
+
+
+def _aplicar_pagamentos(venda, pags):
+    """Substitui os pagamentos da venda e sincroniza status/forma/pago."""
+    for p in list(venda.pagamentos):
+        db.session.delete(p)
+    venda.pagamentos = []
+    for p in pags:
+        db.session.add(Pagamento(venda=venda, **p))
+    formas = list(dict.fromkeys(p["forma"] for p in pags))
+    venda.forma_pagamento = " + ".join(formas)
+    # Calcula direto da lista (não usa total_pago, que tem fallback legado).
+    total = sum(p["valor"] for p in pags)
+    venda.pago = total >= venda.receita - 0.01
+    if not venda.pago:
+        # Sem pagamento total, o pedido volta para "Aguardando pagamento",
+        # mesmo que já estivesse enviado/entregue.
+        venda.status = "realizado"
+    elif venda.status == "realizado":
+        venda.status = "pago"
 
 
 def _agrupar(linhas):
@@ -649,7 +862,7 @@ def _itens_crus_do_form():
     return itens
 
 
-def _render_vendas(prefill_itens=None, prefill_pedido=None):
+def _render_historico():
     q = request.args.get("q", "").strip()
     status = request.args.get("status", "").strip()  # "pago" | "pendente" | ""
     vendas = Venda.query.order_by(Venda.criado_em.desc()).all()
@@ -666,39 +879,46 @@ def _render_vendas(prefill_itens=None, prefill_pedido=None):
         "lucro": sum(v.lucro for v in vendas),
         "qtd": sum(v.quantidade_total for v in vendas),
     }
+    vendas_pag, pagina, total_paginas = _paginar(vendas)
     return render_template(
-        "vendas.html", vendas=vendas, pecas=_pecas_com_estoque(), totais=totais,
-        clientes=Cliente.query.order_by(Cliente.nome).all(),
-        prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
-        q=q, status=status,
+        "vendas_historico.html", vendas=vendas_pag, totais=totais,
+        q=q, status=status, pagina=pagina, total_paginas=total_paginas,
     )
 
 
-@bp.route("/vendas")
-def listar_vendas():
-    return _render_vendas()
+def _pecas_com_estoque():
+    """Peças com ao menos 1 unidade em algum tamanho (para venda com estoque)."""
+    return [p for p in Peca.query.order_by(Peca.nome).all() if p.estoque_total >= 1]
 
 
-@bp.route("/vendas/nova", methods=["POST"])
-def registrar_venda():
-    # Em caso de erro, repovoa o formulário com o que foi digitado.
+def _render_form_pedido(modo, prefill_itens=None, prefill_pedido=None):
+    # Venda: só peças com estoque. Encomenda: todas.
+    pecas = _pecas_com_estoque() if modo == "venda" else Peca.query.order_by(Peca.nome).all()
+    return render_template(
+        "venda_nova.html", modo=modo, pecas=pecas,
+        clientes=Cliente.query.order_by(Cliente.nome).all(),
+        prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
+    )
+
+
+def _processar_pedido(modo):
     def _erro(msg):
         flash(msg, "erro")
-        return _render_vendas(_itens_crus_do_form(), request.form)
+        return _render_form_pedido(modo, _itens_crus_do_form(), request.form)
 
     linhas, erro = _itens_do_form()
     if erro:
         return _erro(erro)
 
-    # Valida estoque somando por peça/tamanho (caso o mesmo item apareça 2x).
-    for (pid, tam), need in _agrupar(linhas).items():
-        peca = Peca.query.get(pid)
-        linha = _linha_estoque_peca(peca, tam)
-        disp = linha.quantidade if linha else 0.0
-        if need > disp:
-            return _erro(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).")
+    # Venda exige estoque (comportamento antigo). Encomenda não baixa.
+    if modo == "venda":
+        faltando = _validar_estoque_pecas(_agrupar(linhas))
+        if faltando:
+            return _erro("Estoque insuficiente: " + "; ".join(faltando)
+                         + ". Use 'Encomenda' para vender sem estoque.")
 
     venda = Venda(**_dados_pedido_do_form())
+    venda.tipo = modo
     db.session.add(venda)
     for l in linhas:
         db.session.add(VendaItem(
@@ -706,15 +926,98 @@ def registrar_venda():
             quantidade=l["quantidade"], preco_unitario=l["preco"],
             desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
         ))
-        linha = _linha_estoque_peca(l["peca"], l["tamanho"], criar=True)
-        linha.quantidade -= l["quantidade"]
-        db.session.add(MovimentoPeca(
-            peca=l["peca"], tamanho=l["tamanho"], tipo="saida", quantidade=l["quantidade"],
-            observacao=f"Venda de {l['quantidade']:g} un.",
-        ))
+    db.session.flush()
+
+    # Cupom de desconto (opcional).
+    cod = request.form.get("cupom", "").strip().upper()
+    if cod:
+        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
+        if cupom and cupom.valido:
+            venda.desconto_total += cupom.desconto_para(venda.receita_itens)
+            venda.cupom_codigo = cupom.codigo
+            cupom.usos += 1
+        else:
+            flash(f"Cupom '{cod}' inválido ou expirado — ignorado.", "erro")
+
+    if modo == "venda":
+        # Venda: pedido é fechado sem pagamento (status "Pedido feito"); baixa estoque.
+        _baixar_estoque_venda(venda)
+        db.session.commit()
+        flash("Pedido registrado. Agora registre o pagamento.", "sucesso")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+
+    # Encomenda: mantém pagamento no cadastro e não baixa estoque.
+    _aplicar_pagamentos(venda, _pagamentos_do_form())
+    venda.estoque_baixado = False
     db.session.commit()
-    flash(f"Venda registrada com {len(linhas)} item(ns).", "sucesso")
-    return redirect(url_for("main.listar_vendas"))
+    flash("Encomenda registrada. Produza as peças e use 'Baixar estoque'.", "sucesso")
+    return redirect(url_for("main.listar_encomendas"))
+
+
+@bp.route("/vendas")
+def listar_vendas():
+    return _render_historico()
+
+
+@bp.route("/vendas/nova", methods=["GET", "POST"])
+def registrar_venda():
+    if request.method == "GET":
+        return _render_form_pedido("venda")
+    return _processar_pedido("venda")
+
+
+@bp.route("/encomendas")
+def listar_encomendas():
+    encomendas = (
+        Venda.query.filter_by(tipo="encomenda").order_by(Venda.criado_em.desc()).all()
+    )
+    encomendas, pagina, total_paginas = _paginar(encomendas)
+    return render_template(
+        "encomendas.html", encomendas=encomendas, pagina=pagina, total_paginas=total_paginas
+    )
+
+
+@bp.route("/encomendas/nova", methods=["GET", "POST"])
+def registrar_encomenda():
+    if request.method == "GET":
+        return _render_form_pedido("encomenda")
+    return _processar_pedido("encomenda")
+
+
+@bp.route("/vendas/<int:venda_id>/baixar-estoque", methods=["POST"])
+def baixar_estoque_venda(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    if venda.estoque_baixado:
+        flash("Estoque desta venda já foi baixado.", "erro")
+        return redirect(request.referrer or url_for("main.listar_vendas"))
+    agrup = {}
+    for it in venda.itens:
+        agrup[(it.peca_id, it.tamanho)] = agrup.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
+    faltando = _validar_estoque_pecas(agrup)
+    if faltando:
+        flash("Sem estoque para baixar: " + "; ".join(faltando) + ". Produza as peças primeiro.", "erro")
+        return redirect(request.referrer or url_for("main.listar_vendas"))
+    _baixar_estoque_venda(venda)
+    db.session.commit()
+    flash(f"Estoque baixado para o pedido #{venda.id}.", "sucesso")
+    return redirect(request.referrer or url_for("main.listar_vendas"))
+
+
+@bp.route("/vendas/<int:venda_id>/status/<novo>", methods=["POST"])
+def alterar_status_venda(venda_id, novo):
+    venda = Venda.query.get_or_404(venda_id)
+    if novo not in Venda.FLUXO:
+        flash("Status inválido.", "erro")
+        return redirect(request.referrer or url_for("main.listar_vendas"))
+    # Só libera envio/entrega depois do pagamento (na venda).
+    if novo in ("enviado", "entregue") and venda.saldo_receber > 0.01:
+        flash("Registre o pagamento antes de enviar/entregar o pedido.", "erro")
+        return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+    venda.status = novo
+    venda.pago = novo in ("pago", "enviado", "entregue")
+    db.session.commit()
+    flash(f"Pedido #{venda.id}: {venda.status_label}.", "sucesso")
+    return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
 
 
 @bp.route("/vendas/<int:venda_id>")
@@ -728,41 +1031,44 @@ def editar_venda(venda_id):
     venda = Venda.query.get_or_404(venda_id)
 
     if request.method == "POST":
+        def _re_render():
+            return render_template(
+                "venda_editar.html", venda=venda, pecas=_pecas_para_venda(),
+                clientes=Cliente.query.order_by(Cliente.nome).all(),
+            )
+
         linhas, erro = _itens_do_form()
         if erro:
             flash(erro, "erro")
-            return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque(), clientes=Cliente.query.order_by(Cliente.nome).all())
+            return _re_render()
 
-        # Estoque que volta ao devolver os itens atuais da venda.
-        retornos = {}
-        for it in venda.itens:
-            retornos[(it.peca_id, it.tamanho)] = retornos.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
-        necessarios = _agrupar(linhas)
+        # Ajusta o estoque só se a venda já tinha estoque baixado.
+        if venda.estoque_baixado:
+            retornos = {}
+            for it in venda.itens:
+                retornos[(it.peca_id, it.tamanho)] = retornos.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
+            necessarios = _agrupar(linhas)
+            for (pid, tam), need in necessarios.items():
+                peca = Peca.query.get(pid)
+                linha = _linha_estoque_peca(peca, tam)
+                disp = (linha.quantidade if linha else 0.0) + retornos.get((pid, tam), 0.0)
+                if need > disp:
+                    flash(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).", "erro")
+                    return _re_render()
+            for chave in set(retornos) | set(necessarios):
+                pid, tam = chave
+                net = necessarios.get(chave, 0.0) - retornos.get(chave, 0.0)
+                if net == 0:
+                    continue
+                peca = Peca.query.get(pid)
+                linha = _linha_estoque_peca(peca, tam, criar=True)
+                linha.quantidade -= net
+                db.session.add(MovimentoPeca(
+                    peca=peca, tamanho=tam, tipo="saida" if net > 0 else "estorno",
+                    quantidade=abs(net), observacao=f"Edição de venda #{venda.id}",
+                ))
 
-        # Valida: precisa <= estoque_atual + o que volta da própria venda.
-        for (pid, tam), need in necessarios.items():
-            peca = Peca.query.get(pid)
-            linha = _linha_estoque_peca(peca, tam)
-            disp = (linha.quantidade if linha else 0.0) + retornos.get((pid, tam), 0.0)
-            if need > disp:
-                flash(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).", "erro")
-                return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque(), clientes=Cliente.query.order_by(Cliente.nome).all())
-
-        # Aplica só a diferença líquida por peça/tamanho.
-        for chave in set(retornos) | set(necessarios):
-            pid, tam = chave
-            net = necessarios.get(chave, 0.0) - retornos.get(chave, 0.0)  # >0 sai mais; <0 volta
-            if net == 0:
-                continue
-            peca = Peca.query.get(pid)
-            linha = _linha_estoque_peca(peca, tam, criar=True)
-            linha.quantidade -= net
-            db.session.add(MovimentoPeca(
-                peca=peca, tamanho=tam, tipo="saida" if net > 0 else "estorno",
-                quantidade=abs(net), observacao=f"Edição de venda #{venda.id}",
-            ))
-
-        # Refaz os itens e atualiza os dados do pedido.
+        # Refaz os itens e atualiza os dados do pedido (mantém o status atual).
         for it in list(venda.itens):
             db.session.delete(it)
         venda.itens = []
@@ -774,40 +1080,114 @@ def editar_venda(venda_id):
             ))
         for campo, valor in _dados_pedido_do_form().items():
             setattr(venda, campo, valor)
+        db.session.flush()
+        _aplicar_pagamentos(venda, _pagamentos_do_form())
 
         db.session.commit()
-        flash("Venda atualizada e estoque ajustado.", "sucesso")
+        flash("Venda atualizada.", "sucesso")
         return redirect(url_for("main.listar_vendas"))
 
-    return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque(), clientes=Cliente.query.order_by(Cliente.nome).all())
+    return render_template(
+        "venda_editar.html", venda=venda, pecas=_pecas_para_venda(),
+        clientes=Cliente.query.order_by(Cliente.nome).all(),
+    )
 
 
 @bp.route("/vendas/<int:venda_id>/excluir", methods=["POST"])
 def excluir_venda(venda_id):
     venda = Venda.query.get_or_404(venda_id)
-    # Devolve ao estoque a quantidade de cada item.
-    for it in venda.itens:
-        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
-        linha.quantidade += it.quantidade
-        db.session.add(MovimentoPeca(
-            peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=it.quantidade,
-            observacao=f"Estorno por exclusão de venda #{venda.id}",
-        ))
+    # Devolve ao estoque só se a venda tinha baixado estoque (não é orçamento/encomenda).
+    if venda.estoque_baixado:
+        for it in venda.itens:
+            linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+            linha.quantidade += it.quantidade
+            db.session.add(MovimentoPeca(
+                peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=it.quantidade,
+                observacao=f"Estorno por exclusão de venda #{venda.id}",
+            ))
     db.session.delete(venda)
     db.session.commit()
-    flash("Venda excluída e estoque devolvido às peças.", "sucesso")
+    flash("Venda excluída.", "sucesso")
     return redirect(url_for("main.listar_vendas"))
 
 
 @bp.route("/vendas/<int:venda_id>/pagar", methods=["POST"])
 def marcar_pago(venda_id):
+    """Quita a venda: registra um pagamento para o saldo restante."""
     venda = Venda.query.get_or_404(venda_id)
-    venda.pago = not venda.pago
+    saldo = venda.saldo_receber
+    if saldo > 0:
+        db.session.add(Pagamento(
+            venda=venda, forma=(venda.forma_pagamento or "Dinheiro").split(" + ")[-1],
+            valor=saldo,
+        ))
+    venda.pago = True
+    if venda.status == "realizado":
+        venda.status = "pago"
     db.session.commit()
-    flash(
-        f"Venda #{venda.id} marcada como {'paga' if venda.pago else 'pendente'}.", "sucesso"
-    )
+    flash(f"Venda #{venda.id} quitada.", "sucesso")
     return redirect(request.referrer or url_for("main.contabilidade"))
+
+
+@bp.route("/vendas/<int:venda_id>/receber", methods=["POST"])
+def receber_pagamento(venda_id):
+    """Registra um pagamento parcial (ex.: recebimento do saldo de um sinal)."""
+    venda = Venda.query.get_or_404(venda_id)
+    valor = _to_float(request.form.get("valor"))
+    forma = request.form.get("forma", "").strip() or "Dinheiro"
+    if valor <= 0:
+        flash("Informe um valor maior que zero.", "erro")
+        return redirect(request.referrer or url_for("main.contabilidade"))
+    db.session.add(Pagamento(venda=venda, forma=forma, valor=valor))
+    venda.pago = (venda.total_pago + valor) >= venda.receita - 0.01
+    if venda.pago and venda.status == "realizado":
+        venda.status = "pago"
+    db.session.commit()
+    flash(f"Pagamento de {valor:.2f} registrado no pedido #{venda.id}.", "sucesso")
+    return redirect(request.referrer or url_for("main.contabilidade"))
+
+
+@bp.route("/vendas/<int:venda_id>/pagamentos", methods=["POST"])
+def receber_pagamentos(venda_id):
+    """Adiciona pagamentos (múltiplas formas). Só dinheiro pode exceder o saldo
+    (o excesso vira troco). Formas eletrônicas não podem passar do saldo."""
+    venda = Venda.query.get_or_404(venda_id)
+    pags = _pagamentos_do_form()
+    if not pags:
+        flash("Adicione ao menos um pagamento com valor.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+
+    restante = round(venda.saldo_receber, 2)
+    troco = 0.0
+    novos = []
+    # Processa as formas eletrônicas primeiro, dinheiro por último.
+    for p in sorted(pags, key=lambda x: x["forma"] == "Dinheiro"):
+        if p["forma"] != "Dinheiro":
+            if p["valor"] > restante + 0.01:
+                flash(f"Pagamento em {p['forma']} (R$ {p['valor']:.2f}) maior que o saldo "
+                      f"(R$ {restante:.2f}). Só dinheiro permite troco.", "erro")
+                return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+            aplicado = p["valor"]
+        else:
+            aplicado = min(p["valor"], max(0.0, restante))
+            troco += p["valor"] - aplicado
+        restante = round(restante - aplicado, 2)
+        if aplicado > 0.001:
+            novos.append({**p, "valor": aplicado})
+
+    for p in novos:
+        db.session.add(Pagamento(venda=venda, **p))
+    if "vencimento" in request.form:
+        venda.vencimento = _to_date(request.form.get("vencimento"))
+    venda.pago = venda.total_pago >= venda.receita - 0.01
+    if venda.pago and venda.status == "realizado":
+        venda.status = "pago"
+    db.session.commit()
+    msg = f"Pagamento registrado (R$ {sum(p['valor'] for p in novos):.2f})."
+    if troco > 0.01:
+        msg += f" Troco: R$ {troco:.2f}."
+    flash(msg, "sucesso")
+    return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
 
 
 # --------------------------------------------------------------------------- #
@@ -877,23 +1257,25 @@ def contabilidade():
         })
     ledger.sort(key=lambda x: x["data"], reverse=True)
 
-    recebido = sum(v.receita for v in vendas_f if v.pago)
-    a_receber = sum(v.receita for v in vendas_f if not v.pago)
+    recebido = sum(v.total_pago for v in vendas_f)
+    a_receber = sum(v.saldo_receber for v in vendas_f)
     saidas_insumos = sum(_compra_valor(c) for c in compras_f)
     saidas_despesas = sum(d.valor for d in despesas_f if d.pago)
     saidas_total = saidas_insumos + saidas_despesas
     lucro = sum(v.lucro for v in vendas_f)
 
-    # Recebido por forma de pagamento.
+    # Recebido por forma de pagamento (a partir dos pagamentos).
     formas = {}
     for v in vendas_f:
-        if v.pago:
-            k = v.forma_pagamento or "—"
-            formas[k] = formas.get(k, 0.0) + v.receita
+        if v.pagamentos:
+            for p in v.pagamentos:
+                formas[p.forma or "—"] = formas.get(p.forma or "—", 0.0) + p.valor
+        elif v.pago:
+            formas[v.forma_pagamento or "—"] = formas.get(v.forma_pagamento or "—", 0.0) + v.receita
 
-    # Contas a receber (vendas pendentes) e a pagar (despesas pendentes) — todas.
+    # Contas a receber (com saldo) e a pagar (despesas pendentes).
     pendentes = sorted(
-        [v for v in vendas if not v.pago],
+        [v for v in vendas if v.saldo_receber > 0.01],
         key=lambda v: (v.vencimento or date.max),
     )
     a_pagar = sorted(
@@ -909,7 +1291,7 @@ def contabilidade():
         "lucro": lucro,
         "n_vendas": len(vendas_f),
         "ticket": (sum(v.receita for v in vendas_f) / len(vendas_f)) if vendas_f else 0.0,
-        "a_receber_total": sum(v.receita for v in pendentes),
+        "a_receber_total": sum(v.saldo_receber for v in pendentes),
         "a_pagar_total": sum(d.valor for d in a_pagar),
     }
 
@@ -1183,3 +1565,169 @@ def calcular_frete():
         return {"ok": True, "opcoes": selecionadas}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "erro": f"Falha ao consultar frete: {e}"}, 502
+
+
+# --------------------------------------------------------------------------- #
+# Cupons de desconto
+# --------------------------------------------------------------------------- #
+@bp.route("/cupons")
+def listar_cupons():
+    cupons = Cupom.query.order_by(Cupom.ativo.desc(), Cupom.codigo).all()
+    return render_template("cupons.html", cupons=cupons)
+
+
+@bp.route("/cupons/novo", methods=["POST"])
+def salvar_cupom():
+    codigo = request.form.get("codigo", "").strip().upper()
+    if not codigo:
+        flash("Informe o código do cupom.", "erro")
+        return redirect(url_for("main.listar_cupons"))
+    if Cupom.query.filter(db.func.upper(Cupom.codigo) == codigo).first():
+        flash("Já existe um cupom com esse código.", "erro")
+        return redirect(url_for("main.listar_cupons"))
+    tipo = "valor" if request.form.get("tipo") == "valor" else "percentual"
+    c = Cupom(
+        codigo=codigo, tipo=tipo, valor=_to_float(request.form.get("valor")),
+        validade=_to_date(request.form.get("validade")),
+        max_usos=int(_to_float(request.form.get("max_usos"))) or None,
+    )
+    db.session.add(c)
+    db.session.commit()
+    flash("Cupom criado.", "sucesso")
+    return redirect(url_for("main.listar_cupons"))
+
+
+@bp.route("/cupons/<int:cupom_id>/toggle", methods=["POST"])
+def toggle_cupom(cupom_id):
+    c = Cupom.query.get_or_404(cupom_id)
+    c.ativo = not c.ativo
+    db.session.commit()
+    return redirect(url_for("main.listar_cupons"))
+
+
+@bp.route("/cupons/<int:cupom_id>/excluir", methods=["POST"])
+def excluir_cupom(cupom_id):
+    c = Cupom.query.get_or_404(cupom_id)
+    db.session.delete(c)
+    db.session.commit()
+    flash("Cupom excluído.", "sucesso")
+    return redirect(url_for("main.listar_cupons"))
+
+
+# --------------------------------------------------------------------------- #
+# Vales (crédito de loja: presente / troca)
+# --------------------------------------------------------------------------- #
+def _gerar_codigo_vale():
+    import random
+    import string
+    while True:
+        cod = "VL-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        if not Vale.query.filter_by(codigo=cod).first():
+            return cod
+
+
+@bp.route("/vales")
+def listar_vales():
+    vales = Vale.query.order_by(Vale.criado_em.desc()).all()
+    clientes = Cliente.query.order_by(Cliente.nome).all()
+    return render_template("vales.html", vales=vales, clientes=clientes)
+
+
+@bp.route("/vales/novo", methods=["POST"])
+def salvar_vale():
+    valor = _to_float(request.form.get("valor"))
+    if valor <= 0:
+        flash("Informe um valor maior que zero.", "erro")
+        return redirect(url_for("main.listar_vales"))
+    cid = request.form.get("cliente_id", type=int)
+    v = Vale(
+        codigo=_gerar_codigo_vale(), tipo="presente",
+        valor_inicial=valor, saldo=valor, cliente_id=cid or None,
+        observacao=request.form.get("observacao", "").strip(),
+    )
+    db.session.add(v)
+    db.session.commit()
+    flash(f"Vale-presente {v.codigo} criado (R$ {valor:.2f}).", "sucesso")
+    return redirect(url_for("main.listar_vales"))
+
+
+@bp.route("/vales/<int:vale_id>/desativar", methods=["POST"])
+def desativar_vale(vale_id):
+    v = Vale.query.get_or_404(vale_id)
+    v.ativo = not v.ativo
+    db.session.commit()
+    return redirect(url_for("main.listar_vales"))
+
+
+@bp.route("/vendas/<int:venda_id>/usar-vale", methods=["POST"])
+def usar_vale(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    cod = request.form.get("codigo", "").strip().upper()
+    vale = Vale.query.filter(db.func.upper(Vale.codigo) == cod).first()
+    if not vale or not vale.disponivel:
+        flash("Vale inválido, sem saldo ou inativo.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+    aplicado = min(vale.saldo, venda.saldo_receber)
+    if aplicado <= 0.01:
+        flash("Nada a aplicar (pedido já quitado).", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+    db.session.add(Pagamento(venda=venda, forma=f"Vale {vale.codigo}", valor=aplicado))
+    vale.saldo = round(vale.saldo - aplicado, 2)
+    venda.pago = venda.total_pago >= venda.receita - 0.01
+    if venda.pago and venda.status == "realizado":
+        venda.status = "pago"
+    db.session.commit()
+    flash(f"Vale {vale.codigo} aplicado: R$ {aplicado:.2f} (saldo do vale: R$ {vale.saldo:.2f}).", "sucesso")
+    return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+
+
+# --------------------------------------------------------------------------- #
+# Devolução / troca (gera vale-crédito)
+# --------------------------------------------------------------------------- #
+@bp.route("/vendas/<int:venda_id>/devolucao", methods=["GET", "POST"])
+def devolucao_venda(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    if request.method == "GET":
+        return render_template("devolucao.html", venda=venda)
+
+    # Lê as quantidades a devolver por item.
+    total_credito = 0.0
+    itens_devolvidos = []
+    for it in venda.itens:
+        qtd = _to_float(request.form.get(f"qtd_{it.id}"))
+        qtd = min(max(0.0, qtd), it.quantidade)
+        if qtd <= 0:
+            continue
+        # valor proporcional (com desconto do item aplicado)
+        valor_unit = it.subtotal_receita / it.quantidade if it.quantidade else 0
+        total_credito += valor_unit * qtd
+        itens_devolvidos.append((it, qtd, valor_unit))
+
+    if not itens_devolvidos:
+        flash("Selecione ao menos um item e quantidade para devolver.", "erro")
+        return redirect(url_for("main.devolucao_venda", venda_id=venda.id))
+
+    # Devolve ao estoque e reduz a quantidade do item na venda.
+    for it, qtd, _vu in itens_devolvidos:
+        if venda.estoque_baixado:
+            linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+            linha.quantidade += qtd
+            db.session.add(MovimentoPeca(
+                peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=qtd,
+                observacao=f"Devolução do pedido #{venda.id}",
+            ))
+        it.quantidade -= qtd
+        if it.quantidade <= 0.001:
+            db.session.delete(it)
+
+    # Gera um vale-troca com o valor devolvido.
+    vale = Vale(
+        codigo=_gerar_codigo_vale(), tipo="troca",
+        valor_inicial=round(total_credito, 2), saldo=round(total_credito, 2),
+        cliente_id=venda.cliente_id,
+        observacao=f"Devolução do pedido #{venda.id}",
+    )
+    db.session.add(vale)
+    db.session.commit()
+    flash(f"Devolução registrada. Vale-troca {vale.codigo} gerado: R$ {total_credito:.2f}.", "sucesso")
+    return redirect(url_for("main.listar_vales"))

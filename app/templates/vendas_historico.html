@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Vendas</h1>
+  <a href="{{ url_for('main.registrar_venda') }}" class="btn btn-primary">+ Nova venda</a>
+</div>
+
+{% set rotulos = {'realizado':'Pago','pago':'Enviado','enviado':'Entregue'} %}
+{% set cores = {'realizado':'text-bg-secondary','pago':'text-bg-info','enviado':'text-bg-primary','entregue':'text-bg-success'} %}
+
+<div class="card bg-white">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h2 class="h5 mb-0">Histórico de vendas</h2>
+      <div class="d-flex gap-2">
+        <form method="get" class="d-flex gap-2">
+          <input type="text" name="q" class="form-control form-control-sm" placeholder="cliente" value="{{ q }}" style="width:140px">
+          <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+            <option value="">Todas</option>
+            <option value="pago" {{ 'selected' if status == 'pago' }}>Pagas</option>
+            <option value="pendente" {{ 'selected' if status == 'pendente' }}>Pendentes</option>
+          </select>
+          <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+        </form>
+        <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ CSV</a>
+      </div>
+    </div>
+    {% if vendas %}
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <thead class="table-light">
+        <tr><th>Data</th><th>Itens</th><th>Cliente</th><th>Status</th><th>Valor total</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for v in vendas %}
+        <tr>
+          <td class="small text-muted">{{ v.criado_em | dt }}</td>
+          <td>
+            {% for it in v.itens %}
+              <div>{{ it.quantidade | num }}× {{ it.peca.nome }}
+                <span class="badge text-bg-light">{{ it.tamanho }}</span>
+              </div>
+            {% endfor %}
+          </td>
+          <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
+          <td>
+            <span class="badge {{ cores[v.status] }}">{{ v.estado_label }}</span>
+            {% if v.tipo == 'encomenda' %}<span class="badge text-bg-warning">encomenda</span>{% endif %}
+          </td>
+          <td class="fw-bold">{{ v.receita | moeda }}</td>
+          <td class="text-nowrap text-end">
+            <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver / fluxo</a>
+            <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline"
+                  onsubmit="return confirm('Excluir esta venda?')">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% if v.tipo == 'venda' %}
+        <tr class="stepper-row">
+          <td colspan="6" class="pt-0">
+            <div class="stepper mini">
+              {% for et in v.fluxo_etapas %}
+                <div class="step {{ 'concluido' if et.concluido }} {{ 'atual' if et.atual }}">
+                  <div class="step-circulo">{% if et.concluido %}✓{% else %}{{ loop.index }}{% endif %}</div>
+                  <div class="step-label">{{ et.label }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% include "_paginacao.html" %}
+    {% else %}
+    <p class="text-muted">Nenhuma venda registrada ainda. <a href="{{ url_for('main.registrar_venda') }}">Registrar a primeira</a>.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

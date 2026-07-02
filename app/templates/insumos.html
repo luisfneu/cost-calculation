@@ -10,21 +10,22 @@
     <input type="text" name="q" class="form-control" placeholder="Buscar por nome" value="{{ q }}">
   </div>
   <div class="col-md-3">
-    <select name="tipo" class="form-select">
+    <select name="tipo" class="form-select" onchange="this.form.submit()">
       <option value="">Todos os tipos</option>
       <option value="materia_prima" {{ 'selected' if tipo == 'materia_prima' }}>Matéria-prima</option>
       <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
     </select>
   </div>
   <div class="col-md-3">
-    <select name="situacao" class="form-select">
+    <select name="situacao" class="form-select" onchange="this.form.submit()">
       <option value="">Todas as situações</option>
+      <option value="ativo" {{ 'selected' if situacao == 'ativo' }}>Ocultar inativos</option>
       <option value="baixo" {{ 'selected' if situacao == 'baixo' }}>Estoque baixo</option>
-      <option value="inativo" {{ 'selected' if situacao == 'inativo' }}>Inativos</option>
+      <option value="inativo" {{ 'selected' if situacao == 'inativo' }}>Somente inativos</option>
     </select>
   </div>
   <div class="col-md-2 d-flex gap-1">
-    <button class="btn btn-outline-secondary flex-grow-1">Filtrar</button>
+    <button class="btn btn-outline-secondary flex-grow-1">Buscar</button>
     {% if q or tipo or situacao %}<a href="{{ url_for('main.listar_insumos') }}" class="btn btn-outline-secondary">×</a>{% endif %}
   </div>
 </form>

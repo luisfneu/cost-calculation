@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Devolução / troca — Pedido #{{ venda.id }}</h1>
+  <a href="{{ url_for('main.visualizar_venda', venda_id=venda.id) }}" class="btn btn-link">← Voltar ao pedido</a>
+</div>
+
+<div class="card bg-white" style="max-width:760px">
+  <div class="card-body">
+    <p class="text-muted">Informe quanto de cada item o cliente está devolvendo. As peças voltam ao estoque e é gerado um <strong>vale-troca</strong> com o valor devolvido.</p>
+    <form method="post" action="{{ url_for('main.devolucao_venda', venda_id=venda.id) }}">
+      <table class="table align-middle">
+        <thead class="table-light"><tr><th>Peça</th><th>Tam.</th><th>Comprado</th><th>Preço un.</th><th style="width:130px">Devolver</th></tr></thead>
+        <tbody>
+        {% for it in venda.itens %}
+          <tr>
+            <td>{{ it.peca.nome }}</td>
+            <td><span class="badge text-bg-light">{{ it.tamanho }}</span></td>
+            <td>{{ it.quantidade | num }}</td>
+            <td>{{ (it.subtotal_receita / it.quantidade) | moeda }}</td>
+            <td><input type="number" name="qtd_{{ it.id }}" class="form-control form-control-sm" min="0" max="{{ it.quantidade }}" step="1" value="0"></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="text-end">
+        <button class="btn btn-primary">Registrar devolução e gerar vale</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
