@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Contas a pagar / Despesas</h1>
+
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Nova despesa</h2>
+    <form method="post" action="{{ url_for('main.salvar_despesa') }}" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Descrição *</label>
+        <input type="text" name="descricao" class="form-control" required placeholder="Ex.: Aluguel">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Categoria</label>
+        <input type="text" name="categoria" class="form-control" placeholder="Fixa, Insumo...">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Valor (R$)</label>
+        <input type="text" name="valor" class="form-control" placeholder="0,00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Vencimento</label>
+        <input type="date" name="vencimento" class="form-control">
+      </div>
+      <div class="col-md-1">
+        <div class="form-check mt-4"><input class="form-check-input" type="checkbox" name="pago" id="dp"><label class="form-check-label" for="dp">Pago</label></div>
+      </div>
+      <div class="col-md-1 text-end"><button class="btn btn-primary">Salvar</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="alert alert-warning">Total a pagar (pendente): <strong>{{ total_pendente | moeda }}</strong></div>
+
+<div class="card bg-white">
+  <div class="card-body">
+    {% if despesas %}
+    <table class="table align-middle">
+      <thead class="table-light"><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th class="text-end">Valor</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for d in despesas %}
+        <tr class="{{ 'table-warning' if d.vencida }}">
+          <td>{{ d.descricao }}</td>
+          <td>{{ d.categoria or '—' }}</td>
+          <td>{{ d.vencimento.strftime('%d/%m/%Y') if d.vencimento else '—' }}
+            {% if d.vencida %}<span class="badge text-bg-danger">vencida</span>{% endif %}</td>
+          <td class="text-end fw-bold">{{ d.valor | moeda }}</td>
+          <td>{% if d.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}</td>
+          <td class="text-end text-nowrap">
+            <form method="post" action="{{ url_for('main.pagar_despesa', despesa_id=d.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-success">{{ 'desmarcar' if d.pago else '✓ pago' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('main.excluir_despesa', despesa_id=d.id) }}" class="d-inline" onsubmit="return confirm('Excluir despesa?')">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted">Nenhuma despesa cadastrada.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

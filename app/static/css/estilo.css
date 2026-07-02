@@ -253,6 +253,30 @@ main.container { max-width: 1100px; }
   letter-spacing: .5px;
 }
 
+/* Opções de frete */
+.frete-op {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  text-align: left;
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: .4rem .6rem;
+  margin-bottom: .35rem;
+}
+.frete-op:hover { border-color: var(--gold-soft); background: #fff; }
+.frete-op.escolhido { border-color: var(--gold); background: #fff; box-shadow: 0 0 0 2px rgba(176,138,79,.2); }
+.frete-nome { color: var(--ink); font-size: .85rem; }
+.frete-preco { color: var(--gold); font-weight: 500; white-space: nowrap; }
+.frete-preco small { color: var(--ink-soft); font-weight: 400; }
+.frete-badge {
+  background: #6d7a5c; color: var(--cream); font-size: .62rem;
+  padding: 1px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: .5px;
+}
+
 /* Título de seção em formulários */
 .section-titulo {
   font-family: 'Cormorant Garamond', serif;

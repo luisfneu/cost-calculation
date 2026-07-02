@@ -4,6 +4,11 @@
   <h1 class="h3 mb-0">Clientes</h1>
   <a href="{{ url_for('main.form_cliente') }}" class="btn btn-primary">+ Novo cliente</a>
 </div>
+<form method="get" class="input-group mb-3" style="max-width:420px">
+  <input type="text" name="q" class="form-control" placeholder="Buscar por nome ou @instagram" value="{{ q }}">
+  <button class="btn btn-outline-secondary">Buscar</button>
+  {% if q %}<a href="{{ url_for('main.listar_clientes') }}" class="btn btn-outline-secondary">×</a>{% endif %}
+</form>
 
 {% if clientes %}
 <div class="table-responsive">

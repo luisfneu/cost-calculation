@@ -1,14 +1,20 @@
 """Rotas da aplicação."""
+import csv
+import io
 import os
+import re
 import uuid
+from datetime import date, datetime
 
 from flask import (
     Blueprint,
+    Response,
     current_app,
     flash,
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from werkzeug.utils import secure_filename
@@ -16,7 +22,9 @@ from werkzeug.utils import secure_filename
 from .models import (
     TAMANHOS,
     Cliente,
+    Despesa,
     EstoquePeca,
+    FotoPeca,
     Insumo,
     MovimentoEstoque,
     MovimentoPeca,
@@ -41,6 +49,16 @@ def _to_float(valor, padrao=0.0):
         return float(str(valor).replace(".", "").replace(",", ".")) if "," in str(valor) else float(valor)
     except ValueError:
         return padrao
+
+
+def _to_date(valor):
+    """Converte 'YYYY-MM-DD' (input date) em date, ou None."""
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor.strip(), "%Y-%m-%d").date()
+    except (ValueError, AttributeError):
+        return None
 
 
 def _extensao_permitida(nome):
@@ -77,15 +95,22 @@ def _linha_estoque_peca(peca, tamanho, criar=False):
     return linha
 
 
-def _registrar_movimento(insumo, tipo, quantidade, observacao=""):
-    """Aplica um movimento de estoque e registra no histórico."""
+def _registrar_movimento(insumo, tipo, quantidade, observacao="", custo_unitario=None):
+    """Aplica um movimento de estoque e registra no histórico.
+
+    Em entradas com custo informado, recalcula o custo médio ponderado do insumo.
+    """
     if tipo == "entrada":
+        if custo_unitario and custo_unitario > 0:
+            base = insumo.estoque * insumo.custo_unitario + quantidade * custo_unitario
+            insumo.custo_unitario = base / (insumo.estoque + quantidade) if (insumo.estoque + quantidade) else custo_unitario
         insumo.estoque += quantidade
     else:  # saida
         insumo.estoque -= quantidade
-    db.session.add(
-        MovimentoEstoque(insumo=insumo, tipo=tipo, quantidade=quantidade, observacao=observacao)
-    )
+    db.session.add(MovimentoEstoque(
+        insumo=insumo, tipo=tipo, quantidade=quantidade, observacao=observacao,
+        custo_unitario=(custo_unitario if custo_unitario else insumo.custo_unitario),
+    ))
 
 
 # --------------------------------------------------------------------------- #
@@ -124,8 +149,20 @@ def vitrine():
 # --------------------------------------------------------------------------- #
 @bp.route("/insumos")
 def listar_insumos():
-    insumos = Insumo.query.order_by(Insumo.nome).all()
-    return render_template("insumos.html", insumos=insumos)
+    q = request.args.get("q", "").strip()
+    tipo = request.args.get("tipo", "").strip()
+    situacao = request.args.get("situacao", "").strip()  # "baixo" | "inativo" | ""
+    query = Insumo.query
+    if q:
+        query = query.filter(Insumo.nome.ilike(f"%{q}%"))
+    if tipo in ("materia_prima", "embalagem"):
+        query = query.filter_by(tipo=tipo)
+    insumos = query.order_by(Insumo.nome).all()
+    if situacao == "baixo":
+        insumos = [i for i in insumos if i.estoque_baixo]
+    elif situacao == "inativo":
+        insumos = [i for i in insumos if not i.ativo]
+    return render_template("insumos.html", insumos=insumos, q=q, tipo=tipo, situacao=situacao)
 
 
 @bp.route("/insumos/novo", methods=["GET", "POST"])
@@ -158,6 +195,7 @@ def form_insumo(insumo_id=None):
             if insumo.estoque > 0:
                 db.session.add(MovimentoEstoque(
                     insumo=insumo, tipo="entrada", quantidade=insumo.estoque,
+                    custo_unitario=insumo.custo_unitario,
                     observacao="Estoque inicial (cadastro)",
                 ))
 
@@ -193,6 +231,7 @@ def movimentar_estoque(insumo_id):
     tipo = request.form.get("tipo")
     quantidade = _to_float(request.form.get("quantidade"))
     observacao = request.form.get("observacao", "").strip()
+    custo_compra = _to_float(request.form.get("custo_unitario"))  # opcional (só entrada)
 
     if tipo not in ("entrada", "saida") or quantidade <= 0:
         flash("Informe um tipo válido e uma quantidade maior que zero.", "erro")
@@ -202,9 +241,12 @@ def movimentar_estoque(insumo_id):
         flash(f"Estoque insuficiente de '{insumo.nome}' (disponível: {insumo.estoque}).", "erro")
         return redirect(url_for("main.listar_insumos"))
 
-    _registrar_movimento(insumo, tipo, quantidade, observacao)
+    _registrar_movimento(insumo, tipo, quantidade, observacao, custo_unitario=custo_compra)
     db.session.commit()
-    flash(f"Movimento de estoque registrado para '{insumo.nome}'.", "sucesso")
+    msg = f"Movimento de estoque registrado para '{insumo.nome}'."
+    if tipo == "entrada" and custo_compra > 0:
+        msg += f" Custo médio atualizado para R$ {insumo.custo_unitario:.2f}."
+    flash(msg, "sucesso")
     return redirect(url_for("main.listar_insumos"))
 
 
@@ -213,8 +255,13 @@ def movimentar_estoque(insumo_id):
 # --------------------------------------------------------------------------- #
 @bp.route("/pecas")
 def listar_pecas():
-    pecas = Peca.query.order_by(Peca.criado_em.desc()).all()
-    return render_template("pecas.html", pecas=pecas)
+    q = request.args.get("q", "").strip()
+    query = Peca.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Peca.nome.ilike(like), Peca.colecao.ilike(like), Peca.tags.ilike(like)))
+    pecas = query.order_by(Peca.criado_em.desc()).all()
+    return render_template("pecas.html", pecas=pecas, q=q)
 
 
 @bp.route("/pecas/nova", methods=["GET", "POST"])
@@ -253,17 +300,31 @@ def form_peca(peca_id=None):
 
         peca.nome = nome
         peca.colecao = request.form.get("colecao", "").strip()
+        peca.tags = request.form.get("tags", "").strip()
         peca.descricao = request.form.get("descricao", "").strip()
         peca.custo_mao_de_obra = _to_float(request.form.get("custo_mao_de_obra"))
         peca.custos_extras = _to_float(request.form.get("custos_extras"))
         peca.margem_percentual = _to_float(request.form.get("margem_percentual"))
         peca.preco_etiqueta = _to_float(request.form.get("preco_etiqueta"))
+        peca.peso_g = _to_float(request.form.get("peso_g"))
+        peca.altura_cm = _to_float(request.form.get("altura_cm"))
+        peca.largura_cm = _to_float(request.form.get("largura_cm"))
+        peca.comprimento_cm = _to_float(request.form.get("comprimento_cm"))
 
-        # Foto (opcional).
+        # Foto principal (opcional).
         nova_foto = _salvar_foto(request.files.get("foto"))
         if nova_foto:
             _remover_foto(peca.foto)
             peca.foto = nova_foto
+
+        # Fotos adicionais (galeria) — aceita múltiplos arquivos.
+        for arq in request.files.getlist("fotos"):
+            nome_arq = _salvar_foto(arq)
+            if nome_arq:
+                if not peca.foto:
+                    peca.foto = nome_arq  # primeira vira a principal se não houver
+                else:
+                    db.session.add(FotoPeca(peca=peca, arquivo=nome_arq))
 
         # Na criação: monta a ficha técnica (quantidade por peça).
         if is_nova and linhas:
@@ -288,10 +349,23 @@ def detalhe_peca(peca_id):
 def excluir_peca(peca_id):
     peca = Peca.query.get_or_404(peca_id)
     _remover_foto(peca.foto)
+    for f in peca.fotos:
+        _remover_foto(f.arquivo)
     db.session.delete(peca)
     db.session.commit()
     flash("Peça excluída.", "sucesso")
     return redirect(url_for("main.listar_pecas"))
+
+
+@bp.route("/fotos/<int:foto_id>/excluir", methods=["POST"])
+def excluir_foto_peca(foto_id):
+    foto = FotoPeca.query.get_or_404(foto_id)
+    peca_id = foto.peca_id
+    _remover_foto(foto.arquivo)
+    db.session.delete(foto)
+    db.session.commit()
+    flash("Foto removida.", "sucesso")
+    return redirect(url_for("main.detalhe_peca", peca_id=peca_id))
 
 
 # ----- Ficha técnica (insumos da peça) -----
@@ -440,8 +514,13 @@ def historico():
 # --------------------------------------------------------------------------- #
 @bp.route("/clientes")
 def listar_clientes():
-    clientes = Cliente.query.order_by(Cliente.nome).all()
-    return render_template("clientes.html", clientes=clientes)
+    q = request.args.get("q", "").strip()
+    query = Cliente.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Cliente.nome.ilike(like), Cliente.instagram.ilike(like)))
+    clientes = query.order_by(Cliente.nome).all()
+    return render_template("clientes.html", clientes=clientes, q=q)
 
 
 @bp.route("/clientes/novo", methods=["GET", "POST"])
@@ -511,6 +590,7 @@ def _dados_pedido_do_form():
         "cliente_id": cid if cid else None,
         "forma_pagamento": request.form.get("forma_pagamento", "").strip(),
         "pago": request.form.get("pago") == "on",
+        "vencimento": _to_date(request.form.get("vencimento")),
     }
 
 
@@ -570,7 +650,16 @@ def _itens_crus_do_form():
 
 
 def _render_vendas(prefill_itens=None, prefill_pedido=None):
+    q = request.args.get("q", "").strip()
+    status = request.args.get("status", "").strip()  # "pago" | "pendente" | ""
     vendas = Venda.query.order_by(Venda.criado_em.desc()).all()
+    if q:
+        ql = q.lower()
+        vendas = [v for v in vendas if ql in (v.cliente_nome or "").lower()]
+    if status == "pago":
+        vendas = [v for v in vendas if v.pago]
+    elif status == "pendente":
+        vendas = [v for v in vendas if not v.pago]
     totais = {
         "receita": sum(v.receita for v in vendas),
         "custo": sum(v.custo_total for v in vendas),
@@ -581,6 +670,7 @@ def _render_vendas(prefill_itens=None, prefill_pedido=None):
         "vendas.html", vendas=vendas, pecas=_pecas_com_estoque(), totais=totais,
         clientes=Cliente.query.order_by(Cliente.nome).all(),
         prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
+        q=q, status=status,
     )
 
 
@@ -746,10 +836,15 @@ def contabilidade():
         MovimentoEstoque.query.filter_by(tipo="entrada")
         .order_by(MovimentoEstoque.criado_em).all()
     )
+    despesas = Despesa.query.order_by(Despesa.criado_em).all()
+
+    def _compra_valor(c):
+        return c.valor if c.custo_unitario else c.quantidade * c.insumo.custo_unitario
 
     # Meses disponíveis (dos dados) para o filtro.
     meses = sorted(
-        {_mes_de(v.criado_em) for v in vendas} | {_mes_de(c.criado_em) for c in compras},
+        {_mes_de(v.criado_em) for v in vendas} | {_mes_de(c.criado_em) for c in compras}
+        | {_mes_de(d.criado_em) for d in despesas},
         reverse=True,
     )
 
@@ -758,8 +853,9 @@ def contabilidade():
 
     vendas_f = [v for v in vendas if no_mes(v.criado_em)]
     compras_f = [c for c in compras if no_mes(c.criado_em)]
+    despesas_f = [d for d in despesas if no_mes(d.criado_em)]
 
-    # Razão (ledger) unificado: vendas = entrada, compras de insumo = saída.
+    # Razão (ledger) unificado: vendas = entrada, compras/despesas = saída.
     ledger = []
     for v in vendas_f:
         itens_txt = ", ".join(f"{i.quantidade:g}x {i.peca.nome} ({i.tamanho})" for i in v.itens)
@@ -767,20 +863,25 @@ def contabilidade():
             "data": v.criado_em, "tipo": "entrada", "categoria": "Venda",
             "descricao": f"Pedido #{v.id}" + (f" · {v.cliente_nome}" if v.cliente_nome else ""),
             "detalhe": itens_txt, "valor": v.receita, "pago": v.pago,
-            "forma": v.forma_pagamento, "venda_id": v.id,
         })
     for c in compras_f:
-        valor = c.quantidade * c.insumo.custo_unitario
         ledger.append({
             "data": c.criado_em, "tipo": "saida", "categoria": "Compra de insumo",
             "descricao": c.insumo.nome, "detalhe": f"{c.quantidade:g} {c.insumo.unidade} · {c.observacao}",
-            "valor": valor, "pago": True, "forma": "", "venda_id": None,
+            "valor": _compra_valor(c), "pago": True,
+        })
+    for d in despesas_f:
+        ledger.append({
+            "data": d.criado_em, "tipo": "saida", "categoria": d.categoria or "Despesa",
+            "descricao": d.descricao, "detalhe": "", "valor": d.valor, "pago": d.pago,
         })
     ledger.sort(key=lambda x: x["data"], reverse=True)
 
     recebido = sum(v.receita for v in vendas_f if v.pago)
     a_receber = sum(v.receita for v in vendas_f if not v.pago)
-    saidas_total = sum(c.quantidade * c.insumo.custo_unitario for c in compras_f)
+    saidas_insumos = sum(_compra_valor(c) for c in compras_f)
+    saidas_despesas = sum(d.valor for d in despesas_f if d.pago)
+    saidas_total = saidas_insumos + saidas_despesas
     lucro = sum(v.lucro for v in vendas_f)
 
     # Recebido por forma de pagamento.
@@ -790,8 +891,15 @@ def contabilidade():
             k = v.forma_pagamento or "—"
             formas[k] = formas.get(k, 0.0) + v.receita
 
-    # Contas a receber: todas as vendas pendentes (independente do mês).
-    pendentes = [v for v in vendas if not v.pago]
+    # Contas a receber (vendas pendentes) e a pagar (despesas pendentes) — todas.
+    pendentes = sorted(
+        [v for v in vendas if not v.pago],
+        key=lambda v: (v.vencimento or date.max),
+    )
+    a_pagar = sorted(
+        [d for d in despesas if not d.pago],
+        key=lambda d: (d.vencimento or date.max),
+    )
 
     kpis = {
         "recebido": recebido,
@@ -802,9 +910,276 @@ def contabilidade():
         "n_vendas": len(vendas_f),
         "ticket": (sum(v.receita for v in vendas_f) / len(vendas_f)) if vendas_f else 0.0,
         "a_receber_total": sum(v.receita for v in pendentes),
+        "a_pagar_total": sum(d.valor for d in a_pagar),
     }
 
     return render_template(
         "contabilidade.html", ledger=ledger, kpis=kpis, formas=formas,
-        pendentes=pendentes, meses=meses, mes_atual=mes, mes_label=_mes_label,
+        pendentes=pendentes, a_pagar=a_pagar, meses=meses, mes_atual=mes, mes_label=_mes_label,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Backup do banco
+# --------------------------------------------------------------------------- #
+@bp.route("/backup")
+def backup():
+    caminho = os.path.join(current_app.instance_path, "costcalc.db")
+    if not os.path.exists(caminho):
+        flash("Banco de dados não encontrado.", "erro")
+        return redirect(url_for("main.index"))
+    nome = f"costcalc-backup-{date.today().isoformat()}.db"
+    return send_file(caminho, as_attachment=True, download_name=nome)
+
+
+# --------------------------------------------------------------------------- #
+# Contas a pagar (Despesas)
+# --------------------------------------------------------------------------- #
+@bp.route("/despesas")
+def listar_despesas():
+    despesas = Despesa.query.order_by(Despesa.pago, Despesa.vencimento).all()
+    total_pendente = sum(d.valor for d in despesas if not d.pago)
+    return render_template("despesas.html", despesas=despesas, total_pendente=total_pendente)
+
+
+@bp.route("/despesas/nova", methods=["POST"])
+@bp.route("/despesas/<int:despesa_id>/editar", methods=["POST"])
+def salvar_despesa(despesa_id=None):
+    d = Despesa.query.get_or_404(despesa_id) if despesa_id else Despesa()
+    descricao = request.form.get("descricao", "").strip()
+    if not descricao:
+        flash("Informe a descrição da despesa.", "erro")
+        return redirect(url_for("main.listar_despesas"))
+    if despesa_id is None:
+        db.session.add(d)
+    d.descricao = descricao
+    d.categoria = request.form.get("categoria", "").strip()
+    d.valor = _to_float(request.form.get("valor"))
+    d.vencimento = _to_date(request.form.get("vencimento"))
+    d.pago = request.form.get("pago") == "on"
+    db.session.commit()
+    flash("Despesa salva.", "sucesso")
+    return redirect(url_for("main.listar_despesas"))
+
+
+@bp.route("/despesas/<int:despesa_id>/pagar", methods=["POST"])
+def pagar_despesa(despesa_id):
+    d = Despesa.query.get_or_404(despesa_id)
+    d.pago = not d.pago
+    db.session.commit()
+    return redirect(request.referrer or url_for("main.listar_despesas"))
+
+
+@bp.route("/despesas/<int:despesa_id>/excluir", methods=["POST"])
+def excluir_despesa(despesa_id):
+    d = Despesa.query.get_or_404(despesa_id)
+    db.session.delete(d)
+    db.session.commit()
+    flash("Despesa excluída.", "sucesso")
+    return redirect(url_for("main.listar_despesas"))
+
+
+# --------------------------------------------------------------------------- #
+# Relatório mensal
+# --------------------------------------------------------------------------- #
+@bp.route("/relatorio")
+def relatorio():
+    vendas = Venda.query.all()
+    # Agrega por mês.
+    por_mes = {}
+    for v in vendas:
+        k = _mes_de(v.criado_em)
+        m = por_mes.setdefault(k, {"receita": 0.0, "custo": 0.0, "lucro": 0.0, "qtd": 0.0})
+        m["receita"] += v.receita
+        m["custo"] += v.custo_total
+        m["lucro"] += v.lucro
+        m["qtd"] += v.quantidade_total
+    meses_ord = sorted(por_mes.keys())
+    serie = [{"mes": k, "label": _mes_label(k), **por_mes[k]} for k in meses_ord]
+
+    # Peças mais vendidas (por quantidade).
+    ranking = {}
+    for v in vendas:
+        for it in v.itens:
+            r = ranking.setdefault(it.peca.nome, {"qtd": 0.0, "receita": 0.0})
+            r["qtd"] += it.quantidade
+            r["receita"] += it.subtotal_receita
+    mais_vendidas = sorted(ranking.items(), key=lambda x: x[1]["qtd"], reverse=True)[:10]
+
+    # Lucro por coleção.
+    por_colecao = {}
+    for v in vendas:
+        for it in v.itens:
+            col = it.peca.colecao or "Sem coleção"
+            por_colecao[col] = por_colecao.get(col, 0.0) + it.subtotal_receita
+    colecoes = sorted(por_colecao.items(), key=lambda x: x[1], reverse=True)
+
+    return render_template(
+        "relatorio.html", serie=serie, mais_vendidas=mais_vendidas, colecoes=colecoes,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Exportações CSV
+# --------------------------------------------------------------------------- #
+def _csv_response(cabecalho, linhas, nome):
+    buf = io.StringIO()
+    buf.write("﻿")  # BOM p/ Excel abrir acentos corretamente
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(cabecalho)
+    w.writerows(linhas)
+    return Response(
+        buf.getvalue(), mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={nome}"},
+    )
+
+
+@bp.route("/vendas/exportar.csv")
+def exportar_vendas_csv():
+    linhas = []
+    for v in Venda.query.order_by(Venda.criado_em).all():
+        itens = "; ".join(f"{i.quantidade:g}x {i.peca.nome} ({i.tamanho})" for i in v.itens)
+        linhas.append([
+            v.id, v.criado_em.strftime("%d/%m/%Y %H:%M"), v.cliente_nome, itens,
+            f"{v.receita:.2f}", f"{v.frete:.2f}", f"{v.comissao_marketplace:.2f}",
+            f"{v.custo_total:.2f}", f"{v.lucro:.2f}",
+            "sim" if v.pago else "não", v.forma_pagamento or "",
+        ])
+    return _csv_response(
+        ["Pedido", "Data", "Cliente", "Itens", "Valor total", "Frete", "Comissão",
+         "Custo total", "Lucro", "Pago", "Pagamento"],
+        linhas, "vendas.csv",
+    )
+
+
+@bp.route("/contabilidade/receber.csv")
+def exportar_receber_csv():
+    linhas = [
+        [v.id, v.cliente_nome, v.criado_em.strftime("%d/%m/%Y"),
+         v.vencimento.strftime("%d/%m/%Y") if v.vencimento else "", f"{v.receita:.2f}",
+         "vencida" if v.vencida else "a vencer"]
+        for v in Venda.query.filter_by(pago=False).all()
+    ]
+    return _csv_response(
+        ["Pedido", "Cliente", "Data", "Vencimento", "Valor", "Situação"],
+        linhas, "contas-a-receber.csv",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Etiqueta com QR code
+# --------------------------------------------------------------------------- #
+@bp.route("/pecas/<int:peca_id>/etiqueta")
+def etiqueta_peca(peca_id):
+    peca = Peca.query.get_or_404(peca_id)
+    url_peca = url_for("main.detalhe_peca", peca_id=peca.id, _external=True)
+    return render_template("etiqueta.html", peca=peca, url_peca=url_peca)
+
+
+# --------------------------------------------------------------------------- #
+# Cadastro rápido de cliente (JSON, usado no modal da venda)
+# --------------------------------------------------------------------------- #
+@bp.route("/clientes/rapido", methods=["POST"])
+def cliente_rapido():
+    nome = request.form.get("nome", "").strip()
+    if not nome:
+        return {"ok": False, "erro": "Nome é obrigatório."}, 400
+    c = Cliente(
+        nome=nome,
+        instagram=request.form.get("instagram", "").strip(),
+        telefone=request.form.get("telefone", "").strip(),
+        cep=request.form.get("cep", "").strip(),
+        logradouro=request.form.get("logradouro", "").strip(),
+        numero=request.form.get("numero", "").strip(),
+        complemento=request.form.get("complemento", "").strip(),
+        bairro=request.form.get("bairro", "").strip(),
+        cidade=request.form.get("cidade", "").strip(),
+        uf=request.form.get("uf", "").strip().upper()[:2],
+    )
+    db.session.add(c)
+    db.session.commit()
+    return {"ok": True, "id": c.id, "nome": c.nome, "cep": c.cep}
+
+
+# --------------------------------------------------------------------------- #
+# Vitrine pública (sem menu, para compartilhar com o cliente)
+# --------------------------------------------------------------------------- #
+@bp.route("/publico/vitrine")
+def vitrine_publica():
+    pecas = Peca.query.order_by(Peca.colecao, Peca.nome).all()
+    grupos = {}
+    for p in pecas:
+        grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
+    return render_template("vitrine_publica.html", grupos=grupos)
+
+
+# --------------------------------------------------------------------------- #
+# Frete (Melhor Envio) — requer token configurado em MELHOR_ENVIO_TOKEN
+# --------------------------------------------------------------------------- #
+@bp.route("/frete/calcular", methods=["POST"])
+def calcular_frete():
+    import json
+    import urllib.request
+
+    token = os.environ.get("MELHOR_ENVIO_TOKEN", "").strip()
+    cep_origem = os.environ.get("CEP_ORIGEM", "").strip()
+    if not token or not cep_origem:
+        return {"ok": False, "erro": "Frete não configurado. Defina MELHOR_ENVIO_TOKEN e CEP_ORIGEM."}, 400
+
+    cep_destino = re.sub(r"\D", "", request.form.get("cep", ""))
+    if len(cep_destino) != 8:
+        return {"ok": False, "erro": "CEP de destino inválido."}, 400
+
+    payload = {
+        "from": {"postal_code": re.sub(r"\D", "", cep_origem)},
+        "to": {"postal_code": cep_destino},
+        "package": {
+            "weight": _to_float(request.form.get("peso")) / 1000 or 0.3,   # kg
+            "height": _to_float(request.form.get("altura")) or 5,
+            "width": _to_float(request.form.get("largura")) or 20,
+            "length": _to_float(request.form.get("comprimento")) or 30,
+        },
+    }
+    req = urllib.request.Request(
+        "https://melhorenvio.com.br/api/v2/me/shipment/calculate",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json", "Accept": "application/json",
+            "Authorization": f"Bearer {token}", "User-Agent": "cost-calculation",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            dados = json.loads(resp.read())
+        opcoes = [
+            {"nome": o.get("name"), "preco": o.get("price"), "prazo": o.get("delivery_time")}
+            for o in dados if not o.get("error") and o.get("price")
+        ]
+
+        def _preco(o):
+            try:
+                return float(o["preco"])
+            except (TypeError, ValueError):
+                return float("inf")
+
+        # Remove repetições pelo nome do serviço (mantém a mais barata de cada).
+        unicas = {}
+        for o in opcoes:
+            if o["nome"] not in unicas or _preco(o) < _preco(unicas[o["nome"]]):
+                unicas[o["nome"]] = o
+        lista = list(unicas.values())
+
+        # Seleciona: a mais rápida + as 3 mais baratas (sem repetir), no máx. 4.
+        selecionadas = []
+        if lista:
+            rapida = min(lista, key=lambda o: ((o.get("prazo") or 999), _preco(o)))
+            rapida["rapido"] = True
+            selecionadas.append(rapida)
+            for o in sorted(lista, key=_preco):
+                if len(selecionadas) >= 4:
+                    break
+                if o is not rapida:
+                    selecionadas.append(o)
+        return {"ok": True, "opcoes": selecionadas}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "erro": f"Falha ao consultar frete: {e}"}, 502

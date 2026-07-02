@@ -10,5 +10,8 @@ instance/
 app/static/uploads/*
 !app/static/uploads/.gitkeep
 
+# Segredos / configuração local
+.env
+
 # Sistema
 .DS_Store

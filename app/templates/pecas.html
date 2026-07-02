@@ -4,6 +4,11 @@
   <h1 class="h3 mb-0">Peças</h1>
   <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary">+ Nova peça</a>
 </div>
+<form method="get" class="input-group mb-3" style="max-width:420px">
+  <input type="text" name="q" class="form-control" placeholder="Buscar por nome ou coleção" value="{{ q }}">
+  <button class="btn btn-outline-secondary">Buscar</button>
+  {% if q %}<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-outline-secondary">×</a>{% endif %}
+</form>
 
 {% if pecas %}
 <div class="table-responsive">
@@ -24,6 +29,7 @@
       <td>
         <strong>{{ peca.nome }}</strong>
         {% if peca.colecao %}<div class="small text-muted">{{ peca.colecao }}</div>{% endif %}
+        {% if peca.tags_lista %}<div>{% for t in peca.tags_lista %}<span class="badge badge-materia me-1">#{{ t }}</span>{% endfor %}</div>{% endif %}
       </td>
       <td>
         <span class="fw-bold">{{ peca.estoque_total | num }}</span>

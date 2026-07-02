@@ -66,6 +66,7 @@ class Peca(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
     colecao = db.Column(db.String(120), default="")  # coleção a que a peça pertence
+    tags = db.Column(db.String(255), default="")     # etiquetas livres, separadas por vírgula
     descricao = db.Column(db.Text, default="")
     foto = db.Column(db.String(255))  # nome do arquivo salvo em static/uploads
 
@@ -80,10 +81,20 @@ class Peca(db.Model):
     # é usado como preço de venda padrão (em vez do preço calculado pela margem).
     preco_etiqueta = db.Column(db.Float, nullable=False, default=0.0)
 
+    # Dados de envio (para cálculo de frete): peso em gramas e dimensões em cm.
+    peso_g = db.Column(db.Float, nullable=False, default=0.0)
+    altura_cm = db.Column(db.Float, nullable=False, default=0.0)
+    largura_cm = db.Column(db.Float, nullable=False, default=0.0)
+    comprimento_cm = db.Column(db.Float, nullable=False, default=0.0)
+
     criado_em = db.Column(db.DateTime, default=_agora)
 
     insumos = db.relationship(
         "PecaInsumo", back_populates="peca", cascade="all, delete-orphan"
+    )
+    fotos = db.relationship(
+        "FotoPeca", back_populates="peca", cascade="all, delete-orphan",
+        order_by="FotoPeca.id",
     )
     estoques = db.relationship(
         "EstoquePeca", back_populates="peca", cascade="all, delete-orphan"
@@ -132,6 +143,10 @@ class Peca(db.Model):
     def preco_etiqueta_efetivo(self) -> float:
         """Preço comercial usado como padrão na venda (etiqueta, ou o calculado)."""
         return self.preco_etiqueta if self.preco_etiqueta and self.preco_etiqueta > 0 else self.preco_venda
+
+    @property
+    def tags_lista(self) -> list:
+        return [t.strip() for t in (self.tags or "").split(",") if t.strip()]
 
 
 class PecaInsumo(db.Model):
@@ -272,6 +287,7 @@ class Venda(db.Model):
     comprador = db.Column(db.String(160), default="")        # legado / texto livre
     forma_pagamento = db.Column(db.String(40), default="")   # Pix, Dinheiro, Cartão...
     pago = db.Column(db.Boolean, nullable=False, default=False)
+    vencimento = db.Column(db.Date)  # data de vencimento (venda a prazo/pendente)
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
@@ -283,6 +299,12 @@ class Venda(db.Model):
     @property
     def cliente_nome(self) -> str:
         return self.cliente.nome if self.cliente else (self.comprador or "")
+
+    @property
+    def vencida(self) -> bool:
+        """Pendente e com vencimento no passado."""
+        from datetime import date
+        return (not self.pago) and self.vencimento is not None and self.vencimento < date.today()
 
     @property
     def quantidade_total(self) -> float:
@@ -381,7 +403,44 @@ class MovimentoEstoque(db.Model):
     insumo_id = db.Column(db.Integer, db.ForeignKey("insumos.id"), nullable=False)
     tipo = db.Column(db.String(10), nullable=False)  # "entrada" ou "saida"
     quantidade = db.Column(db.Float, nullable=False, default=0.0)
+    # Custo unitário no momento do movimento (para custo médio e contabilidade).
+    custo_unitario = db.Column(db.Float, nullable=False, default=0.0)
     observacao = db.Column(db.String(255), default="")
     criado_em = db.Column(db.DateTime, default=_agora)
 
     insumo = db.relationship("Insumo", back_populates="movimentos")
+
+    @property
+    def valor(self) -> float:
+        return self.quantidade * self.custo_unitario
+
+
+class Despesa(db.Model):
+    """Conta a pagar / despesa da empresa (aluguel, energia, etc.)."""
+
+    __tablename__ = "despesas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    descricao = db.Column(db.String(160), nullable=False)
+    categoria = db.Column(db.String(60), default="")  # Aluguel, Energia, Pró-labore...
+    valor = db.Column(db.Float, nullable=False, default=0.0)
+    vencimento = db.Column(db.Date)
+    pago = db.Column(db.Boolean, nullable=False, default=False)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    @property
+    def vencida(self) -> bool:
+        from datetime import date
+        return (not self.pago) and self.vencimento is not None and self.vencimento < date.today()
+
+
+class FotoPeca(db.Model):
+    """Foto adicional de uma peça (galeria)."""
+
+    __tablename__ = "fotos_peca"
+
+    id = db.Column(db.Integer, primary_key=True)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    arquivo = db.Column(db.String(255), nullable=False)
+
+    peca = db.relationship("Peca", back_populates="fotos")

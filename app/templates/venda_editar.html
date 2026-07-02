@@ -52,6 +52,10 @@
         {% endfor %}
       </select>
     </div>
+    <div class="col-md-2">
+      <label class="form-label">Vencimento</label>
+      <input type="date" name="vencimento" class="form-control" value="{{ venda.vencimento.isoformat() if venda.vencimento else '' }}">
+    </div>
     <div class="col-md-2 d-flex align-items-center">
       <div class="form-check mt-4">
         <input class="form-check-input" type="checkbox" name="pago" id="chk-pago" {{ 'checked' if venda.pago }}>

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Relatório</h1>
+
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Faturamento mensal</h2>
+    {% if serie %}
+      <canvas id="grafico" height="90"></canvas>
+    {% else %}
+      <p class="text-muted">Sem vendas registradas ainda.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card bg-white h-100"><div class="card-body">
+      <h2 class="h5">Peças mais vendidas</h2>
+      {% if mais_vendidas %}
+      <table class="table table-sm align-middle">
+        <thead class="table-light"><tr><th>Peça</th><th class="text-end">Qtd</th><th class="text-end">Receita</th></tr></thead>
+        <tbody>
+        {% for nome, r in mais_vendidas %}
+          <tr><td>{{ nome }}</td><td class="text-end">{{ r.qtd | num }}</td><td class="text-end">{{ r.receita | moeda }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="text-muted">—</p>{% endif %}
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card bg-white h-100"><div class="card-body">
+      <h2 class="h5">Receita por coleção</h2>
+      {% if colecoes %}
+      <table class="table table-sm align-middle">
+        <thead class="table-light"><tr><th>Coleção</th><th class="text-end">Receita</th></tr></thead>
+        <tbody>
+        {% for col, valor in colecoes %}
+          <tr><td>{{ col }}</td><td class="text-end fw-bold">{{ valor | moeda }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="text-muted">—</p>{% endif %}
+    </div></div>
+  </div>
+</div>
+
+{% if serie %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  const serie = {{ serie | tojson }};
+  new Chart(document.getElementById('grafico'), {
+    type: 'bar',
+    data: {
+      labels: serie.map(s => s.label),
+      datasets: [
+        { label: 'Receita', data: serie.map(s => s.receita), backgroundColor: '#b08a4f' },
+        { label: 'Custo', data: serie.map(s => s.custo), backgroundColor: '#a5624f' },
+        { label: 'Lucro', data: serie.map(s => s.lucro), backgroundColor: '#6d7a5c' },
+      ],
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+  });
+</script>
+{% endif %}
+{% endblock %}

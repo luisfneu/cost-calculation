@@ -20,7 +20,7 @@
           </select>
         </div>
         <div class="col-md-3">
-          <a href="{{ url_for('main.form_cliente') }}" class="btn btn-outline-secondary" target="_blank">+ Novo cliente</a>
+          <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-cliente">+ Novo cliente</button>
         </div>
       </div>
       <div id="cliente-dados" class="mb-3 small" style="display:none"></div>
@@ -56,6 +56,11 @@
           <label class="form-label">Desconto total (R$)</label>
           <input type="text" name="desconto_total" id="in-desconto" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('desconto_total','') }}">
         </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">&nbsp;</label>
+          <button type="button" class="btn btn-outline-secondary" id="btn-frete">Calcular frete</button>
+          <div class="mt-2" id="frete-resultado"></div>
+        </div>
       </div>
 
       <!-- Pagamento -->
@@ -69,6 +74,10 @@
               <option {{ 'selected' if f == prefill_pedido.get('forma_pagamento') }}>{{ f }}</option>
             {% endfor %}
           </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Vencimento <span class="text-muted small">(se a prazo)</span></label>
+          <input type="date" name="vencimento" class="form-control" value="{{ prefill_pedido.get('vencimento') or '' }}">
         </div>
         <div class="col-md-3 d-flex align-items-center">
           <div class="form-check mt-4">
@@ -101,7 +110,7 @@
       [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho|tojson }}}{{ "," if not loop.last }}{% endfor %}]
     </script>
     <script id="dados-clientes" type="application/json">
-      [{% for c in clientes %}{"id": {{ c.id }}, "nome": {{ c.nome|tojson }}, "instagram": {{ c.instagram_handle|tojson }}, "whatsapp": {{ c.whatsapp_numero|tojson }}, "telefone": {{ c.telefone|tojson }}, "endereco": {{ c.endereco_completo|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+      [{% for c in clientes %}{"id": {{ c.id }}, "nome": {{ c.nome|tojson }}, "instagram": {{ c.instagram_handle|tojson }}, "whatsapp": {{ c.whatsapp_numero|tojson }}, "telefone": {{ c.telefone|tojson }}, "endereco": {{ c.endereco_completo|tojson }}, "cep": {{ c.cep|tojson }}}{{ "," if not loop.last }}{% endfor %}]
     </script>
     <script id="prefill-itens" type="application/json">{{ prefill_itens|tojson }}</script>
     {% else %}
@@ -113,7 +122,21 @@
 <!-- Histórico de vendas -->
 <div class="card bg-white">
   <div class="card-body">
-    <h2 class="h5">Histórico de vendas</h2>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h2 class="h5 mb-0">Histórico de vendas</h2>
+      <div class="d-flex gap-2">
+        <form method="get" class="d-flex gap-2">
+          <input type="text" name="q" class="form-control form-control-sm" placeholder="cliente" value="{{ q }}" style="width:140px">
+          <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+            <option value="">Todas</option>
+            <option value="pago" {{ 'selected' if status == 'pago' }}>Pagas</option>
+            <option value="pendente" {{ 'selected' if status == 'pendente' }}>Pendentes</option>
+          </select>
+          <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+        </form>
+        <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ CSV</a>
+      </div>
+    </div>
     {% if vendas %}
     <div class="table-responsive">
     <table class="table align-middle">
@@ -158,6 +181,113 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Modal: cadastro rápido de cliente -->
+<div class="modal fade" id="modal-cliente" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Novo cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label">Nome *</label><input type="text" id="mc-nome" class="form-control"></div>
+        <div class="row">
+          <div class="col-6 mb-2"><label class="form-label">Instagram</label><input type="text" id="mc-instagram" class="form-control" placeholder="@usuario"></div>
+          <div class="col-6 mb-2"><label class="form-label">Telefone / WhatsApp</label><input type="text" id="mc-telefone" class="form-control"></div>
+        </div>
+        <div class="section-titulo">Endereço <span class="text-muted small" style="letter-spacing:normal;text-transform:none">(opcional)</span></div>
+        <div class="row">
+          <div class="col-4 mb-2"><label class="form-label">CEP <span class="small" id="mc-cep-status"></span></label><input type="text" id="mc-cep" class="form-control" maxlength="9" placeholder="00000-000"></div>
+          <div class="col-6 mb-2"><label class="form-label">Logradouro</label><input type="text" id="mc-logradouro" class="form-control"></div>
+          <div class="col-2 mb-2"><label class="form-label">Nº</label><input type="text" id="mc-numero" class="form-control"></div>
+          <div class="col-5 mb-2"><label class="form-label">Complemento</label><input type="text" id="mc-complemento" class="form-control"></div>
+          <div class="col-4 mb-2"><label class="form-label">Bairro</label><input type="text" id="mc-bairro" class="form-control"></div>
+          <div class="col-2 mb-2"><label class="form-label">Cidade</label><input type="text" id="mc-cidade" class="form-control"></div>
+          <div class="col-1 mb-2"><label class="form-label">UF</label><input type="text" id="mc-uf" class="form-control" maxlength="2"></div>
+        </div>
+        <div class="small text-danger" id="mc-erro"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="mc-salvar">Salvar e selecionar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Cadastro rápido de cliente (modal) — sem sair da tela de venda.
+(function () {
+  const btn = document.getElementById('mc-salvar');
+  if (!btn) return;
+  const campos = ['nome','instagram','telefone','cep','logradouro','numero','complemento','bairro','cidade','uf'];
+  const el = id => document.getElementById('mc-' + id);
+
+  // Autofill por CEP (ViaCEP) dentro do modal.
+  const cep = el('cep'), status = document.getElementById('mc-cep-status');
+  cep.addEventListener('input', async function () {
+    let dg = cep.value.replace(/\D/g, '').slice(0, 8);
+    cep.value = dg.length > 5 ? dg.slice(0,5) + '-' + dg.slice(5) : dg;
+    if (dg.length !== 8) { status.textContent = ''; return; }
+    status.textContent = '…';
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${dg}/json/`);
+      const d = await r.json();
+      if (d.erro) { status.textContent = '✗'; status.className = 'small text-danger'; return; }
+      if (d.logradouro) el('logradouro').value = d.logradouro;
+      if (d.bairro) el('bairro').value = d.bairro;
+      if (d.localidade) el('cidade').value = d.localidade;
+      if (d.uf) el('uf').value = d.uf;
+      status.textContent = '✓'; status.className = 'small text-success';
+      el('numero').focus();
+    } catch (e) { status.textContent = ''; }
+  });
+
+  btn.addEventListener('click', async function () {
+    const erro = document.getElementById('mc-erro');
+    if (!el('nome').value.trim()) { erro.textContent = 'Informe o nome.'; return; }
+    const fd = new FormData();
+    campos.forEach(c => fd.append(c, el(c).value));
+    const resp = await fetch("{{ url_for('main.cliente_rapido') }}", { method: 'POST', body: fd });
+    const d = await resp.json();
+    if (!d.ok) { erro.textContent = d.erro || 'Erro ao salvar.'; return; }
+    const sel = document.getElementById('sel-cliente');
+    sel.add(new Option(d.nome, d.id, true, true));
+    if (window.__CEP_CLIENTE) window.__CEP_CLIENTE[d.id] = d.cep || '';
+    sel.dispatchEvent(new Event('change'));
+    bootstrap.Modal.getInstance(document.getElementById('modal-cliente')).hide();
+    campos.forEach(c => { el(c).value = ''; }); erro.textContent = ''; status.textContent = '';
+  });
+})();
+
+// Cálculo de frete (Correios via Melhor Envio) — usa o CEP do cliente selecionado.
+(function () {
+  const btn = document.getElementById('btn-frete');
+  if (!btn) return;
+  const CLIENTES_CEP = {}; // preenchido abaixo se houver dados
+  btn.addEventListener('click', async function () {
+    const box = document.getElementById('frete-resultado');
+    const sel = document.getElementById('sel-cliente');
+    box.innerHTML = 'calculando…';
+    const fd = new FormData();
+    fd.append('cep', (window.__CEP_CLIENTE && window.__CEP_CLIENTE[sel.value]) || '');
+    const resp = await fetch("{{ url_for('main.calcular_frete') }}", { method: 'POST', body: fd });
+    const d = await resp.json();
+    if (!d.ok) { box.innerHTML = '<span class="text-danger small">' + (d.erro || 'erro') + '</span>'; return; }
+    if (!d.opcoes.length) { box.innerHTML = '<span class="text-muted small">Nenhuma opção. Verifique o CEP do cliente.</span>'; return; }
+    const brlF = v => Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    box.innerHTML = d.opcoes.map(o => `
+      <button type="button" class="frete-op" data-p="${o.preco}">
+        <span class="frete-nome">${o.nome}${o.rapido ? ' <span class="frete-badge">mais rápido</span>' : ''}</span>
+        <span class="frete-preco">R$ ${brlF(o.preco)} <small>· ${o.prazo} dias</small></span>
+      </button>`).join('');
+    box.querySelectorAll('.frete-op').forEach(a => a.addEventListener('click', () => {
+      document.getElementById('in-frete').value = String(a.dataset.p).replace('.', ',');
+      document.getElementById('in-frete').dispatchEvent(new Event('input'));
+      box.querySelectorAll('.frete-op').forEach(x => x.classList.remove('escolhido'));
+      a.classList.add('escolhido');
+    }));
+  });
+})();
+</script>
 
 {% if pecas %}
 <script>
@@ -265,6 +395,8 @@
 
   // Painel com os dados do cliente selecionado.
   const CLIENTES = JSON.parse(document.getElementById('dados-clientes').textContent);
+  window.__CEP_CLIENTE = {};
+  CLIENTES.forEach(c => { window.__CEP_CLIENTE[c.id] = c.cep || ''; });
   const selCliente = document.getElementById('sel-cliente');
   function mostrarCliente() {
     const box = document.getElementById('cliente-dados');
