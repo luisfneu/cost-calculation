@@ -35,6 +35,17 @@
           <tr class="fw-bold text-success"><td>Preço de venda</td><td class="text-end">{{ peca.preco_venda | moeda }}</td></tr>
           <tr class="text-success"><td>Lucro por peça</td><td class="text-end">{{ peca.lucro | moeda }}</td></tr>
         </table>
+        <hr>
+        <form method="post" action="{{ url_for('main.atualizar_preco_etiqueta', peca_id=peca.id) }}">
+          <label class="form-label">Preço etiqueta (comercial)</label>
+          <div class="input-group">
+            <span class="input-group-text">R$</span>
+            <input type="text" name="preco_etiqueta" class="form-control"
+                   value="{{ '%.2f'|format(peca.preco_etiqueta) if peca.preco_etiqueta else '' }}" placeholder="ajuste manual">
+            <button class="btn btn-outline-primary">Salvar</button>
+          </div>
+          <small class="text-muted">Usado como preço padrão na venda.</small>
+        </form>
       </div>
     </div>
 
@@ -86,7 +97,7 @@
           {% for item in peca.insumos %}
             <tr>
               <td>{{ item.insumo.nome }}
-                <span class="badge {{ 'text-bg-info' if item.insumo.tipo == 'embalagem' else 'text-bg-light' }}">{{ item.insumo.tipo_label }}</span>
+                <span class="badge {{ 'badge-embalagem' if item.insumo.tipo == 'embalagem' else 'badge-materia' }}">{{ item.insumo.tipo_label }}</span>
                 {% if item.quantidade > item.insumo.estoque %}
                   <span class="badge text-bg-warning">estoque: {{ item.insumo.estoque | num }}</span>
                 {% endif %}
@@ -113,14 +124,26 @@
         <hr>
         <h3 class="h6">Adicionar insumo</h3>
         {% if insumos_disponiveis %}
-        <form method="post" action="{{ url_for('main.adicionar_insumo_peca', peca_id=peca.id) }}" class="row g-2">
+        <form method="post" action="{{ url_for('main.adicionar_insumo_peca', peca_id=peca.id) }}" class="row g-2" id="form-add-insumo">
           <div class="col-sm-6">
-            <select name="insumo_id" class="form-select" required>
-              <option value="">Selecione um insumo...</option>
-              {% for insumo in insumos_disponiveis %}
-                <option value="{{ insumo.id }}">{{ insumo.nome }} ({{ insumo.tipo_label }}) — {{ insumo.custo_unitario | moeda }}/{{ insumo.unidade }}</option>
-              {% endfor %}
-            </select>
+            <div class="peca-picker" id="insumo-picker">
+              <input type="hidden" name="insumo_id" class="picker-value" required>
+              <button type="button" class="form-select text-start picker-toggle">Selecione um insumo...</button>
+              <div class="picker-menu">
+                {% for insumo in insumos_disponiveis %}
+                <button type="button" class="picker-option" data-id="{{ insumo.id }}"
+                        data-nome="{{ insumo.nome|e }}" data-foto="{{ insumo.foto or '' }}">
+                  {% if insumo.foto %}
+                    <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb me-2" alt="">
+                  {% else %}
+                    <span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>
+                  {% endif %}
+                  <span>{{ insumo.nome }} <span class="small text-muted">({{ insumo.tipo_label }})</span></span>
+                  <span class="small text-muted ms-auto">{{ insumo.custo_unitario | moeda }}/{{ insumo.unidade }}</span>
+                </button>
+                {% endfor %}
+              </div>
+            </div>
           </div>
           <div class="col-sm-3">
             <input type="text" name="quantidade" class="form-control" placeholder="quantidade" required>
@@ -129,6 +152,31 @@
             <button class="btn btn-outline-primary w-100">Adicionar</button>
           </div>
         </form>
+        <script>
+        (function () {
+          const UPLOADS = "{{ url_for('static', filename='uploads/') }}";
+          const picker = document.getElementById('insumo-picker');
+          if (!picker) return;
+          const valor = picker.querySelector('.picker-value');
+          const toggle = picker.querySelector('.picker-toggle');
+          const menu = picker.querySelector('.picker-menu');
+          toggle.addEventListener('click', () => menu.classList.toggle('aberto'));
+          menu.addEventListener('click', function (e) {
+            const opt = e.target.closest('.picker-option');
+            if (!opt) return;
+            valor.value = opt.dataset.id;
+            const img = opt.dataset.foto
+              ? `<img src="${UPLOADS}${opt.dataset.foto}" class="foto-thumb me-2" alt="">`
+              : `<span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>`;
+            toggle.innerHTML = `${img} ${opt.dataset.nome}`;
+            menu.classList.remove('aberto');
+          });
+          document.addEventListener('click', e => { if (!e.target.closest('#insumo-picker')) menu.classList.remove('aberto'); });
+          document.getElementById('form-add-insumo').addEventListener('submit', e => {
+            if (!valor.value) { e.preventDefault(); alert('Selecione um insumo.'); }
+          });
+        })();
+        </script>
         {% else %}
         <p class="text-muted">Nenhum insumo cadastrado. <a href="{{ url_for('main.form_insumo') }}">Cadastre insumos primeiro</a>.</p>
         {% endif %}

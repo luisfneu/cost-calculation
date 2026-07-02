@@ -22,6 +22,7 @@ from .models import (
     Peca,
     PecaInsumo,
     Venda,
+    VendaItem,
     db,
 )
 
@@ -64,6 +65,15 @@ def _remover_foto(nome):
     caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
     if os.path.exists(caminho):
         os.remove(caminho)
+
+
+def _linha_estoque_peca(peca, tamanho, criar=False):
+    """Retorna a linha de estoque da peça no tamanho (cria se pedido)."""
+    linha = next((e for e in peca.estoques if e.tamanho == tamanho), None)
+    if linha is None and criar:
+        linha = EstoquePeca(peca=peca, tamanho=tamanho, quantidade=0.0)
+        db.session.add(linha)
+    return linha
 
 
 def _registrar_movimento(insumo, tipo, quantidade, observacao=""):
@@ -218,6 +228,7 @@ def form_peca(peca_id=None):
         peca.custo_mao_de_obra = _to_float(request.form.get("custo_mao_de_obra"))
         peca.custos_extras = _to_float(request.form.get("custos_extras"))
         peca.margem_percentual = _to_float(request.form.get("margem_percentual"))
+        peca.preco_etiqueta = _to_float(request.form.get("preco_etiqueta"))
 
         # Foto (opcional).
         nova_foto = _salvar_foto(request.files.get("foto"))
@@ -348,6 +359,16 @@ def produzir_peca(peca_id):
     return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
 
+@bp.route("/pecas/<int:peca_id>/preco-etiqueta", methods=["POST"])
+def atualizar_preco_etiqueta(peca_id):
+    """Atualiza rapidamente o preço de etiqueta (preço comercial) da peça."""
+    peca = Peca.query.get_or_404(peca_id)
+    peca.preco_etiqueta = _to_float(request.form.get("preco_etiqueta"))
+    db.session.commit()
+    flash(f"Preço etiqueta atualizado para {peca.preco_etiqueta:.2f}.", "sucesso")
+    return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+
 @bp.route("/pecas/<int:peca_id>/estoque/ajustar", methods=["POST"])
 def ajustar_estoque_peca(peca_id):
     """Define manualmente a quantidade em estoque de um tamanho da peça."""
@@ -388,58 +409,212 @@ def historico():
 # --------------------------------------------------------------------------- #
 # Vendas
 # --------------------------------------------------------------------------- #
-@bp.route("/vendas")
-def listar_vendas():
+def _pecas_com_estoque():
+    """Peças que têm ao menos 1 unidade em algum tamanho (para vender)."""
+    return [p for p in Peca.query.order_by(Peca.nome).all() if p.estoque_total >= 1]
+
+
+def _dados_pedido_do_form():
+    return {
+        "frete": _to_float(request.form.get("frete")),
+        "frete_cortesia": request.form.get("frete_cortesia") == "on",
+        "marketplace_pct": _to_float(request.form.get("marketplace_pct")),
+        "desconto_total": _to_float(request.form.get("desconto_total")),
+        "comprador": request.form.get("comprador", "").strip(),
+        "forma_pagamento": request.form.get("forma_pagamento", "").strip(),
+        "pago": request.form.get("pago") == "on",
+    }
+
+
+def _itens_do_form():
+    """Lê as linhas de item do formulário. Retorna (linhas, erro)."""
+    ids = request.form.getlist("peca_id")
+    tamanhos = request.form.getlist("tamanho")
+    qtds = request.form.getlist("quantidade")
+    precos = request.form.getlist("preco_unitario")
+    descontos = request.form.getlist("desconto")
+    linhas = []
+    for i, pid in enumerate(ids):
+        if not pid:
+            continue
+        peca = Peca.query.get(int(pid))
+        tam = (tamanhos[i] if i < len(tamanhos) else "").strip().upper()
+        qtd = _to_float(qtds[i] if i < len(qtds) else 0)
+        preco = _to_float(precos[i] if i < len(precos) else 0)
+        desconto = _to_float(descontos[i] if i < len(descontos) else 0)
+        if not peca or tam not in TAMANHOS or qtd <= 0:
+            continue
+        linhas.append({"peca": peca, "tamanho": tam, "quantidade": qtd, "preco": preco, "desconto": desconto})
+    if not linhas:
+        return [], "Adicione ao menos um item com peça, tamanho e quantidade válidos."
+    return linhas, None
+
+
+def _agrupar(linhas):
+    """Soma as quantidades por (peca_id, tamanho)."""
+    agrup = {}
+    for l in linhas:
+        agrup[(l["peca"].id, l["tamanho"])] = agrup.get((l["peca"].id, l["tamanho"]), 0.0) + l["quantidade"]
+    return agrup
+
+
+def _itens_crus_do_form():
+    """Reconstrói os itens digitados (mesmo inválidos) para repovoar o formulário."""
+    ids = request.form.getlist("peca_id")
+    tamanhos = request.form.getlist("tamanho")
+    qtds = request.form.getlist("quantidade")
+    precos = request.form.getlist("preco_unitario")
+    descontos = request.form.getlist("desconto")
+    itens = []
+    for i, pid in enumerate(ids):
+        peca = Peca.query.get(int(pid)) if pid else None
+        itens.append({
+            "peca_id": pid or "",
+            "nome": peca.nome if peca else "",
+            "foto": peca.foto if peca else None,
+            "tamanho": tamanhos[i] if i < len(tamanhos) else "",
+            "quantidade": qtds[i] if i < len(qtds) else "",
+            "preco": precos[i] if i < len(precos) else "",
+            "desconto": descontos[i] if i < len(descontos) else "",
+            "estoque": peca.estoque_por_tamanho if peca else {},
+        })
+    return itens
+
+
+def _render_vendas(prefill_itens=None, prefill_pedido=None):
     vendas = Venda.query.order_by(Venda.criado_em.desc()).all()
-    pecas = Peca.query.order_by(Peca.nome).all()
     totais = {
         "receita": sum(v.receita for v in vendas),
         "custo": sum(v.custo_total for v in vendas),
         "lucro": sum(v.lucro for v in vendas),
-        "qtd": sum(v.quantidade for v in vendas),
+        "qtd": sum(v.quantidade_total for v in vendas),
     }
-    return render_template("vendas.html", vendas=vendas, pecas=pecas, totais=totais)
+    return render_template(
+        "vendas.html", vendas=vendas, pecas=_pecas_com_estoque(), totais=totais,
+        prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
+    )
+
+
+@bp.route("/vendas")
+def listar_vendas():
+    return _render_vendas()
 
 
 @bp.route("/vendas/nova", methods=["POST"])
 def registrar_venda():
-    peca_id = request.form.get("peca_id", type=int)
-    peca = Peca.query.get(peca_id) if peca_id else None
-    tamanho = request.form.get("tamanho", "").strip().upper()
-    quantidade = _to_float(request.form.get("quantidade"), padrao=1) or 1
-    preco_unitario = _to_float(request.form.get("preco_unitario"))
-    frete = _to_float(request.form.get("frete"))
-    marketplace_pct = _to_float(request.form.get("marketplace_pct"))
+    # Em caso de erro, repovoa o formulário com o que foi digitado.
+    def _erro(msg):
+        flash(msg, "erro")
+        return _render_vendas(_itens_crus_do_form(), request.form)
 
-    if not peca or tamanho not in TAMANHOS or quantidade <= 0:
-        flash("Selecione a peça, um tamanho válido e a quantidade.", "erro")
-        return redirect(url_for("main.listar_vendas"))
+    linhas, erro = _itens_do_form()
+    if erro:
+        return _erro(erro)
 
-    linha = next((e for e in peca.estoques if e.tamanho == tamanho), None)
-    disponivel = linha.quantidade if linha else 0.0
-    if quantidade > disponivel:
-        flash(
-            f"Estoque insuficiente de '{peca.nome}' tam {tamanho} "
-            f"(disponível: {disponivel:g}).", "erro",
-        )
-        return redirect(url_for("main.listar_vendas"))
+    # Valida estoque somando por peça/tamanho (caso o mesmo item apareça 2x).
+    for (pid, tam), need in _agrupar(linhas).items():
+        peca = Peca.query.get(pid)
+        linha = _linha_estoque_peca(peca, tam)
+        disp = linha.quantidade if linha else 0.0
+        if need > disp:
+            return _erro(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).")
 
-    # Baixa o estoque da peça e registra no histórico.
-    linha.quantidade -= quantidade
-    db.session.add(
-        MovimentoPeca(
-            peca=peca, tamanho=tamanho, tipo="saida", quantidade=quantidade,
-            observacao=f"Venda de {quantidade:g} un.",
-        )
-    )
-    # Registra a venda (com snapshot do custo atual da peça).
-    db.session.add(
-        Venda(
-            peca=peca, tamanho=tamanho, quantidade=quantidade,
-            preco_unitario=preco_unitario, frete=frete,
-            marketplace_pct=marketplace_pct, custo_unitario=peca.custo_total,
-        )
-    )
+    venda = Venda(**_dados_pedido_do_form())
+    db.session.add(venda)
+    for l in linhas:
+        db.session.add(VendaItem(
+            venda=venda, peca=l["peca"], tamanho=l["tamanho"],
+            quantidade=l["quantidade"], preco_unitario=l["preco"],
+            desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
+        ))
+        linha = _linha_estoque_peca(l["peca"], l["tamanho"], criar=True)
+        linha.quantidade -= l["quantidade"]
+        db.session.add(MovimentoPeca(
+            peca=l["peca"], tamanho=l["tamanho"], tipo="saida", quantidade=l["quantidade"],
+            observacao=f"Venda de {l['quantidade']:g} un.",
+        ))
     db.session.commit()
-    flash(f"Venda registrada: {quantidade:g}x '{peca.nome}' tam {tamanho}.", "sucesso")
+    flash(f"Venda registrada com {len(linhas)} item(ns).", "sucesso")
+    return redirect(url_for("main.listar_vendas"))
+
+
+@bp.route("/vendas/<int:venda_id>")
+def visualizar_venda(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    return render_template("venda_detalhe.html", venda=venda)
+
+
+@bp.route("/vendas/<int:venda_id>/editar", methods=["GET", "POST"])
+def editar_venda(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+
+    if request.method == "POST":
+        linhas, erro = _itens_do_form()
+        if erro:
+            flash(erro, "erro")
+            return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque())
+
+        # Estoque que volta ao devolver os itens atuais da venda.
+        retornos = {}
+        for it in venda.itens:
+            retornos[(it.peca_id, it.tamanho)] = retornos.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
+        necessarios = _agrupar(linhas)
+
+        # Valida: precisa <= estoque_atual + o que volta da própria venda.
+        for (pid, tam), need in necessarios.items():
+            peca = Peca.query.get(pid)
+            linha = _linha_estoque_peca(peca, tam)
+            disp = (linha.quantidade if linha else 0.0) + retornos.get((pid, tam), 0.0)
+            if need > disp:
+                flash(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).", "erro")
+                return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque())
+
+        # Aplica só a diferença líquida por peça/tamanho.
+        for chave in set(retornos) | set(necessarios):
+            pid, tam = chave
+            net = necessarios.get(chave, 0.0) - retornos.get(chave, 0.0)  # >0 sai mais; <0 volta
+            if net == 0:
+                continue
+            peca = Peca.query.get(pid)
+            linha = _linha_estoque_peca(peca, tam, criar=True)
+            linha.quantidade -= net
+            db.session.add(MovimentoPeca(
+                peca=peca, tamanho=tam, tipo="saida" if net > 0 else "estorno",
+                quantidade=abs(net), observacao=f"Edição de venda #{venda.id}",
+            ))
+
+        # Refaz os itens e atualiza os dados do pedido.
+        for it in list(venda.itens):
+            db.session.delete(it)
+        venda.itens = []
+        for l in linhas:
+            db.session.add(VendaItem(
+                venda=venda, peca=l["peca"], tamanho=l["tamanho"],
+                quantidade=l["quantidade"], preco_unitario=l["preco"],
+                desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
+            ))
+        for campo, valor in _dados_pedido_do_form().items():
+            setattr(venda, campo, valor)
+
+        db.session.commit()
+        flash("Venda atualizada e estoque ajustado.", "sucesso")
+        return redirect(url_for("main.listar_vendas"))
+
+    return render_template("venda_editar.html", venda=venda, pecas=_pecas_com_estoque())
+
+
+@bp.route("/vendas/<int:venda_id>/excluir", methods=["POST"])
+def excluir_venda(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    # Devolve ao estoque a quantidade de cada item.
+    for it in venda.itens:
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade += it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=it.quantidade,
+            observacao=f"Estorno por exclusão de venda #{venda.id}",
+        ))
+    db.session.delete(venda)
+    db.session.commit()
+    flash("Venda excluída e estoque devolvido às peças.", "sucesso")
     return redirect(url_for("main.listar_vendas"))

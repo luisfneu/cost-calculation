@@ -7,49 +7,72 @@
   <div class="card-body">
     <h2 class="h5 mb-3">Registrar venda</h2>
     {% if pecas %}
-    <form method="post" action="{{ url_for('main.registrar_venda') }}" class="row g-3 align-items-end" id="form-venda">
-      <div class="col-md-4">
-        <label class="form-label">Peça</label>
-        <select name="peca_id" id="sel-peca" class="form-select" required>
-          <option value="">Selecione...</option>
-          {% for p in pecas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Tamanho</label>
-        <select name="tamanho" id="sel-tamanho" class="form-select" required>
-          <option value="">—</option>
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Quantidade</label>
-        <input type="text" name="quantidade" id="in-qtd" class="form-control" value="1">
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Preço unit. (R$)</label>
-        <input type="text" name="preco_unitario" id="in-preco" class="form-control" placeholder="0,00">
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Frete (R$) <span class="text-muted">opc.</span></label>
-        <input type="text" name="frete" id="in-frete" class="form-control" placeholder="0,00">
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">% Marketplace <span class="text-muted">opc.</span></label>
-        <input type="text" name="marketplace_pct" id="in-mkt" class="form-control" placeholder="Ex.: 12">
-      </div>
-      <div class="col-md-6">
-        <div class="small text-muted" id="resumo-venda">Selecione a peça e o tamanho.</div>
-      </div>
-      <div class="col-md-4 text-end">
-        <button class="btn btn-primary">Registrar venda</button>
+    <form method="post" action="{{ url_for('main.registrar_venda') }}" id="form-venda">
+      <table class="table align-middle" id="tabela-itens">
+        <thead class="table-light">
+          <tr><th style="width:32%">Peça</th><th>Tamanho</th><th>Qtd</th><th>Preço un. (R$)</th><th>Desc. (R$)</th><th>Subtotal</th><th></th></tr>
+        </thead>
+        <tbody id="linhas-itens"></tbody>
+        <tfoot>
+          <tr class="fw-bold"><td colspan="5" class="text-end">Total produtos</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
+        </tfoot>
+      </table>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-item">+ Adicionar item</button>
+
+      <div class="row g-3 align-items-end border-top pt-3">
+        <div class="col-md-2">
+          <label class="form-label">Frete (R$) <span class="text-muted">opc.</span></label>
+          <input type="text" name="frete" id="in-frete" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('frete','') }}">
+        </div>
+        <div class="col-md-3 d-flex align-items-center">
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="frete_cortesia" id="chk-cortesia" {{ 'checked' if prefill_pedido.get('frete_cortesia') }}>
+            <label class="form-check-label" for="chk-cortesia">Frete cortesia <span class="text-muted small">(custo)</span></label>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">% Marketplace <span class="text-muted">opc.</span></label>
+          <input type="text" name="marketplace_pct" id="in-mkt" class="form-control" placeholder="Ex.: 12" value="{{ prefill_pedido.get('marketplace_pct','') }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Desconto total (R$) <span class="text-muted">opc.</span></label>
+          <input type="text" name="desconto_total" id="in-desconto" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('desconto_total','') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Comprador <span class="text-muted">opc.</span></label>
+          <input type="text" name="comprador" class="form-control" placeholder="nome / contato" value="{{ prefill_pedido.get('comprador','') }}">
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Forma de pagamento</label>
+          <select name="forma_pagamento" class="form-select">
+            <option value="">—</option>
+            {% for f in ['Pix','Dinheiro','Cartão de crédito','Cartão de débito','Transferência','Boleto'] %}
+              <option {{ 'selected' if f == prefill_pedido.get('forma_pagamento') }}>{{ f }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-center">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" name="pago" id="chk-pago" {{ 'checked' if prefill_pedido.get('pago') }}>
+            <label class="form-check-label" for="chk-pago">Pago</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted" id="resumo-venda">Adicione itens à venda.</div>
+        </div>
+        <div class="col-md-3 text-end">
+          <button class="btn btn-primary">Registrar venda</button>
+        </div>
       </div>
     </form>
 
     <script id="dados-pecas" type="application/json">
-      [{% for p in pecas %}{"id": {{ p.id }}, "preco": {{ p.preco_venda }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho | tojson }}}{{ "," if not loop.last }}{% endfor %}]
+      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho|tojson }}}{{ "," if not loop.last }}{% endfor %}]
     </script>
+    <script id="prefill-itens" type="application/json">{{ prefill_itens|tojson }}</script>
     {% else %}
-    <p class="text-muted">Cadastre e produza peças antes de registrar vendas.</p>
+    <p class="text-muted">Nenhuma peça com estoque disponível. Produza peças antes de vender.</p>
     {% endif %}
   </div>
 </div>
@@ -74,22 +97,39 @@
     <div class="table-responsive">
     <table class="table align-middle">
       <thead class="table-light">
-        <tr><th>Data</th><th>Peça</th><th>Tam.</th><th>Qtd</th><th>Preço un.</th>
-            <th>Receita</th><th>Frete</th><th>Comissão</th><th>Custo total</th><th>Lucro</th></tr>
+        <tr><th>Data</th><th>Itens</th><th>Comprador</th><th>Pgto</th>
+            <th>Receita</th><th>Frete</th><th>Comissão</th><th>Custo total</th><th>Lucro</th><th></th></tr>
       </thead>
       <tbody>
       {% for v in vendas %}
         <tr>
           <td class="small text-muted">{{ v.criado_em | dt }}</td>
-          <td>{{ v.peca.nome }}</td>
-          <td><span class="badge text-bg-light">{{ v.tamanho }}</span></td>
-          <td>{{ v.quantidade | num }}</td>
-          <td>{{ v.preco_unitario | moeda }}</td>
+          <td>
+            {% for it in v.itens %}
+              <div>{{ it.quantidade | num }}× {{ it.peca.nome }}
+                <span class="badge text-bg-light">{{ it.tamanho }}</span>
+                <span class="small text-muted">{{ it.preco_unitario | moeda }}</span>
+              </div>
+            {% endfor %}
+          </td>
+          <td>{{ v.comprador or '—' }}</td>
+          <td>
+            {{ v.forma_pagamento or '—' }}
+            {% if v.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}
+          </td>
           <td class="fw-bold">{{ v.receita | moeda }}</td>
-          <td>{{ v.frete | moeda }}</td>
+          <td>{{ v.frete | moeda }}{% if v.frete_cortesia %} <span class="badge text-bg-light">cortesia</span>{% endif %}</td>
           <td>{{ v.comissao_marketplace | moeda }}{% if v.marketplace_pct %} <span class="small text-muted">({{ v.marketplace_pct | num }}%)</span>{% endif %}</td>
           <td>{{ v.custo_total | moeda }}</td>
           <td class="fw-bold {{ 'text-success' if v.lucro >= 0 else 'text-danger' }}">{{ v.lucro | moeda }}</td>
+          <td class="text-nowrap text-end">
+            <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
+            <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline"
+                  onsubmit="return confirm('Excluir esta venda? As quantidades voltarão ao estoque.')">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
         </tr>
       {% endfor %}
       </tbody>
@@ -104,43 +144,150 @@
 {% if pecas %}
 <script>
 (function () {
-  const pecas = JSON.parse(document.getElementById('dados-pecas').textContent);
-  const selPeca = document.getElementById('sel-peca');
-  const selTam = document.getElementById('sel-tamanho');
-  const inPreco = document.getElementById('in-preco');
-  const inQtd = document.getElementById('in-qtd');
-  const inFrete = document.getElementById('in-frete');
-  const inMkt = document.getElementById('in-mkt');
-  const resumo = document.getElementById('resumo-venda');
+  const PECAS = JSON.parse(document.getElementById('dados-pecas').textContent);
+  const PREFILL = JSON.parse(document.getElementById('prefill-itens').textContent);
+  const UPLOADS = "{{ url_for('static', filename='uploads/') }}";
+  const corpo = document.getElementById('linhas-itens');
   const brl = v => 'R$ ' + (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const num = t => t ? (parseFloat(String(t).replace('.', '').replace(',', '.')) || 0) : 0;
+  const fmt2 = v => (num(v)).toFixed(2).replace('.', ',');
+  const acha = id => PECAS.find(p => String(p.id) === String(id));
+  const thumb = p => p.foto
+    ? `<img src="${UPLOADS}${p.foto}" class="foto-thumb me-2" alt="">`
+    : `<span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>`;
 
-  function pecaAtual() { return pecas.find(p => String(p.id) === selPeca.value); }
-
-  function preencherTamanhos() {
-    const p = pecaAtual();
-    selTam.innerHTML = '<option value="">—</option>';
-    if (!p) return;
-    Object.entries(p.estoque).forEach(([tam, q]) => {
-      if (q > 0) selTam.innerHTML += `<option value="${tam}">${tam} (estoque: ${q})</option>`;
-    });
-    if (inPreco.value === '') inPreco.value = String(p.preco.toFixed(2)).replace('.', ',');
+  function opcoesMenu() {
+    return PECAS.map(p => `
+      <button type="button" class="picker-option" data-id="${p.id}">
+        ${thumb(p)} <span>${p.nome}</span>
+        <span class="small text-muted ms-auto">estoque ${Object.entries(p.estoque).filter(([t,q])=>q>0).map(([t,q])=>t+':'+q).join(' ')}</span>
+      </button>`).join('');
   }
 
-  function calcular() {
-    const p = pecaAtual();
-    if (!p || !selTam.value) { resumo.textContent = 'Selecione a peça e o tamanho.'; return; }
-    const qtd = num(inQtd.value), preco = num(inPreco.value), frete = num(inFrete.value), mkt = num(inMkt.value);
-    const receita = preco * qtd;
-    const comissao = receita * mkt / 100;
-    const custo = p.custo * qtd + frete + comissao;
+  function novaLinha(inicial) {
+    const tr = document.createElement('tr');
+    tr.className = 'item-row';
+    tr.innerHTML = `
+      <td>
+        <div class="peca-picker">
+          <input type="hidden" name="peca_id" class="picker-value">
+          <button type="button" class="form-select text-start picker-toggle">Selecione a peça...</button>
+          <div class="picker-menu">${opcoesMenu()}</div>
+        </div>
+      </td>
+      <td><select name="tamanho" class="form-select sel-tam"><option value="">—</option></select></td>
+      <td><input type="text" name="quantidade" class="form-control in-qtd" value="1" style="width:70px"></td>
+      <td><input type="text" name="preco_unitario" class="form-control in-preco" style="width:100px"></td>
+      <td><input type="text" name="desconto" class="form-control in-desc" value="0,00" style="width:90px"></td>
+      <td class="subtotal">R$ 0,00</td>
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-item">×</button></td>`;
+    corpo.appendChild(tr);
+    if (inicial && inicial.peca_id) {
+      const p = acha(inicial.peca_id) || inicial;
+      tr.querySelector('.picker-value').value = inicial.peca_id;
+      tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${inicial.nome || p.nome}`;
+      preencherTamanhos(tr, inicial.estoque || p.estoque || {}, inicial.tamanho);
+      if (inicial.quantidade !== '') tr.querySelector('.in-qtd').value = String(inicial.quantidade).replace('.', ',');
+      if (inicial.preco !== '') tr.querySelector('.in-preco').value = String(inicial.preco).replace('.', ',');
+      tr.querySelector('.in-desc').value = fmt2(inicial.desconto || 0);
+    }
+  }
+
+  function preencherTamanhos(tr, estoque, tamAtual) {
+    const sel = tr.querySelector('.sel-tam');
+    sel.innerHTML = '<option value="">—</option>';
+    const vistos = new Set();
+    Object.entries(estoque).forEach(([t, q]) => {
+      if (q > 0) { sel.innerHTML += `<option value="${t}">${t} (${q})</option>`; vistos.add(t); }
+    });
+    if (tamAtual && !vistos.has(tamAtual)) sel.innerHTML += `<option value="${tamAtual}">${tamAtual} (0)</option>`;
+    if (tamAtual) sel.value = tamAtual;
+  }
+
+  function recalcular() {
+    let totalProdutos = 0, totalCusto = 0;
+    corpo.querySelectorAll('.item-row').forEach(tr => {
+      const p = acha(tr.querySelector('.picker-value').value);
+      const qtd = num(tr.querySelector('.in-qtd').value);
+      const preco = num(tr.querySelector('.in-preco').value);
+      const desc = num(tr.querySelector('.in-desc').value);
+      const sub = preco * qtd - desc;
+      tr.querySelector('.subtotal').textContent = brl(sub);
+      totalProdutos += sub;
+      if (p) totalCusto += p.custo * qtd;
+    });
+
+    const descTotal = num(document.getElementById('in-desconto').value);
+    totalProdutos -= descTotal;
+    document.getElementById('total-produtos').textContent = brl(totalProdutos);
+
+    const frete = num(document.getElementById('in-frete').value);
+    const mkt = num(document.getElementById('in-mkt').value);
+    const cortesia = document.getElementById('chk-cortesia').checked;
+    const comissao = totalProdutos * mkt / 100;
+    const receita = totalProdutos + (cortesia ? 0 : frete);
+    const custo = totalCusto + comissao + (cortesia ? frete : 0);
     const lucro = receita - custo;
-    resumo.innerHTML = `Receita <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
+    document.getElementById('resumo-venda').innerHTML =
+      `Receita <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
       `Lucro <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b>`;
   }
 
-  selPeca.addEventListener('change', () => { preencherTamanhos(); calcular(); });
-  [selTam, inQtd, inPreco, inFrete, inMkt].forEach(el => el.addEventListener('input', calcular));
+  // --- Eventos ---
+  document.getElementById('add-item').addEventListener('click', novaLinha);
+
+  corpo.addEventListener('input', recalcular);
+  corpo.addEventListener('change', recalcular);
+
+  corpo.addEventListener('click', function (e) {
+    // Abrir/fechar menu do seletor
+    const toggle = e.target.closest('.picker-toggle');
+    if (toggle) {
+      const menu = toggle.nextElementSibling;
+      document.querySelectorAll('.picker-menu.aberto').forEach(m => { if (m !== menu) m.classList.remove('aberto'); });
+      menu.classList.toggle('aberto');
+      return;
+    }
+    // Escolher uma peça
+    const opt = e.target.closest('.picker-option');
+    if (opt) {
+      const tr = opt.closest('.item-row');
+      const p = acha(opt.dataset.id);
+      tr.querySelector('.picker-value').value = p.id;
+      tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${p.nome}`;
+      tr.querySelector('.picker-menu').classList.remove('aberto');
+      preencherTamanhos(tr, p.estoque, null);
+      if (tr.querySelector('.in-preco').value === '') tr.querySelector('.in-preco').value = String(p.preco.toFixed(2)).replace('.', ',');
+      recalcular();
+      return;
+    }
+    // Remover linha
+    if (e.target.classList.contains('rem-item')) {
+      e.target.closest('.item-row').remove();
+      recalcular();
+    }
+  });
+
+  // Formata descontos com 2 casas ao sair do campo
+  corpo.addEventListener('blur', function (e) {
+    if (e.target.classList.contains('in-desc')) e.target.value = fmt2(e.target.value);
+  }, true);
+  document.getElementById('in-desconto').addEventListener('blur', function () {
+    if (this.value !== '') this.value = fmt2(this.value);
+  });
+
+  ['in-frete', 'in-mkt', 'in-desconto'].forEach(id => document.getElementById(id).addEventListener('input', recalcular));
+  document.getElementById('chk-cortesia').addEventListener('change', recalcular);
+
+  // Fecha menus ao clicar fora
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.peca-picker')) {
+      document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
+    }
+  });
+
+  if (PREFILL.length) PREFILL.forEach(novaLinha); else novaLinha();
+  recalcular();
 })();
 </script>
 {% endif %}
