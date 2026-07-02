@@ -131,7 +131,7 @@
     </form>
 
     <script id="dados-pecas" type="application/json">
-      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "sku": {{ p.sku|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "sku": {{ p.sku|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ (p.disponivel_por_tamanho if modo == 'venda' else p.estoque_por_tamanho)|tojson }}}{{ "," if not loop.last }}{% endfor %}]
     </script>
     <script id="dados-kits" type="application/json">
       [{% for k in kits %}{"id": {{ k.id }}, "nome": {{ k.nome|tojson }}, "preco": {{ k.preco }}, "itens": [{% for i in k.itens %}{"peca_id": {{ i.peca_id }}, "quantidade": {{ i.quantidade }}}{{ "," if not loop.last }}{% endfor %}]}{{ "," if not loop.last }}{% endfor %}]

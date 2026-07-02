@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block titulo %}Produção{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Ordens de produção</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('main.inventario') }}" class="btn btn-outline-secondary btn-sm">← Inventário</a>
+    <a href="{{ url_for('main.nova_ordem_from_minimos') }}" class="btn btn-outline-primary btn-sm">Gerar dos mínimos</a>
+  </div>
+</div>
+
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Nova ordem</h2>
+    {% if pecas %}
+    <form method="post" action="{{ url_for('main.nova_ordem') }}">
+      <div class="mb-3">
+        <label class="form-label">Descrição <span class="text-muted small">(opcional)</span></label>
+        <input type="text" name="descricao" class="form-control" placeholder="Ex.: Reposição coleção verão">
+      </div>
+      <table class="table table-sm align-middle">
+        <thead class="table-light"><tr><th style="width:55%">Peça</th><th>Tamanho</th><th>Qtd</th><th></th></tr></thead>
+        <tbody class="op-linhas"></tbody>
+      </table>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-3 op-add">+ Adicionar peça</button>
+      <div class="text-end"><button class="btn btn-primary">Criar ordem</button></div>
+    </form>
+    {% else %}
+    <p class="text-muted">Cadastre peças antes de criar ordens de produção.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card bg-white">
+  <div class="card-body">
+    {% if ordens %}
+    <table class="table align-middle">
+      <thead class="table-light"><tr><th>#</th><th>Descrição</th><th>Itens</th><th>Peças</th><th>Status</th><th>Criada</th><th></th></tr></thead>
+      <tbody>
+      {% for o in ordens %}
+        <tr class="{{ '' if o.status == 'aberta' else 'text-muted' }}">
+          <td>#{{ o.id }}</td>
+          <td>{{ o.descricao or '—' }}</td>
+          <td>{{ o.itens|length }}</td>
+          <td>{{ o.total_unidades|int }}</td>
+          <td>{% if o.status == 'aberta' %}<span class="badge text-bg-primary">Aberta</span>{% else %}<span class="badge text-bg-success">Concluída</span>{% endif %}</td>
+          <td class="small text-muted">{{ o.criado_em | dt }}</td>
+          <td class="text-end"><a href="{{ url_for('main.detalhe_ordem', ordem_id=o.id) }}" class="btn btn-sm btn-outline-primary">Abrir</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="text-muted">Nenhuma ordem de produção.</p>{% endif %}
+  </div>
+</div>
+
+{% if pecas %}
+<script id="dados-pecas-op" type="application/json">
+  [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "foto": {{ p.foto|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+</script>
+<script>
+(function () {
+  const PECAS = JSON.parse(document.getElementById('dados-pecas-op').textContent);
+  const UPLOADS = "{{ url_for('static', filename='uploads/') }}";
+  const TAMS = {{ tamanhos|tojson }};
+  const acha = id => PECAS.find(p => String(p.id) === String(id));
+  const thumb = p => p.foto
+    ? `<img src="${UPLOADS}${p.foto}" class="foto-thumb me-2" alt="">`
+    : `<span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>`;
+  const opcoes = () => PECAS.map(p => `
+    <button type="button" class="picker-option" data-id="${p.id}">${thumb(p)} <span>${p.nome}</span></button>`).join('');
+
+  function novaLinha(tbody) {
+    const tr = document.createElement('tr');
+    tr.className = 'op-row';
+    tr.innerHTML = `
+      <td>
+        <div class="peca-picker">
+          <input type="hidden" name="peca_id" class="picker-value">
+          <button type="button" class="form-select text-start picker-toggle">Selecione a peça...</button>
+          <div class="picker-menu">${opcoes()}</div>
+        </div>
+      </td>
+      <td><select name="tamanho" class="form-select form-select-sm">${TAMS.map(t => `<option value="${t}">${t}</option>`).join('')}</select></td>
+      <td><input type="text" name="quantidade" class="form-control form-control-sm" value="1" style="width:70px"></td>
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger op-rem">×</button></td>`;
+    tbody.appendChild(tr);
+  }
+
+  const form = document.querySelector('form[action$="/producao/nova"]');
+  if (!form) return;
+  const tbody = form.querySelector('.op-linhas');
+  form.querySelector('.op-add').addEventListener('click', () => novaLinha(tbody));
+  tbody.addEventListener('click', e => {
+    const toggle = e.target.closest('.picker-toggle');
+    if (toggle) {
+      const menu = toggle.nextElementSibling;
+      document.querySelectorAll('.picker-menu.aberto').forEach(m => { if (m !== menu) m.classList.remove('aberto'); });
+      menu.classList.toggle('aberto');
+      return;
+    }
+    const opt = e.target.closest('.picker-option');
+    if (opt) {
+      const tr = opt.closest('.op-row');
+      const p = acha(opt.dataset.id);
+      tr.querySelector('.picker-value').value = p.id;
+      tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${p.nome}`;
+      tr.querySelector('.picker-menu').classList.remove('aberto');
+      return;
+    }
+    if (e.target.classList.contains('op-rem')) e.target.closest('.op-row').remove();
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.peca-picker')) document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
+  });
+  novaLinha(tbody);
+})();
+</script>
+{% endif %}
+{% endblock %}

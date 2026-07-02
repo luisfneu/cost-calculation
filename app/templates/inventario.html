@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titulo %}Inventário{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Inventário de peças</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('main.inventario_insumos') }}" class="btn btn-outline-secondary btn-sm">Inventário de insumos</a>
+    <a href="{{ url_for('main.listar_ordens') }}" class="btn btn-outline-secondary btn-sm">Ordens de produção →</a>
+  </div>
+</div>
+<p class="text-muted">Preencha a <strong>contagem</strong> real para ajustar o estoque (deixe em branco para não mexer) e o <strong>mínimo</strong> por tamanho (gera alerta de reposição).</p>
+
+{% if pecas %}
+<form method="post">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle bg-white">
+      <thead class="table-light">
+        <tr>
+          <th style="min-width:180px">Peça</th>
+          {% for t in tamanhos %}<th class="text-center">{{ t }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in pecas %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              {% if p.foto %}
+                <img src="{{ url_for('static', filename='uploads/' ~ p.foto) }}" class="foto-thumb" alt="">
+              {% else %}
+                <span class="foto-thumb sem-foto d-inline-flex align-items-center justify-content-center">—</span>
+              {% endif %}
+              <div>
+                <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="link-atelier">{{ p.nome }}</a>
+                {% if p.sku %}<div class="small text-muted">{{ p.sku }}</div>{% endif %}
+              </div>
+            </div>
+          </td>
+          {% for t in tamanhos %}
+            {% set atual = p.estoque_por_tamanho[t] %}
+            {% set mini = p.minimo_por_tamanho[t] %}
+            <td class="text-center" style="min-width:90px">
+              <div class="small text-muted">tem {{ atual|num }}</div>
+              <input type="text" name="cont_{{ p.id }}_{{ t }}" title="contagem" style="min-width:64px"
+                     class="form-control form-control-sm text-center mb-1 {{ 'border-danger' if mini and atual < mini }}"
+                     placeholder="{{ atual|num }}">
+              <input type="text" name="min_{{ p.id }}_{{ t }}" class="form-control form-control-sm text-center"
+                     value="{{ mini|num if mini else '' }}" placeholder="mín." title="estoque mínimo" style="min-width:64px">
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="text-end">
+    <button class="btn btn-primary">Aplicar inventário</button>
+  </div>
+</form>
+{% else %}
+<p class="text-muted">Nenhuma peça cadastrada.</p>
+{% endif %}
+{% endblock %}

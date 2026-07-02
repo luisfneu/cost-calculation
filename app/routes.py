@@ -1,6 +1,7 @@
 """Rotas da aplicação."""
 import csv
 import io
+import math
 import os
 import re
 import uuid
@@ -32,6 +33,8 @@ from .models import (
     KitItem,
     MovimentoEstoque,
     MovimentoPeca,
+    OrdemProducao,
+    OrdemProducaoItem,
     Pagamento,
     Parametro,
     Peca,
@@ -177,14 +180,15 @@ def _paginar(itens, por_pagina=24):
 
 
 def _validar_estoque_pecas(agrupado):
-    """Retorna lista de faltas (strings) para {(peca_id, tamanho): qtd}."""
+    """Retorna lista de faltas (strings) para {(peca_id, tamanho): qtd}.
+    Considera o estoque disponível (quantidade − reservado)."""
     faltando = []
     for (pid, tam), need in agrupado.items():
         peca = Peca.query.get(pid)
         linha = _linha_estoque_peca(peca, tam)
-        disp = linha.quantidade if linha else 0.0
+        disp = linha.disponivel if linha else 0.0
         if need > disp:
-            faltando.append(f"{peca.nome} tam {tam} (tem {disp:g}, precisa {need:g})")
+            faltando.append(f"{peca.nome} tam {tam} (disponível {disp:g}, precisa {need:g})")
     return faltando
 
 
@@ -238,6 +242,7 @@ def index():
     pecas = Peca.query.order_by(Peca.criado_em.desc()).all()
     insumos = Insumo.query.order_by(Insumo.nome).all()
     alertas = [i for i in insumos if i.ativo and i.estoque_baixo]
+    pecas_repor = [p for p in pecas if p.precisa_repor]
     vendas = Venda.query.all()
     totais_venda = {
         "receita": sum(v.receita for v in vendas),
@@ -252,6 +257,7 @@ def index():
     meta_pct = (receita_mes / meta * 100) if meta else 0
     return render_template(
         "index.html", pecas=pecas, insumos=insumos, alertas=alertas,
+        pecas_repor=pecas_repor,
         totais_venda=totais_venda, n_clientes=Cliente.query.count(),
         meta=meta, receita_mes=receita_mes, meta_pct=meta_pct,
     )
@@ -688,6 +694,261 @@ def historico():
 
 
 # --------------------------------------------------------------------------- #
+# Estoque de peças: inventário, mínimos e reserva
+# --------------------------------------------------------------------------- #
+@bp.route("/estoque/inventario", methods=["GET", "POST"])
+def inventario():
+    """Contagem em massa do estoque de peças + definição do estoque mínimo.
+
+    Campos do form por tamanho: cont_<peca_id>_<tam> (contado) e
+    min_<peca_id>_<tam> (mínimo). Aplica ajustes só onde o valor mudou."""
+    pecas = Peca.query.order_by(Peca.nome).all()
+    if request.method == "GET":
+        return render_template("inventario.html", pecas=pecas, tamanhos=TAMANHOS)
+
+    ajustes = 0
+    for peca in pecas:
+        for tam in TAMANHOS:
+            linha = _linha_estoque_peca(peca, tam)
+            atual = linha.quantidade if linha else 0.0
+            atual_min = linha.estoque_minimo if linha else 0.0
+
+            cont_raw = request.form.get(f"cont_{peca.id}_{tam}", "")
+            min_raw = request.form.get(f"min_{peca.id}_{tam}", "")
+            novo_min = _to_float(min_raw) if min_raw != "" else atual_min
+
+            # Só ajusta a quantidade se o campo foi preenchido.
+            if cont_raw != "":
+                novo = _to_float(cont_raw)
+                if abs(novo - atual) > 0.0001:
+                    if linha is None:
+                        linha = _linha_estoque_peca(peca, tam, criar=True)
+                    delta = novo - linha.quantidade
+                    linha.quantidade = novo
+                    db.session.add(MovimentoPeca(
+                        peca=peca, tamanho=tam, tipo="ajuste", quantidade=delta,
+                        observacao=f"Inventário: {atual:g} → {novo:g}",
+                    ))
+                    ajustes += 1
+
+            # Mínimo (cria linha se necessário para guardar o mínimo).
+            if abs(novo_min - atual_min) > 0.0001:
+                if linha is None:
+                    linha = _linha_estoque_peca(peca, tam, criar=True)
+                linha.estoque_minimo = novo_min
+
+    db.session.commit()
+    flash(f"Inventário aplicado. {ajustes} ajuste(s) de quantidade.", "sucesso")
+    return redirect(url_for("main.inventario"))
+
+
+@bp.route("/estoque/inventario-insumos", methods=["GET", "POST"])
+def inventario_insumos():
+    """Contagem/correção do estoque de insumos + estoque mínimo.
+
+    Campos por insumo: cont_<insumo_id> (contado) e min_<insumo_id> (mínimo).
+    A diferença vira um movimento de entrada/saída (sem alterar o custo médio)."""
+    insumos = Insumo.query.order_by(Insumo.nome).all()
+    if request.method == "GET":
+        return render_template("inventario_insumos.html", insumos=insumos)
+
+    ajustes = 0
+    for insumo in insumos:
+        cont_raw = request.form.get(f"cont_{insumo.id}", "")
+        min_raw = request.form.get(f"min_{insumo.id}", "")
+
+        if min_raw != "":
+            insumo.estoque_minimo = _to_float(min_raw)
+
+        if cont_raw != "":
+            novo = _to_float(cont_raw)
+            delta = novo - insumo.estoque
+            if abs(delta) > 0.0001:
+                if delta > 0:
+                    _registrar_movimento(insumo, "entrada", delta, observacao="Inventário (correção)")
+                else:
+                    _registrar_movimento(insumo, "saida", -delta, observacao="Inventário (correção)")
+                ajustes += 1
+
+    db.session.commit()
+    flash(f"Inventário de insumos aplicado. {ajustes} ajuste(s).", "sucesso")
+    return redirect(url_for("main.inventario_insumos"))
+
+
+@bp.route("/pecas/<int:peca_id>/estoque/reservar", methods=["POST"])
+def reservar_peca(peca_id):
+    """Reserva unidades de um tamanho (ficam indisponíveis para nova venda)."""
+    peca = Peca.query.get_or_404(peca_id)
+    tamanho = request.form.get("tamanho", "").strip().upper()
+    qtd = _to_float(request.form.get("quantidade"))
+    if tamanho not in TAMANHOS or qtd <= 0:
+        flash("Informe tamanho e quantidade válidos para reservar.", "erro")
+        return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+    linha = _linha_estoque_peca(peca, tamanho, criar=True)
+    livre = max(0.0, linha.quantidade - linha.reservado)
+    if qtd > livre:
+        flash(f"Só há {livre:g} un. disponível no tamanho {tamanho} para reservar.", "erro")
+        return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+    linha.reservado += qtd
+    db.session.add(MovimentoPeca(
+        peca=peca, tamanho=tamanho, tipo="reserva", quantidade=qtd,
+        observacao=(request.form.get("observacao") or "Reserva").strip(),
+    ))
+    db.session.commit()
+    flash(f"{qtd:g} un. reservada(s) no tamanho {tamanho}.", "sucesso")
+    return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+
+@bp.route("/pecas/<int:peca_id>/estoque/liberar-reserva", methods=["POST"])
+def liberar_reserva_peca(peca_id):
+    """Libera unidades reservadas de um tamanho."""
+    peca = Peca.query.get_or_404(peca_id)
+    tamanho = request.form.get("tamanho", "").strip().upper()
+    qtd = _to_float(request.form.get("quantidade"))
+    linha = _linha_estoque_peca(peca, tamanho)
+    if not linha or qtd <= 0:
+        flash("Nada a liberar.", "erro")
+        return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+    qtd = min(qtd, linha.reservado)
+    linha.reservado = max(0.0, linha.reservado - qtd)
+    db.session.add(MovimentoPeca(
+        peca=peca, tamanho=tamanho, tipo="libera", quantidade=qtd,
+        observacao="Liberação de reserva",
+    ))
+    db.session.commit()
+    flash(f"{qtd:g} un. liberada(s) da reserva no tamanho {tamanho}.", "sucesso")
+    return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+
+# --------------------------------------------------------------------------- #
+# Ordens de produção + lista de compras
+# --------------------------------------------------------------------------- #
+@bp.route("/producao")
+def listar_ordens():
+    ordens = OrdemProducao.query.order_by(
+        OrdemProducao.status, OrdemProducao.criado_em.desc()
+    ).all()
+    pecas = Peca.query.order_by(Peca.nome).all()
+    return render_template("producao.html", ordens=ordens, pecas=pecas, tamanhos=TAMANHOS)
+
+
+def _itens_ordem_do_form(ordem):
+    """Lê peca_id[]/tamanho[]/quantidade[] e (re)popula os itens da ordem."""
+    peca_ids = request.form.getlist("peca_id")
+    tamanhos = request.form.getlist("tamanho")
+    quantidades = request.form.getlist("quantidade")
+    for i, pid in enumerate(peca_ids):
+        pid = int(pid) if pid else 0
+        tam = (tamanhos[i] if i < len(tamanhos) else "").strip().upper()
+        qtd = _to_float(quantidades[i]) if i < len(quantidades) else 0
+        if not pid or tam not in TAMANHOS or qtd <= 0:
+            continue
+        ordem.itens.append(OrdemProducaoItem(peca_id=pid, tamanho=tam, quantidade=qtd))
+
+
+@bp.route("/producao/nova", methods=["POST"])
+def nova_ordem():
+    ordem = OrdemProducao(descricao=request.form.get("descricao", "").strip())
+    _itens_ordem_do_form(ordem)
+    if not ordem.itens:
+        flash("Adicione ao menos uma peça/tamanho à ordem.", "erro")
+        return redirect(url_for("main.listar_ordens"))
+    db.session.add(ordem)
+    db.session.commit()
+    return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+
+
+@bp.route("/producao/de-minimos")
+def nova_ordem_from_minimos():
+    """Cria uma ordem já preenchida com o que está abaixo do estoque mínimo."""
+    ordem = OrdemProducao(descricao="Reposição de estoque mínimo")
+    for peca in Peca.query.order_by(Peca.nome).all():
+        for f in peca.abaixo_minimo:
+            ordem.itens.append(OrdemProducaoItem(
+                peca_id=peca.id, tamanho=f["tamanho"],
+                quantidade=float(math.ceil(f["faltam"])),
+            ))
+    if not ordem.itens:
+        flash("Nenhuma peça abaixo do estoque mínimo.", "sucesso")
+        return redirect(url_for("main.listar_ordens"))
+    db.session.add(ordem)
+    db.session.commit()
+    return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+
+
+@bp.route("/producao/<int:ordem_id>")
+def detalhe_ordem(ordem_id):
+    ordem = OrdemProducao.query.get_or_404(ordem_id)
+    pecas = Peca.query.order_by(Peca.nome).all()
+    return render_template("producao_detalhe.html", ordem=ordem, pecas=pecas, tamanhos=TAMANHOS)
+
+
+@bp.route("/producao/<int:ordem_id>/item/add", methods=["POST"])
+def add_item_ordem(ordem_id):
+    ordem = OrdemProducao.query.get_or_404(ordem_id)
+    if ordem.status != "aberta":
+        flash("Ordem já concluída.", "erro")
+        return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+    _itens_ordem_do_form(ordem)
+    db.session.commit()
+    return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+
+
+@bp.route("/producao/<int:ordem_id>/item/<int:item_id>/excluir", methods=["POST"])
+def excluir_item_ordem(ordem_id, item_id):
+    item = OrdemProducaoItem.query.get_or_404(item_id)
+    if item.ordem_id != ordem_id or item.ordem.status != "aberta":
+        flash("Não é possível remover este item.", "erro")
+        return redirect(url_for("main.detalhe_ordem", ordem_id=ordem_id))
+    db.session.delete(item)
+    db.session.commit()
+    return redirect(url_for("main.detalhe_ordem", ordem_id=ordem_id))
+
+
+@bp.route("/producao/<int:ordem_id>/concluir", methods=["POST"])
+def concluir_ordem(ordem_id):
+    ordem = OrdemProducao.query.get_or_404(ordem_id)
+    if ordem.status == "concluida":
+        flash("Ordem já concluída.", "erro")
+        return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+    if not ordem.itens:
+        flash("Ordem sem itens.", "erro")
+        return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+    # Valida os insumos pela necessidade agregada.
+    if not ordem.insumos_suficientes:
+        faltam = ", ".join(f"{c['insumo'].nome} (faltam {c['comprar']:g})" for c in ordem.lista_compras)
+        flash("Estoque de insumos insuficiente: " + faltam + ". Veja a lista de compras.", "erro")
+        return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+    # Produz cada item: baixa insumos e dá entrada no estoque da peça.
+    for it in ordem.itens:
+        for pi in it.peca.insumos:
+            _registrar_movimento(
+                pi.insumo, "saida", pi.quantidade * it.quantidade,
+                observacao=f"Ordem de produção #{ordem.id}: {it.quantidade:g}x '{it.peca.nome}' tam {it.tamanho}",
+            )
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade += it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="producao", quantidade=it.quantidade,
+            observacao=f"Ordem de produção #{ordem.id}",
+        ))
+    ordem.status = "concluida"
+    ordem.concluido_em = datetime.now()
+    db.session.commit()
+    flash(f"Ordem #{ordem.id} concluída: {ordem.total_unidades:g} peça(s) produzida(s).", "sucesso")
+    return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+
+
+@bp.route("/producao/<int:ordem_id>/excluir", methods=["POST"])
+def excluir_ordem(ordem_id):
+    ordem = OrdemProducao.query.get_or_404(ordem_id)
+    db.session.delete(ordem)
+    db.session.commit()
+    flash("Ordem excluída.", "sucesso")
+    return redirect(url_for("main.listar_ordens"))
+
+
+# --------------------------------------------------------------------------- #
 # Clientes
 # --------------------------------------------------------------------------- #
 @bp.route("/clientes")
@@ -718,6 +979,8 @@ def form_cliente(cliente_id=None):
         cliente.nome = nome
         cliente.instagram = request.form.get("instagram", "").strip()
         cliente.telefone = request.form.get("telefone", "").strip()
+        cliente.nascimento = _to_date(request.form.get("nascimento"))
+        cliente.tamanho_habitual = request.form.get("tamanho_habitual", "").strip().upper()
         cliente.cep = request.form.get("cep", "").strip()
         cliente.logradouro = request.form.get("logradouro", "").strip()
         cliente.numero = request.form.get("numero", "").strip()
@@ -737,6 +1000,30 @@ def detalhe_cliente(cliente_id):
     cliente = Cliente.query.get_or_404(cliente_id)
     vendas = sorted(cliente.vendas, key=lambda v: v.criado_em, reverse=True)
     return render_template("cliente_detalhe.html", cliente=cliente, vendas=vendas)
+
+
+@bp.route("/crm")
+def crm():
+    """Painel de relacionamento: aniversariantes do mês e clientes a reativar."""
+    try:
+        dias_inativo = max(1, int(request.args.get("dias", 90)))
+    except (TypeError, ValueError):
+        dias_inativo = 90
+    clientes = Cliente.query.order_by(Cliente.nome).all()
+
+    aniversariantes = sorted(
+        [c for c in clientes if c.aniversario_no_mes],
+        key=lambda c: (c.nascimento.day, c.nome),
+    )
+    reativar = sorted(
+        [c for c in clientes if c.inativo(dias_inativo)],
+        key=lambda c: c.dias_desde_ultima_compra, reverse=True,
+    )
+    sem_compra = [c for c in clientes if not c.vendas]
+    return render_template(
+        "crm.html", aniversariantes=aniversariantes, reativar=reativar,
+        sem_compra=sem_compra, dias_inativo=dias_inativo, hoje=date.today(),
+    )
 
 
 @bp.route("/clientes/<int:cliente_id>/excluir", methods=["POST"])
@@ -891,8 +1178,8 @@ def _render_historico():
 
 
 def _pecas_com_estoque():
-    """Peças com ao menos 1 unidade em algum tamanho (para venda com estoque)."""
-    return [p for p in Peca.query.order_by(Peca.nome).all() if p.estoque_total >= 1]
+    """Peças com ao menos 1 unidade disponível em algum tamanho (venda com estoque)."""
+    return [p for p in Peca.query.order_by(Peca.nome).all() if p.disponivel_total >= 1]
 
 
 def _render_form_pedido(modo, prefill_itens=None, prefill_pedido=None):
@@ -1459,8 +1746,11 @@ def exportar_receber_csv():
 @bp.route("/pecas/<int:peca_id>/etiqueta")
 def etiqueta_peca(peca_id):
     peca = Peca.query.get_or_404(peca_id)
-    url_peca = url_for("main.detalhe_peca", peca_id=peca.id, _external=True)
-    return render_template("etiqueta.html", peca=peca, url_peca=url_peca)
+    # Tamanho pré-selecionado via ?tamanho= (opcional).
+    tam_sel = (request.args.get("tamanho") or "").strip().upper()
+    if tam_sel not in TAMANHOS:
+        tam_sel = ""
+    return render_template("etiqueta.html", peca=peca, tamanhos=TAMANHOS, tam_sel=tam_sel)
 
 
 # --------------------------------------------------------------------------- #
