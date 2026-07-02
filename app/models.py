@@ -10,6 +10,7 @@ import re
 from datetime import datetime, timezone
 
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
 
@@ -538,6 +539,8 @@ class Venda(db.Model):
     vencimento = db.Column(db.Date)  # data de vencimento (venda a prazo/pendente)
     # Tipo: "venda" baixa estoque na criação; "encomenda" não baixa (produz depois).
     tipo = db.Column(db.String(12), nullable=False, default="venda")
+    # Nome do usuário que registrou a venda (vendedor).
+    vendedor = db.Column(db.String(80), default="")
     # Fluxo do pedido: realizado | pago | enviado | entregue.
     status = db.Column(db.String(12), nullable=False, default="realizado")
     # Se o estoque das peças já foi baixado.
@@ -862,6 +865,38 @@ class Parametro(db.Model):
             p = Parametro(chave=chave)
             db.session.add(p)
         p.valor = str(valor)
+
+
+class Usuario(db.Model):
+    """Usuário do sistema (login individual)."""
+
+    __tablename__ = "usuarios"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    login = db.Column(db.String(60), unique=True, nullable=False)
+    senha_hash = db.Column(db.String(255), nullable=False, default="")
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    admin = db.Column(db.Boolean, nullable=False, default=False)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    def set_senha(self, senha):
+        self.senha_hash = generate_password_hash(senha)
+
+    def conferir_senha(self, senha) -> bool:
+        return bool(self.senha_hash) and check_password_hash(self.senha_hash, senha)
+
+
+class Auditoria(db.Model):
+    """Trilha de auditoria: quem fez o quê e quando (login, vendas, estoque)."""
+
+    __tablename__ = "auditoria"
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario = db.Column(db.String(80), default="")
+    acao = db.Column(db.String(40), nullable=False)   # login, logout, venda, estoque...
+    detalhe = db.Column(db.String(255), default="")
+    criado_em = db.Column(db.DateTime, default=_agora)
 
 
 class FotoPeca(db.Model):

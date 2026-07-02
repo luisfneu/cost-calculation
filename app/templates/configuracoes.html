@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Configurações{% endblock %}
+{% block conteudo %}
+<h1 class="h3 mb-4">Configurações</h1>
+
+<form method="post" class="card card-body bg-white mb-4" style="max-width:680px">
+  <h2 class="h5 mb-3"><i class="bi bi-qr-code"></i> Pix (copia e cola)</h2>
+  <p class="text-muted small">Usado para gerar o Pix na tela do pedido. A chave pode ser CPF/CNPJ, e-mail, telefone (+55...) ou chave aleatória.</p>
+  <div class="mb-3">
+    <label class="form-label">Chave Pix</label>
+    <input type="text" name="pix_chave" class="form-control" value="{{ cfg.pix_chave }}" placeholder="ex.: email@exemplo.com / 11999998888 / CPF">
+  </div>
+  <div class="row">
+    <div class="col-md-7 mb-3">
+      <label class="form-label">Nome do recebedor</label>
+      <input type="text" name="pix_nome" class="form-control" value="{{ cfg.pix_nome }}" placeholder="Sabrina Hansen" maxlength="25">
+      <small class="text-muted">Até 25 caracteres, sem acento (padrão Pix).</small>
+    </div>
+    <div class="col-md-5 mb-3">
+      <label class="form-label">Cidade</label>
+      <input type="text" name="pix_cidade" class="form-control" value="{{ cfg.pix_cidade }}" placeholder="Sao Paulo" maxlength="15">
+    </div>
+  </div>
+  {% if pix_previa %}
+  <div class="alert alert-light border small">
+    <strong>Prévia (R$ 1,00 · txid TESTE):</strong>
+    <div class="text-break" style="font-family:monospace">{{ pix_previa }}</div>
+  </div>
+  {% else %}
+  <div class="alert alert-warning small mb-3">Preencha a chave Pix para ativar o Pix nos pedidos.</div>
+  {% endif %}
+
+  <h2 class="h5 mb-3 mt-2">Meta</h2>
+  <div class="mb-3" style="max-width:260px">
+    <label class="form-label">Meta mensal de faturamento (R$)</label>
+    <input type="text" name="meta_mensal" class="form-control" value="{{ cfg.meta_mensal }}" placeholder="0">
+  </div>
+
+  <div><button class="btn btn-primary">Salvar configurações</button></div>
+</form>
+{% endblock %}

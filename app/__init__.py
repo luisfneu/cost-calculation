@@ -2,9 +2,16 @@
 import os
 
 from flask import Flask
+from flask_migrate import Migrate
+from flask_migrate import upgrade as _alembic_upgrade
 
 from config import Config
 from .models import db
+
+migrate = Migrate()
+
+# Diretório das migrações Alembic (raiz do projeto/migrations).
+_MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations")
 
 
 def create_app(config_class=Config):
@@ -16,6 +23,8 @@ def create_app(config_class=Config):
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
     db.init_app(app)
+    # render_as_batch=True: necessário para ALTER TABLE no SQLite via Alembic.
+    migrate.init_app(app, db, directory=_MIGRATIONS_DIR, render_as_batch=True)
 
     from .routes import bp
     app.register_blueprint(bp)
@@ -47,13 +56,31 @@ def create_app(config_class=Config):
             return valor
 
     with app.app_context():
-        legado = _preparar_migracao_vendas()  # renomeia vendas antigas (single-item)
-        db.create_all()                        # cria vendas (pedido) e venda_itens
-        if legado:
-            _copiar_vendas_legadas()           # move dados p/ o novo formato
-        _migrar_colunas()                      # ADD COLUMN idempotente
+        _inicializar_banco(app)
 
     return app
+
+
+def _inicializar_banco(app):
+    """Prepara o schema no boot.
+
+    Preferência: aplica as migrações Alembic (`upgrade`), que é a fonte de
+    verdade do schema. Se o diretório de migrações não existir (ou o Alembic
+    falhar), cai no mecanismo manual antigo — mantém o app funcionando.
+    """
+    tem_migracoes = os.path.isdir(os.path.join(_MIGRATIONS_DIR, "versions"))
+    if tem_migracoes and app.config.get("USE_ALEMBIC", True):
+        try:
+            _alembic_upgrade(directory=_MIGRATIONS_DIR)
+            return
+        except Exception as exc:  # pragma: no cover - salvaguarda de boot
+            app.logger.warning("Alembic upgrade falhou (%s); usando migração manual.", exc)
+
+    legado = _preparar_migracao_vendas()  # renomeia vendas antigas (single-item)
+    db.create_all()                        # cria vendas (pedido) e venda_itens
+    if legado:
+        _copiar_vendas_legadas()           # move dados p/ o novo formato
+    _migrar_colunas()                      # ADD COLUMN idempotente
 
 
 def _preparar_migracao_vendas():

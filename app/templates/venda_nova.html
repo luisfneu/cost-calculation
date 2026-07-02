@@ -75,9 +75,13 @@
         </div>
       </div>
       <div class="row g-3 align-items-end mb-3">
-        <div class="col-md-3">
+        <div class="col-md-4">
           <label class="form-label">Cupom de desconto <span class="text-muted small">(opc.)</span></label>
-          <input type="text" name="cupom" class="form-control text-uppercase" placeholder="Ex.: VERAO10" value="{{ prefill_pedido.get('cupom','') }}">
+          <div class="input-group">
+            <input type="text" name="cupom" id="in-cupom" class="form-control text-uppercase" placeholder="Ex.: VERAO10" value="{{ prefill_pedido.get('cupom','') }}">
+            <button type="button" class="btn btn-outline-primary" id="btn-cupom">Aplicar</button>
+          </div>
+          <div class="small mt-1" id="cupom-msg"></div>
         </div>
       </div>
 
@@ -381,10 +385,18 @@
     const descTotal = num(document.getElementById('in-desconto').value);
     const cortesia = document.getElementById('chk-cortesia').checked;
     const comissao = totalItens * mkt / 100;
-    const valorTotal = totalItens + (cortesia ? 0 : frete) - descTotal;
+    // Desconto do cupom (prévia) — mesma regra do servidor: sobre o total dos itens.
+    let cupomDesc = 0;
+    if (window.__CUPOM) {
+      cupomDesc = window.__CUPOM.tipo === 'percentual'
+        ? totalItens * window.__CUPOM.valor / 100
+        : Math.min(window.__CUPOM.valor, totalItens);
+      cupomDesc = Math.round(cupomDesc * 100) / 100;
+    }
+    const valorTotal = totalItens + (cortesia ? 0 : frete) - descTotal - cupomDesc;
     const custo = totalCusto + comissao + (cortesia ? frete : 0);
     const lucro = valorTotal - custo;
-    const descGeral = descItens + descTotal;
+    const descGeral = descItens + descTotal + cupomDesc;
     const pctDesc = totalBruto ? (descGeral / totalBruto * 100) : 0;
     document.getElementById('total-produtos').textContent = brl(totalItens);
     document.getElementById('s-itens').textContent = brl(totalItens);
@@ -439,9 +451,14 @@
   if (corpoPag) {
     document.getElementById('add-pagamento').addEventListener('click', () => { linhaPagamento('Dinheiro', ''); });
     document.getElementById('pagar-tudo').addEventListener('click', () => {
-      let r = corpoPag.querySelector('.pag-row');
-      if (!r) { linhaPagamento('Dinheiro', ''); r = corpoPag.querySelector('.pag-row'); }
-      r.querySelector('.pg-valor').value = Number(window.__VALOR_TOTAL || 0).toFixed(2).replace('.', ',');
+      const linhas = corpoPag.querySelectorAll('.pag-row');
+      let alvo = linhas.length ? linhas[linhas.length - 1] : null;
+      if (!alvo) { linhaPagamento('Dinheiro', ''); alvo = corpoPag.querySelector('.pag-row'); }
+      const total = window.__VALOR_TOTAL || 0;
+      let outras = 0;
+      corpoPag.querySelectorAll('.pag-row').forEach(tr => { if (tr !== alvo) outras += num(tr.querySelector('.pg-valor').value); });
+      const falta = Math.max(0, Math.round((total - outras) * 100) / 100);
+      alvo.querySelector('.pg-valor').value = falta.toFixed(2).replace('.', ',');
       recalcPagamentos();
     });
     corpoPag.addEventListener('input', recalcPagamentos);
@@ -505,6 +522,38 @@
   document.getElementById('in-desconto').addEventListener('blur', function () { if (this.value !== '') this.value = fmt2(this.value); });
   ['in-frete', 'in-mkt', 'in-desconto'].forEach(id => document.getElementById(id).addEventListener('input', recalcular));
   document.getElementById('chk-cortesia').addEventListener('change', recalcular);
+
+  // ---- Cupom: aplicar e mostrar o desconto na hora ----
+  const inCupom = document.getElementById('in-cupom');
+  const btnCupom = document.getElementById('btn-cupom');
+  const cupomMsg = document.getElementById('cupom-msg');
+  async function aplicarCupom() {
+    const cod = (inCupom.value || '').trim().toUpperCase();
+    if (!cod) { window.__CUPOM = null; cupomMsg.innerHTML = ''; recalcular(); return; }
+    cupomMsg.innerHTML = '<span class="text-muted">validando…</span>';
+    try {
+      const fd = new FormData(); fd.append('codigo', cod);
+      const resp = await fetch("{{ url_for('main.validar_cupom') }}", { method: 'POST', body: fd });
+      const d = await resp.json();
+      if (d.ok) {
+        window.__CUPOM = { tipo: d.tipo, valor: d.valor, codigo: d.codigo };
+        cupomMsg.innerHTML = `<span class="text-success">✓ ${d.codigo} aplicado (${d.rotulo})</span>`;
+      } else {
+        window.__CUPOM = null;
+        cupomMsg.innerHTML = `<span class="text-danger">${d.erro || 'inválido'}</span>`;
+      }
+    } catch (e) {
+      window.__CUPOM = null;
+      cupomMsg.innerHTML = '<span class="text-danger">erro ao validar</span>';
+    }
+    recalcular();
+  }
+  if (btnCupom) {
+    btnCupom.addEventListener('click', aplicarCupom);
+    inCupom.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); aplicarCupom(); } });
+    inCupom.addEventListener('input', () => { window.__CUPOM = null; cupomMsg.innerHTML = ''; });
+    if (inCupom.value.trim()) aplicarCupom();  // prefill
+  }
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.peca-picker')) document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
   });
