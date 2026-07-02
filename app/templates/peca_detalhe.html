@@ -74,18 +74,48 @@
         <h2 class="h6 text-muted">Estoque da peça</h2>
         <table class="table table-sm mb-3 text-center">
           <thead class="table-light"><tr>
+            <th class="text-start small text-muted"></th>
             {% for t in ['PP','P','M','G','GG'] %}<th>{{ t }}</th>{% endfor %}
             <th>Total</th>
           </tr></thead>
-          <tbody><tr>
+          <tbody>
+          <tr>
+            <td class="text-start small text-muted">Físico</td>
             {% for t in ['PP','P','M','G','GG'] %}
               <td class="{{ 'fw-bold' if peca.estoque_por_tamanho[t] > 0 }}">{{ peca.estoque_por_tamanho[t] | num }}</td>
             {% endfor %}
             <td class="fw-bold">{{ peca.estoque_total | num }}</td>
-          </tr></tbody>
+          </tr>
+          {% if peca.reservado_total > 0 %}
+          <tr class="text-warning">
+            <td class="text-start small">Reservado</td>
+            {% for t in ['PP','P','M','G','GG'] %}<td>{{ peca.reservado_por_tamanho[t] | num }}</td>{% endfor %}
+            <td>{{ peca.reservado_total | num }}</td>
+          </tr>
+          <tr>
+            <td class="text-start small text-muted">Disponível</td>
+            {% for t in ['PP','P','M','G','GG'] %}<td>{{ peca.disponivel_por_tamanho[t] | num }}</td>{% endfor %}
+            <td class="fw-bold">{{ peca.disponivel_total | num }}</td>
+          </tr>
+          {% endif %}
+          <tr class="small text-muted">
+            <td class="text-start">Mínimo</td>
+            {% for t in ['PP','P','M','G','GG'] %}
+              <td class="{{ 'text-danger fw-bold' if peca.minimo_por_tamanho[t] and peca.estoque_por_tamanho[t] < peca.minimo_por_tamanho[t] }}">{{ peca.minimo_por_tamanho[t] | num if peca.minimo_por_tamanho[t] else '—' }}</td>
+            {% endfor %}
+            <td></td>
+          </tr>
+          </tbody>
         </table>
+        {% if peca.precisa_repor %}
+        <div class="alert alert-warning py-2 small">
+          Abaixo do mínimo: {% for f in peca.abaixo_minimo %}{{ f.tamanho }} ({{ f.quantidade|int }}/{{ f.minimo|int }}){{ ', ' if not loop.last }}{% endfor %}.
+          <a href="{{ url_for('main.nova_ordem_from_minimos') }}">Gerar ordem</a>
+        </div>
+        {% endif %}
+
         <h3 class="h6 text-muted">Ajustar estoque</h3>
-        <form method="post" action="{{ url_for('main.ajustar_estoque_peca', peca_id=peca.id) }}" class="row g-2">
+        <form method="post" action="{{ url_for('main.ajustar_estoque_peca', peca_id=peca.id) }}" class="row g-2 mb-3">
           <div class="col-5">
             <select name="tamanho" class="form-select form-select-sm" required>
               {% for t in ['PP','P','M','G','GG'] %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
@@ -98,6 +128,39 @@
             <button class="btn btn-sm btn-outline-secondary w-100">Definir</button>
           </div>
         </form>
+
+        <h3 class="h6 text-muted">Reservar unidades</h3>
+        <form method="post" action="{{ url_for('main.reservar_peca', peca_id=peca.id) }}" class="row g-2 mb-2">
+          <div class="col-4">
+            <select name="tamanho" class="form-select form-select-sm" required>
+              {% for t in ['PP','P','M','G','GG'] %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-3">
+            <input type="text" name="quantidade" class="form-control form-control-sm" placeholder="qtd" required>
+          </div>
+          <div class="col-5">
+            <button class="btn btn-sm btn-outline-warning w-100">Reservar</button>
+          </div>
+          <div class="col-12">
+            <input type="text" name="observacao" class="form-control form-control-sm" placeholder="obs. (cliente, motivo…)">
+          </div>
+        </form>
+        {% if peca.reservado_total > 0 %}
+        <form method="post" action="{{ url_for('main.liberar_reserva_peca', peca_id=peca.id) }}" class="row g-2">
+          <div class="col-4">
+            <select name="tamanho" class="form-select form-select-sm" required>
+              {% for t in ['PP','P','M','G','GG'] if peca.reservado_por_tamanho[t] > 0 %}<option value="{{ t }}">{{ t }} ({{ peca.reservado_por_tamanho[t]|num }})</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-3">
+            <input type="text" name="quantidade" class="form-control form-control-sm" placeholder="qtd" required>
+          </div>
+          <div class="col-5">
+            <button class="btn btn-sm btn-outline-secondary w-100">Liberar reserva</button>
+          </div>
+        </form>
+        {% endif %}
       </div>
     </div>
   </div>

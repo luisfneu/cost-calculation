@@ -114,8 +114,13 @@ def _migrar_colunas():
             "tipo": "VARCHAR(12) DEFAULT 'venda'", "cupom_codigo": "VARCHAR(40) DEFAULT ''",
         },
         "venda_itens": {"desconto": "FLOAT DEFAULT 0"},
+        "estoque_pecas": {
+            "estoque_minimo": "FLOAT DEFAULT 0", "reservado": "FLOAT DEFAULT 0",
+        },
         "movimentos_estoque": {"custo_unitario": "FLOAT DEFAULT 0"},
         "clientes": {
+            "nascimento": "DATE",
+            "tamanho_habitual": "VARCHAR(5) DEFAULT ''",
             "cep": "VARCHAR(12) DEFAULT ''",
             "logradouro": "VARCHAR(160) DEFAULT ''",
             "numero": "VARCHAR(20) DEFAULT ''",

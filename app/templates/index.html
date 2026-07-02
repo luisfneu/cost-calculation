@@ -35,9 +35,20 @@
 
 {% if alertas %}
 <div class="alert alert-warning">
-  <strong>⚠️ Estoque baixo:</strong>
+  <strong>⚠️ Estoque baixo (insumos):</strong>
   {{ alertas | map(attribute='nome') | join(', ') }}.
   <a href="{{ url_for('main.listar_insumos') }}">Repor estoque</a>.
+</div>
+{% endif %}
+
+{% if pecas_repor %}
+<div class="alert alert-warning">
+  <strong>⚠️ Peças abaixo do estoque mínimo:</strong>
+  {% for p in pecas_repor %}
+    <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}">{{ p.nome }}</a>
+    ({% for f in p.abaixo_minimo %}{{ f.tamanho }} {{ f.quantidade|int }}/{{ f.minimo|int }}{{ ', ' if not loop.last }}{% endfor %}){{ '; ' if not loop.last }}
+  {% endfor %}
+  · <a href="{{ url_for('main.nova_ordem_from_minimos') }}">Gerar ordem de produção</a>.
 </div>
 {% endif %}
 

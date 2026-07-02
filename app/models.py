@@ -118,6 +118,46 @@ class Peca(db.Model):
     def estoque_total(self) -> float:
         return sum(e.quantidade for e in self.estoques)
 
+    @property
+    def reservado_por_tamanho(self) -> dict:
+        atual = {e.tamanho: e.reservado for e in self.estoques}
+        return {t: atual.get(t, 0.0) for t in TAMANHOS}
+
+    @property
+    def disponivel_por_tamanho(self) -> dict:
+        """Estoque livre para venda (quantidade − reservado)."""
+        atual = {e.tamanho: max(0.0, e.quantidade - e.reservado) for e in self.estoques}
+        return {t: atual.get(t, 0.0) for t in TAMANHOS}
+
+    @property
+    def disponivel_total(self) -> float:
+        return sum(max(0.0, e.quantidade - e.reservado) for e in self.estoques)
+
+    @property
+    def reservado_total(self) -> float:
+        return sum(e.reservado for e in self.estoques)
+
+    @property
+    def minimo_por_tamanho(self) -> dict:
+        atual = {e.tamanho: e.estoque_minimo for e in self.estoques}
+        return {t: atual.get(t, 0.0) for t in TAMANHOS}
+
+    @property
+    def abaixo_minimo(self) -> list:
+        """Tamanhos com mínimo definido cujo estoque está abaixo dele."""
+        faltas = []
+        for e in self.estoques:
+            if e.estoque_minimo and e.estoque_minimo > 0 and e.quantidade < e.estoque_minimo:
+                faltas.append({
+                    "tamanho": e.tamanho, "quantidade": e.quantidade,
+                    "minimo": e.estoque_minimo, "faltam": e.estoque_minimo - e.quantidade,
+                })
+        return sorted(faltas, key=lambda x: TAMANHOS.index(x["tamanho"]) if x["tamanho"] in TAMANHOS else 99)
+
+    @property
+    def precisa_repor(self) -> bool:
+        return bool(self.abaixo_minimo)
+
     # ----- Cálculos -----
     @property
     def custo_insumos(self) -> float:
@@ -189,8 +229,16 @@ class EstoquePeca(db.Model):
     peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
     tamanho = db.Column(db.String(5), nullable=False)  # PP, P, M, G, GG
     quantidade = db.Column(db.Float, nullable=False, default=0.0)
+    # Estoque mínimo desejado para este tamanho (0 = sem alerta).
+    estoque_minimo = db.Column(db.Float, nullable=False, default=0.0)
+    # Unidades reservadas (não disponíveis para nova venda).
+    reservado = db.Column(db.Float, nullable=False, default=0.0)
 
     peca = db.relationship("Peca", back_populates="estoques")
+
+    @property
+    def disponivel(self) -> float:
+        return max(0.0, self.quantidade - self.reservado)
 
 
 class MovimentoPeca(db.Model):
@@ -240,6 +288,76 @@ class KitItem(db.Model):
     peca = db.relationship("Peca")
 
 
+class OrdemProducao(db.Model):
+    """Ordem/plano de produção: peças e tamanhos a produzir, com lista de compras."""
+
+    __tablename__ = "ordens_producao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    descricao = db.Column(db.String(160), default="")
+    status = db.Column(db.String(12), nullable=False, default="aberta")  # aberta | concluida
+    criado_em = db.Column(db.DateTime, default=_agora)
+    concluido_em = db.Column(db.DateTime)
+
+    itens = db.relationship(
+        "OrdemProducaoItem", back_populates="ordem", cascade="all, delete-orphan"
+    )
+
+    @property
+    def total_unidades(self) -> float:
+        return sum(i.quantidade for i in self.itens)
+
+    @property
+    def status_label(self) -> str:
+        return "Concluída" if self.status == "concluida" else "Aberta"
+
+    @property
+    def necessidade_insumos(self) -> dict:
+        """Agrega o consumo de insumos: {insumo_id: {"insumo": Insumo, "qtd": float}}."""
+        need = {}
+        for it in self.itens:
+            for pi in it.peca.insumos:
+                consumo = pi.quantidade * it.quantidade
+                reg = need.setdefault(pi.insumo_id, {"insumo": pi.insumo, "qtd": 0.0})
+                reg["qtd"] += consumo
+        return need
+
+    @property
+    def lista_compras(self) -> list:
+        """Insumos cujo estoque não cobre a necessidade da ordem."""
+        compras = []
+        for reg in self.necessidade_insumos.values():
+            ins, precisa = reg["insumo"], reg["qtd"]
+            falta = precisa - ins.estoque
+            if falta > 0.0001:
+                compras.append({
+                    "insumo": ins, "precisa": precisa, "estoque": ins.estoque,
+                    "comprar": falta, "custo": falta * ins.custo_unitario,
+                })
+        return sorted(compras, key=lambda x: x["insumo"].nome)
+
+    @property
+    def custo_compras(self) -> float:
+        return sum(c["custo"] for c in self.lista_compras)
+
+    @property
+    def insumos_suficientes(self) -> bool:
+        return not self.lista_compras
+
+
+class OrdemProducaoItem(db.Model):
+    __tablename__ = "ordem_producao_itens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_id = db.Column(db.Integer, db.ForeignKey("ordens_producao.id"), nullable=False)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    tamanho = db.Column(db.String(5), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False, default=1.0)
+
+    ordem = db.relationship("OrdemProducao", back_populates="itens")
+    peca = db.relationship("Peca")
+
+
 class Cliente(db.Model):
     """Cliente com dados de contato e histórico de compras."""
 
@@ -249,6 +367,10 @@ class Cliente(db.Model):
     nome = db.Column(db.String(160), nullable=False)
     instagram = db.Column(db.String(80), default="")
     telefone = db.Column(db.String(40), default="")
+    # Data de nascimento (para lembrete de aniversário).
+    nascimento = db.Column(db.Date)
+    # Tamanho habitual informado manualmente (sobrepõe o calculado).
+    tamanho_habitual = db.Column(db.String(5), default="")
 
     # Endereço (opcional) — para envio via Correios.
     cep = db.Column(db.String(12), default="")
@@ -306,6 +428,87 @@ class Cliente(db.Model):
     @property
     def total_pendente(self) -> float:
         return sum(v.receita for v in self.vendas if not v.pago)
+
+    # ----- CRM: aniversário -----
+    @property
+    def aniversario_hoje(self) -> bool:
+        from datetime import date
+        if not self.nascimento:
+            return False
+        hoje = date.today()
+        return (self.nascimento.month, self.nascimento.day) == (hoje.month, hoje.day)
+
+    @property
+    def aniversario_no_mes(self) -> bool:
+        from datetime import date
+        return bool(self.nascimento) and self.nascimento.month == date.today().month
+
+    @property
+    def dias_para_aniversario(self):
+        """Dias até o próximo aniversário (0 = hoje). None se sem data."""
+        from datetime import date
+        if not self.nascimento:
+            return None
+        hoje = date.today()
+
+        def _no_ano(ano):
+            try:
+                return self.nascimento.replace(year=ano)
+            except ValueError:  # 29/02 em ano não bissexto
+                return self.nascimento.replace(year=ano, day=28)
+
+        prox = _no_ano(hoje.year)
+        if prox < hoje:
+            prox = _no_ano(hoje.year + 1)
+        return (prox - hoje).days
+
+    @property
+    def idade(self):
+        from datetime import date
+        if not self.nascimento:
+            return None
+        hoje = date.today()
+        return hoje.year - self.nascimento.year - (
+            (hoje.month, hoje.day) < (self.nascimento.month, self.nascimento.day)
+        )
+
+    # ----- CRM: recência / reativação -----
+    @property
+    def ultima_compra(self):
+        return max((v.criado_em for v in self.vendas), default=None)
+
+    @property
+    def dias_desde_ultima_compra(self):
+        from datetime import datetime, timezone
+        u = self.ultima_compra
+        if not u:
+            return None
+        if u.tzinfo is None:
+            u = u.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - u).days
+
+    def inativo(self, dias=90) -> bool:
+        """Comprou antes mas está há 'dias' ou mais sem comprar."""
+        d = self.dias_desde_ultima_compra
+        return d is not None and d >= dias
+
+    # ----- CRM: tamanho habitual -----
+    @property
+    def tamanho_frequente(self) -> str:
+        """Tamanho mais comprado no histórico (por quantidade)."""
+        from collections import Counter
+        c = Counter()
+        for v in self.vendas:
+            for it in v.itens:
+                if it.tamanho:
+                    c[it.tamanho] += it.quantidade
+        mais = c.most_common(1)
+        return mais[0][0] if mais else ""
+
+    @property
+    def tamanho_preferido(self) -> str:
+        """Habitual informado, senão o mais frequente do histórico."""
+        return self.tamanho_habitual or self.tamanho_frequente
 
 
 class Venda(db.Model):

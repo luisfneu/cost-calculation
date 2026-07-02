@@ -31,9 +31,23 @@
           <a class="nav-link" href="{{ url_for('main.index') }}">Painel</a>
           <a class="nav-link" href="{{ url_for('main.listar_pecas') }}">Peças</a>
           <a class="nav-link" href="{{ url_for('main.listar_insumos') }}">Insumos</a>
+          <div class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Estoque</a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="{{ url_for('main.inventario') }}">Inventário de peças</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.inventario_insumos') }}">Inventário de insumos</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_ordens') }}">Ordens de produção</a></li>
+            </ul>
+          </div>
           <a class="nav-link" href="{{ url_for('main.listar_vendas') }}">Vendas</a>
           <a class="nav-link" href="{{ url_for('main.listar_encomendas') }}">Encomendas</a>
-          <a class="nav-link" href="{{ url_for('main.listar_clientes') }}">Clientes</a>
+          <div class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Clientes</a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_clientes') }}">Todos os clientes</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.crm') }}"><i class="bi bi-heart"></i> CRM (aniversários / reativação)</a></li>
+            </ul>
+          </div>
           <div class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Financeiro</a>
             <ul class="dropdown-menu dropdown-menu-end">

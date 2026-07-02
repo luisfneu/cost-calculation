@@ -16,35 +16,71 @@
     .marca { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; letter-spacing: 3px; text-transform: uppercase; }
     .sub { font-size: .6rem; letter-spacing: 4px; text-transform: uppercase; color: #b08a4f; margin-bottom: 10px; }
     .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; margin: 8px 0 2px; }
+    .nome .tam-badge { font-family: 'Jost'; font-size: .8rem; color: #fff; background: #b08a4f; border-radius: 6px; padding: 1px 8px; vertical-align: middle; margin-left: 6px; }
     .colecao { font-size: .8rem; color: #6b5f52; }
     .preco { font-size: 1.4rem; color: #b08a4f; font-weight: 500; margin: 8px 0; }
     #qr { display: flex; justify-content: center; margin-top: 10px; }
+    .sku-txt { font-size: .7rem; letter-spacing: 1px; color: #6b5f52; margin-top: 6px; }
     .acoes { margin-top: 20px; }
+    .acoes select { font-family: 'Jost'; padding: 7px 10px; border: 1px solid #c9a96a; border-radius: 6px; margin-right: 8px; }
     button { font-family: 'Jost'; padding: 8px 18px; border: 1px solid #b08a4f; background: #b08a4f; color: #fff; border-radius: 6px; cursor: pointer; }
-    @media print { body { background: #fff; } .acoes { display: none; } .etiqueta { border: 1px dashed #999; } }
+    .aviso { color: #a5624f; font-size: .8rem; margin-top: 10px; }
+    @media print { body { background: #fff; } .acoes, .aviso { display: none; } .etiqueta { border: 1px dashed #999; } }
   </style>
 </head>
 <body>
   <div class="etiqueta">
     <div class="marca">Sabrina Hansen</div>
     <div class="sub">Atelier</div>
-    <div class="nome">{{ peca.nome }}</div>
+    <div class="nome">{{ peca.nome }}<span class="tam-badge" id="tam-badge" style="{{ '' if tam_sel else 'display:none' }}">{{ tam_sel }}</span></div>
     {% if peca.colecao %}<div class="colecao">{{ peca.colecao }}</div>{% endif %}
     <div class="preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
     <div id="qr"></div>
+    <div class="sku-txt" id="sku-txt"></div>
   </div>
+
+  {% if not peca.sku %}
+  <div class="aviso">⚠️ Esta peça não tem SKU. <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}">Defina um SKU</a> para o QR funcionar na leitura da venda.</div>
+  {% endif %}
+
   <div class="acoes">
+    <label>Tamanho:
+      <select id="sel-tam">
+        <option value="">— sem tamanho —</option>
+        {% for t in tamanhos %}<option value="{{ t }}" {{ 'selected' if t == tam_sel }}>{{ t }}</option>{% endfor %}
+      </select>
+    </label>
     <button onclick="window.print()">🖨️ Imprimir etiqueta</button>
     <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}">voltar</a>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script>
-    new QRCode(document.getElementById("qr"), {
-      text: {{ url_peca | tojson }},
-      width: 120, height: 120,
-      colorDark: "#2c2620", colorLight: "#ffffff",
-    });
+    const SKU = {{ (peca.sku or '') | tojson }};
+    const selTam = document.getElementById('sel-tam');
+    const badge = document.getElementById('tam-badge');
+    const skuTxt = document.getElementById('sku-txt');
+    const qrBox = document.getElementById('qr');
+
+    function conteudoQR(tam) {
+      // Formato lido na venda: SKU--TAMANHO (o tamanho é opcional).
+      return tam ? `${SKU}--${tam}` : SKU;
+    }
+    function gerar() {
+      const tam = selTam.value;
+      const texto = conteudoQR(tam);
+      qrBox.innerHTML = '';
+      new QRCode(qrBox, {
+        text: texto || ' ',
+        width: 120, height: 120,
+        colorDark: "#2c2620", colorLight: "#ffffff",
+      });
+      skuTxt.textContent = texto;
+      badge.textContent = tam;
+      badge.style.display = tam ? '' : 'none';
+    }
+    selTam.addEventListener('change', gerar);
+    gerar();
   </script>
 </body>
 </html>

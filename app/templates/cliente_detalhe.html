@@ -18,6 +18,24 @@
     {% if cliente.tem_endereco %}
       <div class="text-muted mt-1"><i class="bi bi-geo-alt"></i> {{ cliente.endereco_completo }}</div>
     {% endif %}
+    <div class="d-flex flex-wrap gap-2 mt-2">
+      {% if cliente.nascimento %}
+        <span class="badge {{ 'text-bg-warning' if cliente.aniversario_hoje else 'text-bg-light' }}">
+          <i class="bi bi-gift"></i> {{ cliente.nascimento.strftime('%d/%m') }}
+          {% if cliente.idade is not none %}({{ cliente.idade }} anos){% endif %}
+          {% if cliente.aniversario_hoje %} — é hoje! 🎉
+          {% elif cliente.dias_para_aniversario is not none %} · em {{ cliente.dias_para_aniversario }} dia(s){% endif %}
+        </span>
+      {% endif %}
+      {% if cliente.tamanho_preferido %}
+        <span class="badge text-bg-light">Tamanho habitual: <strong>{{ cliente.tamanho_preferido }}</strong>{% if not cliente.tamanho_habitual %} <span class="text-muted">(do histórico)</span>{% endif %}</span>
+      {% endif %}
+      {% if cliente.ultima_compra %}
+        <span class="badge {{ 'text-bg-danger' if cliente.inativo() else 'text-bg-light' }}">
+          Última compra: {{ cliente.dias_desde_ultima_compra }} dia(s) atrás{% if cliente.inativo() %} · reativar{% endif %}
+        </span>
+      {% endif %}
+    </div>
   </div>
   <div class="text-nowrap">
     <a href="{{ url_for('main.form_cliente', cliente_id=cliente.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
