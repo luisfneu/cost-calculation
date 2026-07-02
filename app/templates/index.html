@@ -9,17 +9,24 @@
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card text-bg-primary h-100"><div class="card-body">
       <div class="h2 mb-0">{{ pecas|length }}</div><div>Peças cadastradas</div>
     </div></div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="card text-bg-secondary h-100"><div class="card-body">
       <div class="h2 mb-0">{{ insumos|length }}</div><div>Insumos no estoque</div>
     </div></div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
+    <a href="{{ url_for('main.listar_clientes') }}" class="text-decoration-none">
+      <div class="card text-bg-dark h-100"><div class="card-body">
+        <div class="h2 mb-0">{{ n_clientes }}</div><div>Clientes cadastrados</div>
+      </div></div>
+    </a>
+  </div>
+  <div class="col-md-3">
     <div class="card {{ 'text-bg-danger' if alertas else 'text-bg-success' }} h-100"><div class="card-body">
       <div class="h2 mb-0">{{ alertas|length }}</div><div>Insumos com estoque baixo</div>
     </div></div>
@@ -34,21 +41,37 @@
 </div>
 {% endif %}
 
+<!-- Totalizadores de vendas -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h5 mb-0">Vendas</h2>
+  <a href="{{ url_for('main.contabilidade') }}" class="btn btn-sm btn-outline-primary">Ver contabilidade →</a>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card text-bg-secondary h-100"><div class="card-body">
+    <div class="h4 mb-0">{{ totais_venda.qtd | num }}</div><div class="small">Peças vendidas</div></div></div></div>
+  <div class="col-md-3"><div class="card text-bg-primary h-100"><div class="card-body">
+    <div class="h4 mb-0">{{ totais_venda.receita | moeda }}</div><div class="small">Receita</div></div></div></div>
+  <div class="col-md-3"><div class="card text-bg-success h-100"><div class="card-body">
+    <div class="h4 mb-0">{{ totais_venda.lucro | moeda }}</div><div class="small">Lucro</div></div></div></div>
+  <div class="col-md-3"><div class="card text-bg-danger h-100"><div class="card-body">
+    <div class="h4 mb-0">{{ totais_venda.a_receber | moeda }}</div><div class="small">A receber</div></div></div></div>
+</div>
+
 <h2 class="h5 mb-3">Peças recentes</h2>
 {% if pecas %}
-<div class="row g-3">
-  {% for peca in pecas[:6] %}
-  <div class="col-md-4">
-    <div class="card h-100">
+<div class="row g-4">
+  {% for peca in pecas[:8] %}
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="card h-100 text-center">
       {% if peca.foto %}
-        <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-peca card-img-top" alt="{{ peca.nome }}">
+        <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="vitrine-foto card-img-top" alt="{{ peca.nome }}">
       {% else %}
-        <div class="foto-peca sem-foto">sem foto</div>
+        <div class="vitrine-foto sem-foto">sem foto</div>
       {% endif %}
       <div class="card-body">
-        <h3 class="h6">{{ peca.nome }}</h3>
+        <div class="vitrine-nome">{{ peca.nome }}</div>
         <div class="small text-muted">Custo: {{ peca.custo_total | moeda }}</div>
-        <div class="fw-bold text-success">Venda (etiqueta): {{ peca.preco_etiqueta_efetivo | moeda }}</div>
+        <div class="vitrine-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
         <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="stretched-link"></a>
       </div>
     </div>

@@ -25,8 +25,14 @@
     <!-- Comprador / pagamento -->
     <div class="row mb-3">
       <div class="col-6">
-        <div class="small text-muted">Comprador</div>
-        <div>{{ venda.comprador or '—' }}</div>
+        <div class="small text-muted">Cliente</div>
+        <div>
+          {{ venda.cliente_nome or '—' }}
+          {% if venda.cliente %}
+            {% if venda.cliente.instagram_handle %}<a href="https://instagram.com/{{ venda.cliente.instagram_handle }}" target="_blank" class="ms-1 no-print"><i class="bi bi-instagram"></i></a>{% endif %}
+            {% if venda.cliente.whatsapp_numero %}<a href="https://wa.me/{{ venda.cliente.whatsapp_numero }}" target="_blank" class="ms-1 text-success no-print"><i class="bi bi-whatsapp"></i></a>{% endif %}
+          {% endif %}
+        </div>
       </div>
       <div class="col-6 text-end">
         <div class="small text-muted">Pagamento</div>
@@ -68,8 +74,8 @@
       </div>
     </div>
 
-    <!-- Bloco interno (não some na impressão, mas em tom discreto) -->
-    <div class="border-top pt-2 mt-2 small text-muted">
+    <!-- Bloco interno: não aparece na impressão -->
+    <div class="border-top pt-2 mt-2 small text-muted no-print">
       {% if venda.marketplace_pct %}Comissão marketplace: {{ venda.comissao_marketplace | moeda }} ({{ venda.marketplace_pct | num }}%) · {% endif %}
       Custo total: {{ venda.custo_total | moeda }} · Lucro: {{ venda.lucro | moeda }}
     </div>

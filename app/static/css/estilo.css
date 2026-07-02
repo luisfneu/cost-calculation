@@ -85,6 +85,7 @@ main.container { max-width: 1100px; }
 .card.text-bg-primary :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
 .card.text-bg-secondary :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
 .card.text-bg-success :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
+.card.text-bg-dark :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6),
 .card.text-bg-danger :is(h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6) {
   font-family: 'Cormorant Garamond', serif;
   color: inherit;
@@ -232,6 +233,35 @@ main.container { max-width: 1100px; }
 }
 .picker-option:hover { background: rgba(176, 138, 79, .1); }
 .picker-option .ms-auto { margin-left: auto; }
+
+/* Vitrine (mostrar ao cliente) */
+.vitrine-foto {
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+  background: var(--cream-soft);
+  border-bottom: 1px solid var(--line);
+}
+.vitrine-nome {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+.vitrine-preco {
+  color: var(--gold);
+  font-weight: 500;
+  letter-spacing: .5px;
+}
+
+/* Título de seção em formulários */
+.section-titulo {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.05rem;
+  color: var(--gold);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: .2rem;
+  margin: .5rem 0 .8rem;
+}
 
 /* Impressão do pedido */
 @media print {

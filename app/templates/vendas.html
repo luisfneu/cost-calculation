@@ -8,42 +8,60 @@
     <h2 class="h5 mb-3">Registrar venda</h2>
     {% if pecas %}
     <form method="post" action="{{ url_for('main.registrar_venda') }}" id="form-venda">
+      <!-- Cliente (topo) -->
+      <div class="section-titulo">Cliente</div>
+      <div class="row g-3 align-items-end mb-2">
+        <div class="col-md-6">
+          <select name="cliente_id" id="sel-cliente" class="form-select">
+            <option value="">— sem cliente —</option>
+            {% for c in clientes %}
+              <option value="{{ c.id }}" {{ 'selected' if prefill_pedido.get('cliente_id')|string == c.id|string }}>{{ c.nome }}{% if c.instagram_handle %} (@{{ c.instagram_handle }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <a href="{{ url_for('main.form_cliente') }}" class="btn btn-outline-secondary" target="_blank">+ Novo cliente</a>
+        </div>
+      </div>
+      <div id="cliente-dados" class="mb-3 small" style="display:none"></div>
+
+      <div class="section-titulo">Itens</div>
       <table class="table align-middle" id="tabela-itens">
         <thead class="table-light">
           <tr><th style="width:32%">Peça</th><th>Tamanho</th><th>Qtd</th><th>Preço un. (R$)</th><th>Desc. (R$)</th><th>Subtotal</th><th></th></tr>
         </thead>
         <tbody id="linhas-itens"></tbody>
         <tfoot>
-          <tr class="fw-bold"><td colspan="5" class="text-end">Total produtos</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
+          <tr class="fw-bold"><td colspan="5" class="text-end">Total dos itens</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
         </tfoot>
       </table>
       <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-item">+ Adicionar item</button>
 
-      <div class="row g-3 align-items-end border-top pt-3">
-        <div class="col-md-2">
-          <label class="form-label">Frete (R$) <span class="text-muted">opc.</span></label>
+      <!-- Frete, taxas e descontos -->
+      <div class="section-titulo">Frete, taxas e descontos</div>
+      <div class="row g-3 align-items-start mb-3">
+        <div class="col-md-3">
+          <label class="form-label">Frete (R$)</label>
           <input type="text" name="frete" id="in-frete" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('frete','') }}">
-        </div>
-        <div class="col-md-3 d-flex align-items-center">
           <div class="form-check mt-2">
             <input class="form-check-input" type="checkbox" name="frete_cortesia" id="chk-cortesia" {{ 'checked' if prefill_pedido.get('frete_cortesia') }}>
-            <label class="form-check-label" for="chk-cortesia">Frete cortesia <span class="text-muted small">(custo)</span></label>
+            <label class="form-check-label" for="chk-cortesia">Frete cortesia</label>
           </div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">% Marketplace <span class="text-muted">opc.</span></label>
+        <div class="col-md-3">
+          <label class="form-label">% Marketplace</label>
           <input type="text" name="marketplace_pct" id="in-mkt" class="form-control" placeholder="Ex.: 12" value="{{ prefill_pedido.get('marketplace_pct','') }}">
         </div>
-        <div class="col-md-2">
-          <label class="form-label">Desconto total (R$) <span class="text-muted">opc.</span></label>
+        <div class="col-md-3">
+          <label class="form-label">Desconto total (R$)</label>
           <input type="text" name="desconto_total" id="in-desconto" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('desconto_total','') }}">
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Comprador <span class="text-muted">opc.</span></label>
-          <input type="text" name="comprador" class="form-control" placeholder="nome / contato" value="{{ prefill_pedido.get('comprador','') }}">
-        </div>
+      </div>
 
-        <div class="col-md-3">
+      <!-- Pagamento -->
+      <div class="section-titulo">Pagamento</div>
+      <div class="row g-3 align-items-end mb-3">
+        <div class="col-md-4">
           <label class="form-label">Forma de pagamento</label>
           <select name="forma_pagamento" class="form-select">
             <option value="">—</option>
@@ -52,41 +70,44 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-2 d-flex align-items-center">
+        <div class="col-md-3 d-flex align-items-center">
           <div class="form-check mt-4">
             <input class="form-check-input" type="checkbox" name="pago" id="chk-pago" {{ 'checked' if prefill_pedido.get('pago') }}>
             <label class="form-check-label" for="chk-pago">Pago</label>
           </div>
         </div>
-        <div class="col-md-4">
-          <div class="small text-muted" id="resumo-venda">Adicione itens à venda.</div>
+      </div>
+
+      <!-- Totalizador resumido + enviar -->
+      <div class="row border-top pt-3">
+        <div class="col-md-6 ms-auto">
+          <table class="table table-sm mb-2">
+            <tr><td>Total dos itens</td><td class="text-end" id="s-itens">R$ 0,00</td></tr>
+            <tr><td>Frete</td><td class="text-end" id="s-frete">R$ 0,00</td></tr>
+            <tr><td>Taxas (marketplace)</td><td class="text-end" id="s-taxas">R$ 0,00</td></tr>
+            <tr><td>Desconto</td><td class="text-end" id="s-desconto">R$ 0,00</td></tr>
+            <tr class="border-top"><td class="h5 mb-0">Valor total</td><td class="text-end h5 mb-0 text-success" id="s-total">R$ 0,00</td></tr>
+          </table>
+          <button type="button" class="btn btn-link btn-sm p-0 no-print" id="toggle-detalhe">▸ ver custo e lucro</button>
+          <div id="resumo-detalhe" class="small text-muted" style="display:none"></div>
         </div>
-        <div class="col-md-3 text-end">
-          <button class="btn btn-primary">Registrar venda</button>
-        </div>
+      </div>
+      <div class="text-end mt-2">
+        <button class="btn btn-primary btn-lg">Registrar venda</button>
       </div>
     </form>
 
     <script id="dados-pecas" type="application/json">
       [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ p.estoque_por_tamanho|tojson }}}{{ "," if not loop.last }}{% endfor %}]
     </script>
+    <script id="dados-clientes" type="application/json">
+      [{% for c in clientes %}{"id": {{ c.id }}, "nome": {{ c.nome|tojson }}, "instagram": {{ c.instagram_handle|tojson }}, "whatsapp": {{ c.whatsapp_numero|tojson }}, "telefone": {{ c.telefone|tojson }}, "endereco": {{ c.endereco_completo|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+    </script>
     <script id="prefill-itens" type="application/json">{{ prefill_itens|tojson }}</script>
     {% else %}
     <p class="text-muted">Nenhuma peça com estoque disponível. Produza peças antes de vender.</p>
     {% endif %}
   </div>
-</div>
-
-<!-- Totais -->
-<div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card text-bg-secondary"><div class="card-body">
-    <div class="h4 mb-0">{{ totais.qtd | num }}</div><div class="small">Peças vendidas</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-primary"><div class="card-body">
-    <div class="h4 mb-0">{{ totais.receita | moeda }}</div><div class="small">Receita</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-danger"><div class="card-body">
-    <div class="h4 mb-0">{{ totais.custo | moeda }}</div><div class="small">Custos (prod.+frete+mkt)</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-success"><div class="card-body">
-    <div class="h4 mb-0">{{ totais.lucro | moeda }}</div><div class="small">Lucro</div></div></div></div>
 </div>
 
 <!-- Histórico de vendas -->
@@ -97,8 +118,8 @@
     <div class="table-responsive">
     <table class="table align-middle">
       <thead class="table-light">
-        <tr><th>Data</th><th>Itens</th><th>Comprador</th><th>Pgto</th>
-            <th>Receita</th><th>Frete</th><th>Comissão</th><th>Custo total</th><th>Lucro</th><th></th></tr>
+        <tr><th>Data</th><th>Itens</th><th>Cliente</th><th>Pgto</th>
+            <th>Valor total</th><th>Frete</th><th></th></tr>
       </thead>
       <tbody>
       {% for v in vendas %}
@@ -112,16 +133,13 @@
               </div>
             {% endfor %}
           </td>
-          <td>{{ v.comprador or '—' }}</td>
+          <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
           <td>
             {{ v.forma_pagamento or '—' }}
             {% if v.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}
           </td>
           <td class="fw-bold">{{ v.receita | moeda }}</td>
           <td>{{ v.frete | moeda }}{% if v.frete_cortesia %} <span class="badge text-bg-light">cortesia</span>{% endif %}</td>
-          <td>{{ v.comissao_marketplace | moeda }}{% if v.marketplace_pct %} <span class="small text-muted">({{ v.marketplace_pct | num }}%)</span>{% endif %}</td>
-          <td>{{ v.custo_total | moeda }}</td>
-          <td class="fw-bold {{ 'text-success' if v.lucro >= 0 else 'text-danger' }}">{{ v.lucro | moeda }}</td>
           <td class="text-nowrap text-end">
             <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
             <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
@@ -205,36 +223,71 @@
   }
 
   function recalcular() {
-    let totalProdutos = 0, totalCusto = 0;
+    let totalItens = 0, totalCusto = 0, totalBruto = 0, descItens = 0;
     corpo.querySelectorAll('.item-row').forEach(tr => {
       const p = acha(tr.querySelector('.picker-value').value);
       const qtd = num(tr.querySelector('.in-qtd').value);
       const preco = num(tr.querySelector('.in-preco').value);
       const desc = num(tr.querySelector('.in-desc').value);
-      const sub = preco * qtd - desc;
+      const bruto = preco * qtd;
+      const sub = bruto - desc;
       tr.querySelector('.subtotal').textContent = brl(sub);
-      totalProdutos += sub;
+      totalItens += sub;
+      totalBruto += bruto;
+      descItens += desc;
       if (p) totalCusto += p.custo * qtd;
     });
 
-    const descTotal = num(document.getElementById('in-desconto').value);
-    totalProdutos -= descTotal;
-    document.getElementById('total-produtos').textContent = brl(totalProdutos);
-
     const frete = num(document.getElementById('in-frete').value);
     const mkt = num(document.getElementById('in-mkt').value);
+    const descTotal = num(document.getElementById('in-desconto').value);
     const cortesia = document.getElementById('chk-cortesia').checked;
-    const comissao = totalProdutos * mkt / 100;
-    const receita = totalProdutos + (cortesia ? 0 : frete);
+
+    const comissao = totalItens * mkt / 100;
+    // Desconto do pedido reduz só o valor final (não o total de itens).
+    const valorTotal = totalItens + (cortesia ? 0 : frete) - descTotal;
     const custo = totalCusto + comissao + (cortesia ? frete : 0);
-    const lucro = receita - custo;
-    document.getElementById('resumo-venda').innerHTML =
-      `Receita <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
-      `Lucro <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b>`;
+    const lucro = valorTotal - custo;
+    const descGeral = descItens + descTotal;
+    const pctDesc = totalBruto ? (descGeral / totalBruto * 100) : 0;
+
+    document.getElementById('total-produtos').textContent = brl(totalItens);
+    document.getElementById('s-itens').textContent = brl(totalItens);
+    document.getElementById('s-frete').textContent = cortesia ? 'cortesia' : brl(frete);
+    document.getElementById('s-taxas').textContent = brl(comissao);
+    document.getElementById('s-desconto').textContent = '− ' + brl(descGeral);
+    document.getElementById('s-total').textContent = brl(valorTotal);
+    document.getElementById('resumo-detalhe').innerHTML =
+      `Custo total: <b>${brl(custo)}</b> · ` +
+      `Lucro: <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b> · ` +
+      `Desconto: <b>${brl(descGeral)}</b> (${pctDesc.toFixed(1)}% da venda)`;
   }
+
+  // Painel com os dados do cliente selecionado.
+  const CLIENTES = JSON.parse(document.getElementById('dados-clientes').textContent);
+  const selCliente = document.getElementById('sel-cliente');
+  function mostrarCliente() {
+    const box = document.getElementById('cliente-dados');
+    const c = CLIENTES.find(x => String(x.id) === selCliente.value);
+    if (!c) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    const partes = [];
+    if (c.instagram) partes.push(`<i class="bi bi-instagram"></i> <a href="https://instagram.com/${c.instagram}" target="_blank">@${c.instagram}</a>`);
+    if (c.whatsapp) partes.push(`<i class="bi bi-whatsapp text-success"></i> <a href="https://wa.me/${c.whatsapp}" target="_blank" class="text-success">${c.telefone}</a>`);
+    if (c.endereco) partes.push(`<i class="bi bi-geo-alt"></i> ${c.endereco}`);
+    box.innerHTML = partes.length ? partes.join(' &nbsp;·&nbsp; ') : '<span class="text-muted">Sem dados de contato/endereço.</span>';
+    box.style.display = 'block';
+  }
+  selCliente.addEventListener('change', mostrarCliente);
+  mostrarCliente();
 
   // --- Eventos ---
   document.getElementById('add-item').addEventListener('click', novaLinha);
+  document.getElementById('toggle-detalhe').addEventListener('click', function () {
+    const d = document.getElementById('resumo-detalhe');
+    const vis = d.style.display !== 'none';
+    d.style.display = vis ? 'none' : 'block';
+    this.textContent = vis ? '▸ ver custo e lucro' : '▾ ocultar custo e lucro';
+  });
 
   corpo.addEventListener('input', recalcular);
   corpo.addEventListener('change', recalcular);

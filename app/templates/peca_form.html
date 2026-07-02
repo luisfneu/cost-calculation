@@ -3,10 +3,17 @@
 <h1 class="h3 mb-4">{{ 'Editar peça' if peca else 'Nova peça' }}</h1>
 
 <form method="post" enctype="multipart/form-data" class="card card-body bg-white" style="max-width:820px">
-  <div class="mb-3">
-    <label class="form-label">Nome *</label>
-    <input type="text" name="nome" class="form-control" required
-           value="{{ peca.nome if peca else '' }}" placeholder="Ex.: Camiseta básica gola redonda">
+  <div class="row">
+    <div class="col-md-7 mb-3">
+      <label class="form-label">Nome *</label>
+      <input type="text" name="nome" class="form-control" required
+             value="{{ peca.nome if peca else '' }}" placeholder="Ex.: Camiseta básica gola redonda">
+    </div>
+    <div class="col-md-5 mb-3">
+      <label class="form-label">Coleção</label>
+      <input type="text" name="colecao" class="form-control"
+             value="{{ peca.colecao if peca else '' }}" placeholder="Ex.: Verão 2026">
+    </div>
   </div>
   <div class="mb-3">
     <label class="form-label">Descrição</label>

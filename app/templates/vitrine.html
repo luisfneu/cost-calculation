@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4 no-print">
+  <h1 class="h3 mb-0">Vitrine</h1>
+  <button onclick="window.print()" class="btn btn-outline-primary">🖨️ Imprimir</button>
+</div>
+
+{% set tem_pecas = grupos.values() | map('length') | sum %}
+{% if tem_pecas %}
+  {% for colecao, pecas in grupos.items() %}
+    <h2 class="h5 section-titulo">{{ colecao }}</h2>
+    <div class="row g-4 mb-4">
+      {% for peca in pecas %}
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card h-100 text-center">
+          {% if peca.foto %}
+            <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="vitrine-foto card-img-top" alt="{{ peca.nome }}">
+          {% else %}
+            <div class="vitrine-foto sem-foto">sem foto</div>
+          {% endif %}
+          <div class="card-body">
+            <div class="vitrine-nome">{{ peca.nome }}</div>
+            {% if peca.colecao %}<div class="small text-muted">{{ peca.colecao }}</div>{% endif %}
+            <div class="vitrine-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="text-muted">Nenhuma peça cadastrada para exibir.</p>
+{% endif %}
+{% endblock %}

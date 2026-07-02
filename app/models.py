@@ -6,6 +6,7 @@ Domínio:
 - PecaInsumo: quantidade de cada insumo usada em uma peça (ficha técnica / BOM).
 - MovimentoEstoque: histórico de entradas/saídas de estoque dos insumos.
 """
+import re
 from datetime import datetime, timezone
 
 from flask_sqlalchemy import SQLAlchemy
@@ -39,6 +40,8 @@ class Insumo(db.Model):
     estoque = db.Column(db.Float, nullable=False, default=0.0)
     # Alerta quando o estoque fica abaixo deste valor.
     estoque_minimo = db.Column(db.Float, nullable=False, default=0.0)
+    # Insumo inativo não gera alerta de estoque no painel.
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
     criado_em = db.Column(db.DateTime, default=_agora)
 
     usos = db.relationship("PecaInsumo", back_populates="insumo", cascade="all, delete-orphan")
@@ -62,6 +65,7 @@ class Peca(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
+    colecao = db.Column(db.String(120), default="")  # coleção a que a peça pertence
     descricao = db.Column(db.Text, default="")
     foto = db.Column(db.String(255))  # nome do arquivo salvo em static/uploads
 
@@ -177,6 +181,74 @@ class MovimentoPeca(db.Model):
     peca = db.relationship("Peca", back_populates="movimentos")
 
 
+class Cliente(db.Model):
+    """Cliente com dados de contato e histórico de compras."""
+
+    __tablename__ = "clientes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(160), nullable=False)
+    instagram = db.Column(db.String(80), default="")
+    telefone = db.Column(db.String(40), default="")
+
+    # Endereço (opcional) — para envio via Correios.
+    cep = db.Column(db.String(12), default="")
+    logradouro = db.Column(db.String(160), default="")
+    numero = db.Column(db.String(20), default="")
+    complemento = db.Column(db.String(80), default="")
+    bairro = db.Column(db.String(80), default="")
+    cidade = db.Column(db.String(80), default="")
+    uf = db.Column(db.String(2), default="")
+
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    vendas = db.relationship("Venda", back_populates="cliente")
+
+    @property
+    def tem_endereco(self) -> bool:
+        return bool(self.logradouro or self.cep or self.cidade)
+
+    @property
+    def endereco_completo(self) -> str:
+        linha1 = self.logradouro
+        if self.numero:
+            linha1 += f", {self.numero}"
+        if self.complemento:
+            linha1 += f" - {self.complemento}"
+        partes = [p for p in [linha1, self.bairro,
+                              " ".join(x for x in [self.cidade, self.uf] if x),
+                              f"CEP {self.cep}" if self.cep else ""] if p]
+        return " · ".join(partes)
+
+    @property
+    def instagram_handle(self) -> str:
+        """Handle sem @ e sem URL (para montar o link)."""
+        h = (self.instagram or "").strip()
+        h = h.rstrip("/").split("/")[-1]  # aceita URL colada
+        return h.lstrip("@")
+
+    @property
+    def whatsapp_numero(self) -> str:
+        """Só dígitos, com DDI 55 se parecer número nacional sem código."""
+        d = re.sub(r"\D", "", self.telefone or "")
+        if d and not d.startswith("55") and len(d) <= 11:
+            d = "55" + d
+        return d
+
+    # ----- Histórico -----
+    @property
+    def total_compras(self) -> float:
+        return sum(v.receita for v in self.vendas)
+
+    @property
+    def total_pago(self) -> float:
+        return sum(v.receita for v in self.vendas if v.pago)
+
+    @property
+    def total_pendente(self) -> float:
+        return sum(v.receita for v in self.vendas if not v.pago)
+
+
 class Venda(db.Model):
     """Pedido de venda com um ou mais itens (peças/tamanhos).
 
@@ -196,15 +268,21 @@ class Venda(db.Model):
     desconto_total = db.Column(db.Float, nullable=False, default=0.0)   # desconto no pedido (R$)
 
     # Dados do comprador / pagamento.
-    comprador = db.Column(db.String(160), default="")        # opcional
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))  # opcional
+    comprador = db.Column(db.String(160), default="")        # legado / texto livre
     forma_pagamento = db.Column(db.String(40), default="")   # Pix, Dinheiro, Cartão...
     pago = db.Column(db.Boolean, nullable=False, default=False)
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
+    cliente = db.relationship("Cliente", back_populates="vendas")
     itens = db.relationship(
         "VendaItem", back_populates="venda", cascade="all, delete-orphan"
     )
+
+    @property
+    def cliente_nome(self) -> str:
+        return self.cliente.nome if self.cliente else (self.comprador or "")
 
     @property
     def quantidade_total(self) -> float:
@@ -212,30 +290,45 @@ class Venda(db.Model):
 
     @property
     def receita_itens(self) -> float:
-        """Soma dos itens já com o desconto de cada item."""
+        """Total dos itens, já com o desconto de cada item (sem o desconto do pedido)."""
         return sum(i.subtotal_receita for i in self.itens)
 
     @property
     def receita_produtos(self) -> float:
-        """Receita dos produtos após descontos de item e desconto total."""
-        return self.receita_itens - self.desconto_total
+        """Mantido = total dos itens. O desconto do pedido NÃO reduz os produtos,
+        só o valor final da venda."""
+        return self.receita_itens
+
+    @property
+    def subtotal_bruto(self) -> float:
+        return sum(i.subtotal_bruto for i in self.itens)
 
     @property
     def desconto_itens(self) -> float:
         return sum(i.desconto for i in self.itens)
 
     @property
+    def desconto_geral(self) -> float:
+        """Descontos de item + desconto do pedido."""
+        return self.desconto_itens + self.desconto_total
+
+    @property
+    def desconto_percentual(self) -> float:
+        """Quanto o desconto total representa sobre o valor bruto dos itens."""
+        return (self.desconto_geral / self.subtotal_bruto * 100.0) if self.subtotal_bruto else 0.0
+
+    @property
     def custo_producao(self) -> float:
         return sum(i.subtotal_custo for i in self.itens)
 
     @property
-    def receita(self) -> float:
-        """Receita total: produtos + frete quando o cliente paga (não cortesia)."""
-        return self.receita_produtos + (0.0 if self.frete_cortesia else self.frete)
+    def comissao_marketplace(self) -> float:
+        return self.receita_itens * (self.marketplace_pct / 100.0)
 
     @property
-    def comissao_marketplace(self) -> float:
-        return self.receita_produtos * (self.marketplace_pct / 100.0)
+    def receita(self) -> float:
+        """Valor final: itens + frete (se o cliente paga) − desconto do pedido."""
+        return self.receita_itens + (0.0 if self.frete_cortesia else self.frete) - self.desconto_total
 
     @property
     def custo_total(self) -> float:

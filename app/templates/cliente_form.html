@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h3 mb-4">{{ 'Editar cliente' if cliente else 'Novo cliente' }}</h1>
+
+<form method="post" class="card card-body bg-white" style="max-width:680px">
+  <div class="mb-3">
+    <label class="form-label">Nome *</label>
+    <input type="text" name="nome" class="form-control" required
+           value="{{ cliente.nome if cliente else '' }}" placeholder="Nome do cliente">
+  </div>
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <label class="form-label"><i class="bi bi-instagram"></i> Instagram</label>
+      <div class="input-group">
+        <span class="input-group-text">@</span>
+        <input type="text" name="instagram" class="form-control"
+               value="{{ cliente.instagram_handle if cliente else '' }}" placeholder="usuario">
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label"><i class="bi bi-whatsapp"></i> Telefone / WhatsApp</label>
+      <input type="text" name="telefone" class="form-control"
+             value="{{ cliente.telefone if cliente else '' }}" placeholder="(11) 99999-9999">
+    </div>
+  </div>
+
+  <div class="section-titulo">Endereço <span class="text-muted small" style="letter-spacing:normal;text-transform:none">(opcional — para envio via Correios)</span></div>
+  <div class="row">
+    <div class="col-md-3 mb-3">
+      <label class="form-label">CEP <span class="small" id="cep-status"></span></label>
+      <input type="text" name="cep" id="cep" class="form-control" value="{{ cliente.cep if cliente else '' }}" placeholder="00000-000" maxlength="9">
+    </div>
+    <div class="col-md-7 mb-3">
+      <label class="form-label">Logradouro</label>
+      <input type="text" name="logradouro" id="logradouro" class="form-control" value="{{ cliente.logradouro if cliente else '' }}" placeholder="Rua / Avenida">
+    </div>
+    <div class="col-md-2 mb-3">
+      <label class="form-label">Número</label>
+      <input type="text" name="numero" id="numero" class="form-control" value="{{ cliente.numero if cliente else '' }}">
+    </div>
+    <div class="col-md-5 mb-3">
+      <label class="form-label">Complemento</label>
+      <input type="text" name="complemento" class="form-control" value="{{ cliente.complemento if cliente else '' }}" placeholder="Apto, bloco...">
+    </div>
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Bairro</label>
+      <input type="text" name="bairro" id="bairro" class="form-control" value="{{ cliente.bairro if cliente else '' }}">
+    </div>
+    <div class="col-md-5 mb-3">
+      <label class="form-label">Cidade</label>
+      <input type="text" name="cidade" id="cidade" class="form-control" value="{{ cliente.cidade if cliente else '' }}">
+    </div>
+    <div class="col-md-2 mb-3">
+      <label class="form-label">UF</label>
+      <input type="text" name="uf" id="uf" class="form-control" maxlength="2" value="{{ cliente.uf if cliente else '' }}" placeholder="SP">
+    </div>
+  </div>
+
+  <div>
+    <button class="btn btn-primary">Salvar</button>
+    <a href="{{ url_for('main.listar_clientes') }}" class="btn btn-link">Cancelar</a>
+  </div>
+</form>
+
+<script>
+(function () {
+  const cep = document.getElementById('cep');
+  const status = document.getElementById('cep-status');
+  const campos = {
+    logradouro: document.getElementById('logradouro'),
+    bairro: document.getElementById('bairro'),
+    cidade: document.getElementById('cidade'),
+    uf: document.getElementById('uf'),
+  };
+
+  async function buscar() {
+    const digitos = (cep.value || '').replace(/\D/g, '');
+    if (digitos.length !== 8) { status.textContent = ''; return; }
+    status.textContent = '…';
+    status.className = 'small text-muted';
+    status.title = 'Buscando endereço…';
+    try {
+      const resp = await fetch(`https://viacep.com.br/ws/${digitos}/json/`);
+      const dados = await resp.json();
+      if (dados.erro) {
+        status.textContent = '✗';
+        status.className = 'small text-danger';
+        status.title = 'CEP não encontrado';
+        return;
+      }
+      // Preenche só o que veio (não sobrescreve com vazio).
+      if (dados.logradouro) campos.logradouro.value = dados.logradouro;
+      if (dados.bairro) campos.bairro.value = dados.bairro;
+      if (dados.localidade) campos.cidade.value = dados.localidade;
+      if (dados.uf) campos.uf.value = dados.uf;
+      status.textContent = '✓';
+      status.className = 'small text-success';
+      status.title = 'Endereço preenchido';
+      // Foca no número para o usuário completar.
+      const numero = document.getElementById('numero');
+      if (numero) numero.focus();
+    } catch (e) {
+      status.textContent = '✗';
+      status.className = 'small text-muted';
+      status.title = 'Sem conexão — preencha manualmente';
+    }
+  }
+
+  cep.addEventListener('blur', buscar);
+  cep.addEventListener('input', function () {
+    // Máscara simples 00000-000
+    let d = cep.value.replace(/\D/g, '').slice(0, 8);
+    cep.value = d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+    if (d.length === 8) buscar();
+  });
+})();
+</script>
+{% endblock %}

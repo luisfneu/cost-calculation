@@ -9,7 +9,7 @@
     </thead>
     <tbody id="linhas-itens"></tbody>
     <tfoot>
-      <tr class="fw-bold"><td colspan="5" class="text-end">Total produtos</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
+      <tr class="fw-bold"><td colspan="5" class="text-end">Total dos itens</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
     </tfoot>
   </table>
   <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-item">+ Adicionar item</button>
@@ -34,8 +34,13 @@
       <input type="text" name="desconto_total" id="in-desconto" class="form-control" value="{{ '%.2f'|format(venda.desconto_total) }}">
     </div>
     <div class="col-md-3">
-      <label class="form-label">Comprador</label>
-      <input type="text" name="comprador" class="form-control" value="{{ venda.comprador or '' }}">
+      <label class="form-label">Cliente</label>
+      <select name="cliente_id" class="form-select">
+        <option value="">— sem cliente —</option>
+        {% for c in clientes %}
+          <option value="{{ c.id }}" {{ 'selected' if c.id == venda.cliente_id }}>{{ c.nome }}</option>
+        {% endfor %}
+      </select>
     </div>
 
     <div class="col-md-3">
@@ -143,17 +148,18 @@
       totalProdutos += sub;
       if (p) totalCusto += p.custo * qtd;
     });
-    totalProdutos -= num(document.getElementById('in-desconto').value);
     document.getElementById('total-produtos').textContent = brl(totalProdutos);
     const frete = num(document.getElementById('in-frete').value);
     const mkt = num(document.getElementById('in-mkt').value);
+    const descTotal = num(document.getElementById('in-desconto').value);
     const cortesia = document.getElementById('chk-cortesia').checked;
     const comissao = totalProdutos * mkt / 100;
-    const receita = totalProdutos + (cortesia ? 0 : frete);
+    // Desconto do pedido reduz só o valor final.
+    const receita = totalProdutos + (cortesia ? 0 : frete) - descTotal;
     const custo = totalCusto + comissao + (cortesia ? frete : 0);
     const lucro = receita - custo;
     document.getElementById('resumo-venda').innerHTML =
-      `Receita <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
+      `Valor total <b>${brl(receita)}</b> · Custo <b>${brl(custo)}</b> · ` +
       `Lucro <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b>`;
   }
 
