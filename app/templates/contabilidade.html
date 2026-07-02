@@ -2,15 +2,18 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Contabilidade</h1>
-  <form method="get" class="d-flex align-items-center gap-2">
-    <label class="form-label mb-0 small text-muted">Mês:</label>
-    <select name="mes" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
-      <option value="">Todos</option>
-      {% for m in meses %}
-        <option value="{{ m }}" {{ 'selected' if m == mes_atual }}>{{ mes_label(m) }}</option>
-      {% endfor %}
-    </select>
-  </form>
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('main.exportar_receber_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ contas a receber (CSV)</a>
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 small text-muted">Mês:</label>
+      <select name="mes" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+        <option value="">Todos</option>
+        {% for m in meses %}
+          <option value="{{ m }}" {{ 'selected' if m == mes_atual }}>{{ mes_label(m) }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
 </div>
 
 <!-- KPIs -->
@@ -18,7 +21,7 @@
   <div class="col-md-3"><div class="card text-bg-success h-100"><div class="card-body">
     <div class="h4 mb-0">{{ kpis.recebido | moeda }}</div><div class="small">Recebido (entradas)</div></div></div></div>
   <div class="col-md-3"><div class="card text-bg-danger h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ kpis.saidas | moeda }}</div><div class="small">Saídas (insumos)</div></div></div></div>
+    <div class="h4 mb-0">{{ kpis.saidas | moeda }}</div><div class="small">Saídas (insumos + despesas)</div></div></div></div>
   <div class="col-md-3"><div class="card text-bg-primary h-100"><div class="card-body">
     <div class="h4 mb-0">{{ kpis.saldo | moeda }}</div><div class="small">Saldo de caixa</div></div></div></div>
   <div class="col-md-3"><div class="card text-bg-secondary h-100"><div class="card-body">
@@ -77,10 +80,11 @@
         {% if pendentes %}
         <table class="table table-sm align-middle mb-0">
           {% for v in pendentes %}
-          <tr>
+          <tr class="{{ 'table-warning' if v.vencida }}">
             <td>
               <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}">Pedido #{{ v.id }}</a>
-              <div class="small text-muted">{{ v.cliente_nome or '—' }} · {{ v.criado_em | dt }}</div>
+              {% if v.vencida %}<span class="badge text-bg-danger">vencida</span>{% endif %}
+              <div class="small text-muted">{{ v.cliente_nome or '—' }}{% if v.vencimento %} · vence {{ v.vencimento.strftime('%d/%m/%Y') }}{% endif %}</div>
             </td>
             <td class="text-end">{{ v.receita | moeda }}</td>
             <td class="text-end">
@@ -93,6 +97,33 @@
         </table>
         {% else %}
         <p class="text-muted small mb-0">Tudo em dia — nenhuma venda pendente.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card bg-white mb-4">
+      <div class="card-body">
+        <h2 class="h6 text-muted">Contas a pagar (pendentes)</h2>
+        <div class="h4 text-danger">{{ kpis.a_pagar_total | moeda }}</div>
+        {% if a_pagar %}
+        <table class="table table-sm align-middle mb-0">
+          {% for d in a_pagar %}
+          <tr class="{{ 'table-warning' if d.vencida }}">
+            <td>{{ d.descricao }}
+              {% if d.vencida %}<span class="badge text-bg-danger">vencida</span>{% endif %}
+              <div class="small text-muted">{{ d.categoria or '—' }}{% if d.vencimento %} · vence {{ d.vencimento.strftime('%d/%m/%Y') }}{% endif %}</div>
+            </td>
+            <td class="text-end">{{ d.valor | moeda }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('main.pagar_despesa', despesa_id=d.id) }}">
+                <button class="btn btn-sm btn-outline-success">✓ pago</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}
+        <p class="text-muted small mb-0"><a href="{{ url_for('main.listar_despesas') }}">Cadastrar despesas</a> para acompanhar aqui.</p>
         {% endif %}
       </div>
     </div>

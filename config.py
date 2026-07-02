@@ -1,7 +1,12 @@
 """Configuração central da aplicação."""
 import os
 
+from dotenv import load_dotenv
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Carrega variáveis do arquivo .env (se existir) para os.environ.
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 
 class Config:

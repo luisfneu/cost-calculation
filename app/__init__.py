@@ -100,10 +100,16 @@ def _migrar_colunas():
     from sqlalchemy import inspect, text
 
     esperado = {
-        "pecas": {"preco_etiqueta": "FLOAT DEFAULT 0", "colecao": "VARCHAR(120) DEFAULT ''"},
+        "pecas": {
+            "preco_etiqueta": "FLOAT DEFAULT 0", "colecao": "VARCHAR(120) DEFAULT ''",
+            "tags": "VARCHAR(255) DEFAULT ''",
+            "peso_g": "FLOAT DEFAULT 0", "altura_cm": "FLOAT DEFAULT 0",
+            "largura_cm": "FLOAT DEFAULT 0", "comprimento_cm": "FLOAT DEFAULT 0",
+        },
         "insumos": {"ativo": "BOOLEAN DEFAULT 1"},
-        "vendas": {"desconto_total": "FLOAT DEFAULT 0", "cliente_id": "INTEGER"},
+        "vendas": {"desconto_total": "FLOAT DEFAULT 0", "cliente_id": "INTEGER", "vencimento": "DATE"},
         "venda_itens": {"desconto": "FLOAT DEFAULT 0"},
+        "movimentos_estoque": {"custo_unitario": "FLOAT DEFAULT 0"},
         "clientes": {
             "cep": "VARCHAR(12) DEFAULT ''",
             "logradouro": "VARCHAR(160) DEFAULT ''",

@@ -16,6 +16,12 @@
     </div>
   </div>
   <div class="mb-3">
+    <label class="form-label">Tags</label>
+    <input type="text" name="tags" class="form-control"
+           value="{{ peca.tags if peca else '' }}" placeholder="Ex.: floral, algodão, lançamento (separe por vírgula)">
+    <small class="text-muted">Etiquetas livres para organizar e buscar as peças.</small>
+  </div>
+  <div class="mb-3">
     <label class="form-label">Descrição</label>
     <textarea name="descricao" class="form-control" rows="2">{{ peca.descricao if peca else '' }}</textarea>
   </div>
@@ -45,12 +51,37 @@
     </div>
   </div>
   <div class="mb-3 foto-campo">
-    <label class="form-label">Foto da peça</label>
+    <label class="form-label">Foto principal</label>
     <input type="file" name="foto" class="form-control" accept="image/*">
     <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
     {% if peca and peca.foto %}
       <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
     {% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Fotos adicionais (galeria)</label>
+    <input type="file" name="fotos" class="form-control" accept="image/*" multiple>
+    <small class="text-muted">Pode selecionar várias. Gerencie/remova depois na tela da peça.</small>
+  </div>
+
+  <div class="section-titulo">Envio (opcional — para cálculo de frete)</div>
+  <div class="row">
+    <div class="col-6 col-md-3 mb-3">
+      <label class="form-label">Peso (g)</label>
+      <input type="text" name="peso_g" class="form-control" value="{{ peca.peso_g|num if peca and peca.peso_g else '' }}" placeholder="300">
+    </div>
+    <div class="col-6 col-md-3 mb-3">
+      <label class="form-label">Altura (cm)</label>
+      <input type="text" name="altura_cm" class="form-control" value="{{ peca.altura_cm|num if peca and peca.altura_cm else '' }}" placeholder="5">
+    </div>
+    <div class="col-6 col-md-3 mb-3">
+      <label class="form-label">Largura (cm)</label>
+      <input type="text" name="largura_cm" class="form-control" value="{{ peca.largura_cm|num if peca and peca.largura_cm else '' }}" placeholder="20">
+    </div>
+    <div class="col-6 col-md-3 mb-3">
+      <label class="form-label">Comprimento (cm)</label>
+      <input type="text" name="comprimento_cm" class="form-control" value="{{ peca.comprimento_cm|num if peca and peca.comprimento_cm else '' }}" placeholder="30">
+    </div>
   </div>
 
   {% if not peca %}
