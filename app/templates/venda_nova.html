@@ -1,13 +1,19 @@
 {% extends "base.html" %}
 {% block conteudo %}
-<h1 class="h3 mb-4">Vendas</h1>
+{% set encomenda = modo == 'encomenda' %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">{{ 'Nova encomenda' if encomenda else 'Nova venda' }}</h1>
+  {% if encomenda %}
+    <a href="{{ url_for('main.listar_encomendas') }}" class="btn btn-outline-secondary">← Encomendas</a>
+  {% else %}
+    <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-outline-secondary">← Histórico de vendas</a>
+  {% endif %}
+</div>
 
-<!-- Registrar venda -->
 <div class="card bg-white mb-4">
   <div class="card-body">
-    <h2 class="h5 mb-3">Registrar venda</h2>
     {% if pecas %}
-    <form method="post" action="{{ url_for('main.registrar_venda') }}" id="form-venda">
+    <form method="post" action="{{ url_for('main.registrar_encomenda' if encomenda else 'main.registrar_venda') }}" id="form-venda">
       <!-- Cliente (topo) -->
       <div class="section-titulo">Cliente</div>
       <div class="row g-3 align-items-end mb-2">
@@ -41,6 +47,11 @@
       <div class="section-titulo">Frete, taxas e descontos</div>
       <div class="row g-3 align-items-start mb-3">
         <div class="col-md-3">
+          <label class="form-label d-block">Frete Correios</label>
+          <button type="button" class="btn btn-outline-secondary" id="btn-frete">Calcular frete</button>
+          <div class="mt-2" id="frete-resultado"></div>
+        </div>
+        <div class="col-md-3">
           <label class="form-label">Frete (R$)</label>
           <input type="text" name="frete" id="in-frete" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('frete','') }}">
           <div class="form-check mt-2">
@@ -56,36 +67,43 @@
           <label class="form-label">Desconto total (R$)</label>
           <input type="text" name="desconto_total" id="in-desconto" class="form-control" placeholder="0,00" value="{{ prefill_pedido.get('desconto_total','') }}">
         </div>
+      </div>
+      <div class="row g-3 align-items-end mb-3">
         <div class="col-md-3">
-          <label class="form-label d-block">&nbsp;</label>
-          <button type="button" class="btn btn-outline-secondary" id="btn-frete">Calcular frete</button>
-          <div class="mt-2" id="frete-resultado"></div>
+          <label class="form-label">Cupom de desconto <span class="text-muted small">(opc.)</span></label>
+          <input type="text" name="cupom" class="form-control text-uppercase" placeholder="Ex.: VERAO10" value="{{ prefill_pedido.get('cupom','') }}">
         </div>
       </div>
 
-      <!-- Pagamento -->
+      {% if encomenda %}
+      <!-- Pagamento (só na encomenda; na venda o pagamento é feito depois de registrar) -->
       <div class="section-titulo">Pagamento</div>
+      <table class="table table-sm align-middle" id="tabela-pagamentos">
+        <thead class="table-light">
+          <tr><th>Forma</th><th>Valor (R$)</th><th>Parcelas</th><th>Taxa %</th><th></th></tr>
+        </thead>
+        <tbody id="linhas-pagamentos"></tbody>
+      </table>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar pagamento</button>
+        <button type="button" class="btn btn-link btn-sm p-0" id="pagar-tudo">preencher com o valor total</button>
+        <span class="ms-auto small">
+          Pago: <b id="p-pago">R$ 0,00</b> ·
+          Saldo a receber: <b id="p-saldo" class="text-danger">R$ 0,00</b>
+        </span>
+      </div>
       <div class="row g-3 align-items-end mb-3">
-        <div class="col-md-4">
-          <label class="form-label">Forma de pagamento</label>
-          <select name="forma_pagamento" class="form-select">
-            <option value="">—</option>
-            {% for f in ['Pix','Dinheiro','Cartão de crédito','Cartão de débito','Transferência','Boleto'] %}
-              <option {{ 'selected' if f == prefill_pedido.get('forma_pagamento') }}>{{ f }}</option>
-            {% endfor %}
-          </select>
+        <div class="col-md-3">
+          <label class="form-label">Dinheiro recebido <span class="text-muted small">(troco)</span></label>
+          <input type="text" class="form-control" id="in-recebido" placeholder="0,00">
+          <div class="small mt-1" id="troco-info"></div>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Vencimento <span class="text-muted small">(se a prazo)</span></label>
+          <label class="form-label">Vencimento do saldo <span class="text-muted small">(se a prazo)</span></label>
           <input type="date" name="vencimento" class="form-control" value="{{ prefill_pedido.get('vencimento') or '' }}">
         </div>
-        <div class="col-md-3 d-flex align-items-center">
-          <div class="form-check mt-4">
-            <input class="form-check-input" type="checkbox" name="pago" id="chk-pago" {{ 'checked' if prefill_pedido.get('pago') }}>
-            <label class="form-check-label" for="chk-pago">Pago</label>
-          </div>
-        </div>
       </div>
+      {% endif %}
 
       <!-- Totalizador resumido + enviar -->
       <div class="row border-top pt-3">
@@ -97,12 +115,12 @@
             <tr><td>Desconto</td><td class="text-end" id="s-desconto">R$ 0,00</td></tr>
             <tr class="border-top"><td class="h5 mb-0">Valor total</td><td class="text-end h5 mb-0 text-success" id="s-total">R$ 0,00</td></tr>
           </table>
-          <button type="button" class="btn btn-link btn-sm p-0 no-print" id="toggle-detalhe">▸ ver custo e lucro</button>
+          <button type="button" class="btn btn-link btn-sm p-0" id="toggle-detalhe">▸ ver custo e lucro</button>
           <div id="resumo-detalhe" class="small text-muted" style="display:none"></div>
         </div>
       </div>
       <div class="text-end mt-2">
-        <button class="btn btn-primary btn-lg">Registrar venda</button>
+        <button class="btn btn-primary btn-lg">Registrar</button>
       </div>
     </form>
 
@@ -114,70 +132,16 @@
     </script>
     <script id="prefill-itens" type="application/json">{{ prefill_itens|tojson }}</script>
     {% else %}
-    <p class="text-muted">Nenhuma peça com estoque disponível. Produza peças antes de vender.</p>
-    {% endif %}
-  </div>
-</div>
-
-<!-- Histórico de vendas -->
-<div class="card bg-white">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <h2 class="h5 mb-0">Histórico de vendas</h2>
-      <div class="d-flex gap-2">
-        <form method="get" class="d-flex gap-2">
-          <input type="text" name="q" class="form-control form-control-sm" placeholder="cliente" value="{{ q }}" style="width:140px">
-          <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
-            <option value="">Todas</option>
-            <option value="pago" {{ 'selected' if status == 'pago' }}>Pagas</option>
-            <option value="pendente" {{ 'selected' if status == 'pendente' }}>Pendentes</option>
-          </select>
-          <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
-        </form>
-        <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ CSV</a>
-      </div>
-    </div>
-    {% if vendas %}
-    <div class="table-responsive">
-    <table class="table align-middle">
-      <thead class="table-light">
-        <tr><th>Data</th><th>Itens</th><th>Cliente</th><th>Pgto</th>
-            <th>Valor total</th><th>Frete</th><th></th></tr>
-      </thead>
-      <tbody>
-      {% for v in vendas %}
-        <tr>
-          <td class="small text-muted">{{ v.criado_em | dt }}</td>
-          <td>
-            {% for it in v.itens %}
-              <div>{{ it.quantidade | num }}× {{ it.peca.nome }}
-                <span class="badge text-bg-light">{{ it.tamanho }}</span>
-                <span class="small text-muted">{{ it.preco_unitario | moeda }}</span>
-              </div>
-            {% endfor %}
-          </td>
-          <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
-          <td>
-            {{ v.forma_pagamento or '—' }}
-            {% if v.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}
-          </td>
-          <td class="fw-bold">{{ v.receita | moeda }}</td>
-          <td>{{ v.frete | moeda }}{% if v.frete_cortesia %} <span class="badge text-bg-light">cortesia</span>{% endif %}</td>
-          <td class="text-nowrap text-end">
-            <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline"
-                  onsubmit="return confirm('Excluir esta venda? As quantidades voltarão ao estoque.')">
-              <button class="btn btn-sm btn-outline-danger">Excluir</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
+    {% if encomenda %}
+      <p class="text-muted">Nenhuma peça cadastrada. Cadastre peças antes de registrar encomendas.</p>
     {% else %}
-    <p class="text-muted">Nenhuma venda registrada ainda.</p>
+      <div class="alert alert-warning mb-0">
+        <strong>Nenhuma peça com estoque disponível para venda.</strong>
+        <p class="mb-2 mt-1 small">A venda mostra apenas peças com estoque. Para vender, <strong>produza peças</strong> (dá entrada no estoque, na tela da peça em “Produzir”), ou registre uma <strong>encomenda</strong> (vende sem estoque e produz depois).</p>
+        <a href="{{ url_for('main.listar_pecas') }}" class="btn btn-sm btn-outline-primary">Ver peças / produzir</a>
+        <a href="{{ url_for('main.registrar_encomenda') }}" class="btn btn-sm btn-outline-secondary">+ Nova encomenda</a>
+      </div>
+    {% endif %}
     {% endif %}
   </div>
 </div>
@@ -214,14 +178,12 @@
 </div>
 
 <script>
-// Cadastro rápido de cliente (modal) — sem sair da tela de venda.
+// Cadastro rápido de cliente (modal).
 (function () {
   const btn = document.getElementById('mc-salvar');
   if (!btn) return;
   const campos = ['nome','instagram','telefone','cep','logradouro','numero','complemento','bairro','cidade','uf'];
   const el = id => document.getElementById('mc-' + id);
-
-  // Autofill por CEP (ViaCEP) dentro do modal.
   const cep = el('cep'), status = document.getElementById('mc-cep-status');
   cep.addEventListener('input', async function () {
     let dg = cep.value.replace(/\D/g, '').slice(0, 8);
@@ -240,7 +202,6 @@
       el('numero').focus();
     } catch (e) { status.textContent = ''; }
   });
-
   btn.addEventListener('click', async function () {
     const erro = document.getElementById('mc-erro');
     if (!el('nome').value.trim()) { erro.textContent = 'Informe o nome.'; return; }
@@ -258,11 +219,10 @@
   });
 })();
 
-// Cálculo de frete (Correios via Melhor Envio) — usa o CEP do cliente selecionado.
+// Cálculo de frete (Correios via Melhor Envio).
 (function () {
   const btn = document.getElementById('btn-frete');
   if (!btn) return;
-  const CLIENTES_CEP = {}; // preenchido abaixo se houver dados
   btn.addEventListener('click', async function () {
     const box = document.getElementById('frete-resultado');
     const sel = document.getElementById('sel-cliente');
@@ -276,7 +236,7 @@
     const brlF = v => Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     box.innerHTML = d.opcoes.map(o => `
       <button type="button" class="frete-op" data-p="${o.preco}">
-        <span class="frete-nome">${o.nome}${o.rapido ? ' <span class="frete-badge">mais rápido</span>' : ''}</span>
+        <span class="frete-nome">${o.nome}${o.rapido ? ' <span class="frete-badge">rápido</span>' : ''}</span>
         <span class="frete-preco">R$ ${brlF(o.preco)} <small>· ${o.prazo} dias</small></span>
       </button>`).join('');
     box.querySelectorAll('.frete-op').forEach(a => a.addEventListener('click', () => {
@@ -292,12 +252,13 @@
 {% if pecas %}
 <script>
 (function () {
+  const MODO = "{{ modo }}";
   const PECAS = JSON.parse(document.getElementById('dados-pecas').textContent);
   const PREFILL = JSON.parse(document.getElementById('prefill-itens').textContent);
   const UPLOADS = "{{ url_for('static', filename='uploads/') }}";
   const corpo = document.getElementById('linhas-itens');
   const brl = v => 'R$ ' + (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  const num = t => t ? (parseFloat(String(t).replace('.', '').replace(',', '.')) || 0) : 0;
+  const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
   const fmt2 = v => (num(v)).toFixed(2).replace('.', ',');
   const acha = id => PECAS.find(p => String(p.id) === String(id));
   const thumb = p => p.foto
@@ -308,7 +269,7 @@
     return PECAS.map(p => `
       <button type="button" class="picker-option" data-id="${p.id}">
         ${thumb(p)} <span>${p.nome}</span>
-        <span class="small text-muted ms-auto">estoque ${Object.entries(p.estoque).filter(([t,q])=>q>0).map(([t,q])=>t+':'+q).join(' ')}</span>
+        <span class="small text-muted ms-auto">estoque ${Object.entries(p.estoque).filter(([t,q])=>q>0).map(([t,q])=>t+':'+q).join(' ') || '0'}</span>
       </button>`).join('');
   }
 
@@ -348,7 +309,10 @@
     Object.entries(estoque).forEach(([t, q]) => {
       if (q > 0) { sel.innerHTML += `<option value="${t}">${t} (${q})</option>`; vistos.add(t); }
     });
-    if (tamAtual && !vistos.has(tamAtual)) sel.innerHTML += `<option value="${tamAtual}">${tamAtual} (0)</option>`;
+    // Encomenda pode vender sem estoque: mostra todos os tamanhos.
+    if (MODO === 'encomenda') {
+      ['PP','P','M','G','GG'].forEach(t => { if (!vistos.has(t)) sel.innerHTML += `<option value="${t}">${t} (0)</option>`; });
+    }
     if (tamAtual) sel.value = tamAtual;
   }
 
@@ -367,20 +331,16 @@
       descItens += desc;
       if (p) totalCusto += p.custo * qtd;
     });
-
     const frete = num(document.getElementById('in-frete').value);
     const mkt = num(document.getElementById('in-mkt').value);
     const descTotal = num(document.getElementById('in-desconto').value);
     const cortesia = document.getElementById('chk-cortesia').checked;
-
     const comissao = totalItens * mkt / 100;
-    // Desconto do pedido reduz só o valor final (não o total de itens).
     const valorTotal = totalItens + (cortesia ? 0 : frete) - descTotal;
     const custo = totalCusto + comissao + (cortesia ? frete : 0);
     const lucro = valorTotal - custo;
     const descGeral = descItens + descTotal;
     const pctDesc = totalBruto ? (descGeral / totalBruto * 100) : 0;
-
     document.getElementById('total-produtos').textContent = brl(totalItens);
     document.getElementById('s-itens').textContent = brl(totalItens);
     document.getElementById('s-frete').textContent = cortesia ? 'cortesia' : brl(frete);
@@ -391,9 +351,60 @@
       `Custo total: <b>${brl(custo)}</b> · ` +
       `Lucro: <b style="color:${lucro >= 0 ? '#6d7a5c' : '#a5624f'}">${brl(lucro)}</b> · ` +
       `Desconto: <b>${brl(descGeral)}</b> (${pctDesc.toFixed(1)}% da venda)`;
+    window.__VALOR_TOTAL = valorTotal;
+    recalcPagamentos();
   }
 
-  // Painel com os dados do cliente selecionado.
+  // ---- Pagamentos ----
+  const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto'];
+  const corpoPag = document.getElementById('linhas-pagamentos');
+  function linhaPagamento(forma, valor) {
+    const tr = document.createElement('tr');
+    tr.className = 'pag-row';
+    tr.innerHTML = `
+      <td><select name="pag_forma" class="form-select form-select-sm pg-forma">
+        ${FORMAS.map(f => `<option ${f===forma?'selected':''}>${f}</option>`).join('')}</select></td>
+      <td><input type="text" name="pag_valor" class="form-control form-control-sm pg-valor" value="${valor||''}" style="width:110px"></td>
+      <td><input type="text" name="pag_parcelas" class="form-control form-control-sm pg-parc" value="1" style="width:60px"></td>
+      <td><input type="text" name="pag_taxa" class="form-control form-control-sm pg-taxa" value="0" style="width:70px"></td>
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
+    corpoPag.appendChild(tr);
+  }
+  function recalcPagamentos() {
+    if (!corpoPag) return;  // venda não tem pagamento no cadastro
+    let pago = 0, dinheiro = 0;
+    corpoPag.querySelectorAll('.pag-row').forEach(tr => {
+      const v = num(tr.querySelector('.pg-valor').value);
+      pago += v;
+      if (tr.querySelector('.pg-forma').value === 'Dinheiro') dinheiro += v;
+    });
+    const total = window.__VALOR_TOTAL || 0;
+    const saldo = Math.max(0, total - pago);
+    document.getElementById('p-pago').textContent = brl(pago);
+    const elSaldo = document.getElementById('p-saldo');
+    elSaldo.textContent = brl(saldo);
+    elSaldo.className = saldo > 0.01 ? 'text-danger' : 'text-success';
+    // Troco
+    const recebido = num(document.getElementById('in-recebido').value);
+    const troco = recebido - dinheiro;
+    document.getElementById('troco-info').innerHTML = recebido > 0
+      ? (troco >= 0 ? `Troco: <b>${brl(troco)}</b>` : `<span class="text-danger">Faltam ${brl(-troco)}</span>`)
+      : '';
+  }
+  if (corpoPag) {
+    document.getElementById('add-pagamento').addEventListener('click', () => { linhaPagamento('Dinheiro', ''); });
+    document.getElementById('pagar-tudo').addEventListener('click', () => {
+      let r = corpoPag.querySelector('.pag-row');
+      if (!r) { linhaPagamento('Dinheiro', ''); r = corpoPag.querySelector('.pag-row'); }
+      r.querySelector('.pg-valor').value = Number(window.__VALOR_TOTAL || 0).toFixed(2).replace('.', ',');
+      recalcPagamentos();
+    });
+    corpoPag.addEventListener('input', recalcPagamentos);
+    corpoPag.addEventListener('change', recalcPagamentos);
+    corpoPag.addEventListener('click', e => { if (e.target.classList.contains('pg-rem')) { e.target.closest('.pag-row').remove(); recalcPagamentos(); } });
+    document.getElementById('in-recebido').addEventListener('input', recalcPagamentos);
+  }
+
   const CLIENTES = JSON.parse(document.getElementById('dados-clientes').textContent);
   window.__CEP_CLIENTE = {};
   CLIENTES.forEach(c => { window.__CEP_CLIENTE[c.id] = c.cep || ''; });
@@ -412,7 +423,6 @@
   selCliente.addEventListener('change', mostrarCliente);
   mostrarCliente();
 
-  // --- Eventos ---
   document.getElementById('add-item').addEventListener('click', novaLinha);
   document.getElementById('toggle-detalhe').addEventListener('click', function () {
     const d = document.getElementById('resumo-detalhe');
@@ -420,12 +430,9 @@
     d.style.display = vis ? 'none' : 'block';
     this.textContent = vis ? '▸ ver custo e lucro' : '▾ ocultar custo e lucro';
   });
-
   corpo.addEventListener('input', recalcular);
   corpo.addEventListener('change', recalcular);
-
   corpo.addEventListener('click', function (e) {
-    // Abrir/fechar menu do seletor
     const toggle = e.target.closest('.picker-toggle');
     if (toggle) {
       const menu = toggle.nextElementSibling;
@@ -433,7 +440,6 @@
       menu.classList.toggle('aberto');
       return;
     }
-    // Escolher uma peça
     const opt = e.target.closest('.picker-option');
     if (opt) {
       const tr = opt.closest('.item-row');
@@ -446,32 +452,20 @@
       recalcular();
       return;
     }
-    // Remover linha
-    if (e.target.classList.contains('rem-item')) {
-      e.target.closest('.item-row').remove();
-      recalcular();
-    }
+    if (e.target.classList.contains('rem-item')) { e.target.closest('.item-row').remove(); recalcular(); }
   });
-
-  // Formata descontos com 2 casas ao sair do campo
   corpo.addEventListener('blur', function (e) {
     if (e.target.classList.contains('in-desc')) e.target.value = fmt2(e.target.value);
   }, true);
-  document.getElementById('in-desconto').addEventListener('blur', function () {
-    if (this.value !== '') this.value = fmt2(this.value);
-  });
-
+  document.getElementById('in-desconto').addEventListener('blur', function () { if (this.value !== '') this.value = fmt2(this.value); });
   ['in-frete', 'in-mkt', 'in-desconto'].forEach(id => document.getElementById(id).addEventListener('input', recalcular));
   document.getElementById('chk-cortesia').addEventListener('change', recalcular);
-
-  // Fecha menus ao clicar fora
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('.peca-picker')) {
-      document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
-    }
+    if (!e.target.closest('.peca-picker')) document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
   });
 
   if (PREFILL.length) PREFILL.forEach(novaLinha); else novaLinha();
+  if (corpoPag) linhaPagamento('Dinheiro', '');  // pagamento inicial (só encomenda)
   recalcular();
 })();
 </script>

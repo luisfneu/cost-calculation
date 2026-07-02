@@ -86,9 +86,13 @@
               {% if v.vencida %}<span class="badge text-bg-danger">vencida</span>{% endif %}
               <div class="small text-muted">{{ v.cliente_nome or '—' }}{% if v.vencimento %} · vence {{ v.vencimento.strftime('%d/%m/%Y') }}{% endif %}</div>
             </td>
-            <td class="text-end">{{ v.receita | moeda }}</td>
-            <td class="text-end">
-              <form method="post" action="{{ url_for('main.marcar_pago', venda_id=v.id) }}">
+            <td class="text-end">{{ v.saldo_receber | moeda }}{% if v.total_pago > 0.01 %}<div class="small text-muted">de {{ v.receita | moeda }}</div>{% endif %}</td>
+            <td class="text-end text-nowrap">
+              {% if v.cliente and v.cliente.whatsapp_numero %}
+                {% set msg = 'Olá ' ~ v.cliente.nome ~ '! Passando para lembrar do seu pedido #' ~ v.id ~ ' no valor de ' ~ (v.receita | moeda) ~ '. Qualquer dúvida, estou à disposição 💛' %}
+                <a href="https://wa.me/{{ v.cliente.whatsapp_numero }}?text={{ msg | urlencode }}" target="_blank" class="btn btn-sm btn-outline-success" title="Cobrar via WhatsApp"><i class="bi bi-whatsapp"></i></a>
+              {% endif %}
+              <form method="post" action="{{ url_for('main.marcar_pago', venda_id=v.id) }}" class="d-inline">
                 <button class="btn btn-sm btn-outline-success">✓ pago</button>
               </form>
             </td>

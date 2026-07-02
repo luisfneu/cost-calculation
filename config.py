@@ -13,6 +13,9 @@ class Config:
     # Chave usada por sessões e mensagens flash. Em produção, use variável de ambiente.
     SECRET_KEY = os.environ.get("SECRET_KEY", "troque-esta-chave-em-producao")
 
+    # Senha de acesso ao sistema (login). Definida no .env.
+    APP_SENHA = os.environ.get("APP_SENHA", "atelier")
+
     # Banco SQLite salvo na pasta instance/ (criada automaticamente pelo Flask).
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'costcalc.db')}"

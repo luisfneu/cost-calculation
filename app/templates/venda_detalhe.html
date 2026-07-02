@@ -3,10 +3,48 @@
 <div class="d-flex justify-content-between align-items-center mb-4 no-print">
   <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-link">← Voltar</a>
   <div>
+    <a href="{{ url_for('main.devolucao_venda', venda_id=venda.id) }}" class="btn btn-outline-secondary">↩ Devolução</a>
     <a href="{{ url_for('main.editar_venda', venda_id=venda.id) }}" class="btn btn-outline-secondary">Editar</a>
     <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir pedido</button>
   </div>
 </div>
+
+{% if venda.tipo == 'venda' %}
+<!-- Fluxo do pedido (stepper) -->
+<div class="card bg-white mb-4 no-print" style="max-width:820px; margin:0 auto;">
+  <div class="card-body">
+    <div class="text-center h5 mb-3">{{ venda.estado_label }}</div>
+    <div class="stepper">
+      {% for et in venda.fluxo_etapas %}
+        <div class="step {{ 'concluido' if et.concluido }} {{ 'atual' if et.atual }}">
+          <div class="step-circulo">{% if et.concluido %}✓{% else %}{{ loop.index }}{% endif %}</div>
+          <div class="step-label">{{ et.label }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Ações do fluxo -->
+    <div class="text-center mt-4">
+      {% if venda.saldo_receber > 0.01 %}
+        <span class="text-muted small">Registre o pagamento abaixo para liberar o envio.</span>
+      {% elif venda.status == 'pago' %}
+        <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='enviado') }}" class="d-inline">
+          <button class="btn btn-primary">📦 Marcar como enviado</button>
+        </form>
+        <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='entregue') }}" class="d-inline">
+          <button class="btn btn-outline-primary">🤝 Entregar em mãos</button>
+        </form>
+      {% elif venda.status == 'enviado' %}
+        <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='entregue') }}" class="d-inline">
+          <button class="btn btn-primary">✅ Marcar como entregue</button>
+        </form>
+      {% elif venda.status == 'entregue' %}
+        <span class="text-success">Pedido concluído 🎉</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="card bg-white area-impressao" style="max-width:820px; margin:0 auto;">
   <div class="card-body">
@@ -70,15 +108,119 @@
           {% if venda.desconto_total %}<tr><td>Desconto do pedido</td><td class="text-end">− {{ venda.desconto_total | moeda }}</td></tr>{% endif %}
           {% if venda.frete %}<tr><td>Frete{% if venda.frete_cortesia %} (cortesia){% endif %}</td><td class="text-end">{{ venda.frete | moeda }}</td></tr>{% endif %}
           <tr class="fw-bold border-top"><td>Total do pedido</td><td class="text-end">{{ venda.receita | moeda }}</td></tr>
+          {% for p in venda.pagamentos %}
+            <tr class="text-success"><td>Pago · {{ p.forma }}{% if p.parcelas > 1 %} ({{ p.parcelas }}x){% endif %}</td><td class="text-end">{{ p.valor | moeda }}</td></tr>
+          {% endfor %}
+          {% if venda.saldo_receber > 0.01 %}
+            <tr class="fw-bold text-danger"><td>Saldo a receber</td><td class="text-end">{{ venda.saldo_receber | moeda }}</td></tr>
+          {% endif %}
         </table>
       </div>
     </div>
 
-    <!-- Bloco interno: não aparece na impressão -->
-    <div class="border-top pt-2 mt-2 small text-muted no-print">
-      {% if venda.marketplace_pct %}Comissão marketplace: {{ venda.comissao_marketplace | moeda }} ({{ venda.marketplace_pct | num }}%) · {% endif %}
-      Custo total: {{ venda.custo_total | moeda }} · Lucro: {{ venda.lucro | moeda }}
+    <!-- Receber pagamento — múltiplas formas (não imprime) -->
+    {% if venda.saldo_receber > 0.01 %}
+    <div class="no-print border-top pt-3">
+      <div class="section-titulo">Receber pagamento</div>
+      <form method="post" action="{{ url_for('main.receber_pagamentos', venda_id=venda.id) }}">
+        <table class="table table-sm align-middle mb-2">
+          <thead class="table-light"><tr><th>Forma</th><th>Valor (R$)</th><th>Parcelas</th><th>Taxa %</th><th></th></tr></thead>
+          <tbody id="linhas-pagamentos"></tbody>
+        </table>
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar forma</button>
+          <button type="button" class="btn btn-link btn-sm p-0" id="pagar-tudo">preencher com o saldo</button>
+          <span class="ms-auto small">
+            Informado: <b id="p-pago">R$ 0,00</b> ·
+            Saldo: <b id="p-saldo" class="text-danger">{{ venda.saldo_receber | moeda }}</b>
+            <span id="troco-info"></span>
+          </span>
+        </div>
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+          <div>
+            <label class="form-label small mb-0">Vencimento do saldo <span class="text-muted">(se ficar a prazo)</span></label>
+            <input type="date" name="vencimento" class="form-control form-control-sm" style="width:170px" value="{{ venda.vencimento.isoformat() if venda.vencimento else '' }}">
+          </div>
+          <button class="btn btn-success">Registrar pagamento</button>
+        </div>
+      </form>
+      <form method="post" action="{{ url_for('main.usar_vale', venda_id=venda.id) }}" class="d-flex gap-2 align-items-center mt-2 border-top pt-2">
+        <label class="form-label small mb-0">Usar vale / crédito:</label>
+        <input type="text" name="codigo" class="form-control form-control-sm text-uppercase" style="width:150px" placeholder="VL-XXXXXX">
+        <button class="btn btn-sm btn-outline-primary">Aplicar vale</button>
+      </form>
     </div>
+    <script>
+    (function () {
+      const SALDO = {{ venda.saldo_receber }};
+      const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto'];
+      const corpo = document.getElementById('linhas-pagamentos');
+      const brl = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
+      const numBR = v => Number(v||0).toFixed(2).replace('.', ',');  // formata NÚMERO (não texto digitado)
+      function linha(forma, valor) {
+        const tr = document.createElement('tr'); tr.className = 'pag-row';
+        tr.innerHTML = `
+          <td><select name="pag_forma" class="form-select form-select-sm pg-forma">${FORMAS.map(f=>`<option ${f===forma?'selected':''}>${f}</option>`).join('')}</select></td>
+          <td><input type="text" name="pag_valor" class="form-control form-control-sm pg-valor" value="${valor||''}" style="width:110px"></td>
+          <td><input type="text" name="pag_parcelas" class="form-control form-control-sm" value="1" style="width:60px"></td>
+          <td><input type="text" name="pag_taxa" class="form-control form-control-sm" value="0" style="width:70px"></td>
+          <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
+        corpo.appendChild(tr);
+      }
+      function recalc() {
+        let informado = 0, dinheiro = 0, naoDinheiro = 0;
+        corpo.querySelectorAll('.pag-row').forEach(tr => {
+          const cash = tr.querySelector('.pg-forma').value === 'Dinheiro';
+          const v = num(tr.querySelector('.pg-valor').value);
+          informado += v;
+          if (cash) dinheiro += v; else naoDinheiro += v;
+          // Formas não-dinheiro não podem passar do saldo — destaca em vermelho.
+          const inp = tr.querySelector('.pg-valor');
+          inp.classList.toggle('is-invalid', !cash && v > SALDO + 0.01);
+        });
+        document.getElementById('p-pago').textContent = brl(informado);
+        const restante = Math.max(0, SALDO - informado);
+        const s = document.getElementById('p-saldo');
+        s.textContent = brl(restante); s.className = restante > 0.01 ? 'text-danger' : 'text-success';
+        // Troco só existe se o excesso for dinheiro.
+        const aplicadoDinheiro = Math.max(0, Math.min(dinheiro, SALDO - naoDinheiro));
+        const troco = dinheiro - aplicadoDinheiro;
+        document.getElementById('troco-info').innerHTML = troco > 0.01 ? ` · Troco: <b>${brl(troco)}</b>` : '';
+      }
+      document.getElementById('add-pagamento').addEventListener('click', () => linha('Dinheiro',''));
+      document.getElementById('pagar-tudo').addEventListener('click', () => {
+        let r = corpo.querySelector('.pag-row'); if (!r) { linha('Dinheiro',''); r = corpo.querySelector('.pag-row'); }
+        r.querySelector('.pg-valor').value = numBR(SALDO); recalc();
+      });
+      corpo.addEventListener('input', recalc); corpo.addEventListener('change', recalc);
+      corpo.addEventListener('click', e => { if (e.target.classList.contains('pg-rem')) { e.target.closest('.pag-row').remove(); recalc(); } });
+      linha('Dinheiro', numBR(SALDO)); recalc();
+    })();
+    </script>
+    {% endif %}
+
+    <!-- Bloco interno: não aparece na impressão, oculto por padrão -->
+    <div class="border-top pt-2 mt-2 no-print">
+      <button type="button" class="btn btn-link btn-sm p-0" id="toggle-custo">▸ ver custo e lucro</button>
+      <div id="bloco-custo" class="small text-muted" style="display:none">
+        {% if venda.marketplace_pct %}Comissão marketplace: {{ venda.comissao_marketplace | moeda }} ({{ venda.marketplace_pct | num }}%) · {% endif %}
+        {% if venda.taxa_maquininha %}Taxa maquininha: {{ venda.taxa_maquininha | moeda }} · {% endif %}
+        Custo total: {{ venda.custo_total | moeda }} · Lucro: {{ venda.lucro | moeda }}
+      </div>
+    </div>
+    <script>
+    (function () {
+      const b = document.getElementById('toggle-custo');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        const d = document.getElementById('bloco-custo');
+        const vis = d.style.display !== 'none';
+        d.style.display = vis ? 'none' : 'block';
+        this.textContent = vis ? '▸ ver custo e lucro' : '▾ ocultar custo e lucro';
+      });
+    })();
+    </script>
   </div>
 </div>
 {% endblock %}

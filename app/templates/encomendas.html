@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Encomendas</h1>
+  <a href="{{ url_for('main.registrar_encomenda') }}" class="btn btn-primary">+ Nova encomenda</a>
+</div>
+
+{% set rotulos = {'realizado':'Pago','pago':'Enviado','enviado':'Entregue'} %}
+{% set cores = {'realizado':'text-bg-secondary','pago':'text-bg-info','enviado':'text-bg-primary','entregue':'text-bg-success'} %}
+
+<div class="card bg-white">
+  <div class="card-body">
+    <p class="text-muted small">Pedidos vendidos <strong>sem estoque</strong>. Produza as peças e clique em <strong>Baixar estoque</strong> quando prontas.</p>
+    {% if encomendas %}
+    <div class="table-responsive">
+    <table class="table align-middle">
+      <thead class="table-light">
+        <tr><th>Data</th><th>Itens</th><th>Cliente</th><th>Status</th><th>Estoque</th><th>Valor</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for v in encomendas %}
+        <tr>
+          <td class="small text-muted">{{ v.criado_em | dt }}</td>
+          <td>{% for it in v.itens %}<div>{{ it.quantidade | num }}× {{ it.peca.nome }} <span class="badge text-bg-light">{{ it.tamanho }}</span></div>{% endfor %}</td>
+          <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
+          <td><span class="badge {{ cores[v.status] }}">{{ v.status_label }}</span></td>
+          <td>{% if v.estoque_baixado %}<span class="badge text-bg-success">baixado</span>{% else %}<span class="badge text-bg-warning">a produzir</span>{% endif %}</td>
+          <td class="fw-bold">{{ v.receita | moeda }}</td>
+          <td class="text-nowrap text-end">
+            {% if not v.estoque_baixado %}
+              <form method="post" action="{{ url_for('main.baixar_estoque_venda', venda_id=v.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-success" title="Baixar estoque das peças">Baixar estoque</button>
+              </form>
+            {% elif v.proximo_status %}
+              <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=v.id, novo=v.proximo_status) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-success">→ {{ rotulos[v.status] }}</button>
+              </form>
+            {% endif %}
+            <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
+            <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta encomenda?')">
+              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% include "_paginacao.html" %}
+    {% else %}
+    <p class="text-muted">Nenhuma encomenda registrada. <a href="{{ url_for('main.registrar_encomenda') }}">Registrar a primeira</a>.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

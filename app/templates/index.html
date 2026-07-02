@@ -57,6 +57,29 @@
     <div class="h4 mb-0">{{ totais_venda.a_receber | moeda }}</div><div class="small">A receber</div></div></div></div>
 </div>
 
+<!-- Meta do mês -->
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+      <h2 class="h6 mb-0 text-muted">Meta do mês</h2>
+      <form method="post" action="{{ url_for('main.salvar_meta') }}" class="input-group input-group-sm" style="width:auto">
+        <span class="input-group-text">R$</span>
+        <input type="text" name="meta_mensal" class="form-control" style="width:120px"
+               value="{{ '%.0f'|format(meta) if meta else '' }}" placeholder="definir meta">
+        <button class="btn btn-outline-secondary">Salvar</button>
+      </form>
+    </div>
+    {% if meta %}
+      <div class="progress" style="height:22px">
+        <div class="progress-bar bg-success" role="progressbar" style="width: {{ [meta_pct, 100]|min }}%">{{ '%.0f'|format(meta_pct) }}%</div>
+      </div>
+      <div class="small text-muted mt-1">{{ receita_mes | moeda }} de {{ meta | moeda }} neste mês</div>
+    {% else %}
+      <p class="text-muted small mb-0">Defina uma meta de faturamento para acompanhar o progresso do mês.</p>
+    {% endif %}
+  </div>
+</div>
+
 <h2 class="h5 mb-3">Peças recentes</h2>
 {% if pecas %}
 <div class="row g-4">

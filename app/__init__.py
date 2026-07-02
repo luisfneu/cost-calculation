@@ -107,7 +107,11 @@ def _migrar_colunas():
             "largura_cm": "FLOAT DEFAULT 0", "comprimento_cm": "FLOAT DEFAULT 0",
         },
         "insumos": {"ativo": "BOOLEAN DEFAULT 1"},
-        "vendas": {"desconto_total": "FLOAT DEFAULT 0", "cliente_id": "INTEGER", "vencimento": "DATE"},
+        "vendas": {
+            "desconto_total": "FLOAT DEFAULT 0", "cliente_id": "INTEGER", "vencimento": "DATE",
+            "status": "VARCHAR(12) DEFAULT 'realizado'", "estoque_baixado": "BOOLEAN DEFAULT 1",
+            "tipo": "VARCHAR(12) DEFAULT 'venda'", "cupom_codigo": "VARCHAR(40) DEFAULT ''",
+        },
         "venda_itens": {"desconto": "FLOAT DEFAULT 0"},
         "movimentos_estoque": {"custo_unitario": "FLOAT DEFAULT 0"},
         "clientes": {
@@ -129,3 +133,17 @@ def _migrar_colunas():
             if coluna not in existentes:
                 db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
     db.session.commit()
+
+    # Normaliza status antigos (orcamento/confirmado) para o novo fluxo.
+    if insp.has_table("vendas"):
+        db.session.execute(text(
+            "UPDATE vendas SET status = CASE "
+            "WHEN status='entregue' THEN 'entregue' "
+            "WHEN pago=1 THEN 'pago' ELSE 'realizado' END "
+            "WHERE status IN ('orcamento','confirmado')"
+        ))
+        db.session.execute(text(
+            "UPDATE vendas SET tipo = CASE WHEN estoque_baixado=1 THEN 'venda' ELSE 'encomenda' END "
+            "WHERE tipo IS NULL OR tipo=''"
+        ))
+        db.session.commit()
