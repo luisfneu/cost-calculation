@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recibo · Pedido #{{ venda.id }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { --gold:#b08a4f; --ink:#2c2620; --soft:#6b5f52; --line:#e6ddcf; }
+    * { box-sizing: border-box; }
+    body { font-family:'Jost',sans-serif; color:var(--ink); background:#f0ece3; margin:0; padding:24px; }
+    .recibo { width:420px; max-width:100%; margin:0 auto; background:#fff; border:1px solid var(--gold); border-radius:12px; padding:26px 28px; }
+    .cab { text-align:center; border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:14px; }
+    .marca { font-family:'Cormorant Garamond',serif; font-size:1.5rem; letter-spacing:2px; text-transform:uppercase; }
+    .sub { font-size:.6rem; letter-spacing:4px; text-transform:uppercase; color:var(--gold); }
+    .meta { font-size:.85rem; color:var(--soft); margin-top:6px; }
+    h1 { font-family:'Cormorant Garamond',serif; font-size:1.15rem; margin:0 0 2px; }
+    table { width:100%; border-collapse:collapse; margin:10px 0; font-size:.9rem; }
+    th { text-align:left; color:var(--soft); font-weight:500; border-bottom:1px solid var(--line); padding:4px 0; font-size:.8rem; }
+    td { padding:5px 0; vertical-align:top; }
+    td.r, th.r { text-align:right; }
+    .tot { border-top:1px solid var(--line); margin-top:8px; padding-top:8px; font-size:.9rem; }
+    .tot .linha { display:flex; justify-content:space-between; padding:2px 0; }
+    .tot .total { font-size:1.15rem; font-weight:600; color:var(--gold); }
+    .status { text-align:center; margin-top:12px; padding:7px; border-radius:8px; font-size:.9rem; }
+    .status.ok { background:#eaf3ea; color:#3f6b3f; }
+    .status.pend { background:#fbeee6; color:#a5624f; }
+    .rodape { text-align:center; color:var(--soft); font-size:.85rem; margin-top:16px; }
+    .acoes { text-align:center; margin-top:20px; }
+    button, a.btn { font-family:'Jost'; padding:8px 18px; border:1px solid var(--gold); background:var(--gold); color:#fff; border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block; }
+    a.voltar { color:var(--soft); margin-left:10px; }
+    @media print { body { background:#fff; padding:0; } .acoes { display:none; } .recibo { border:none; } }
+  </style>
+</head>
+<body>
+  <div class="recibo">
+    <div class="cab">
+      <div class="marca">Sabrina Hansen</div>
+      <div class="sub">Atelier</div>
+      <div class="meta">
+        Recibo do pedido <strong>#{{ venda.id }}</strong><br>
+        {{ venda.criado_em | dt }}
+      </div>
+    </div>
+
+    {% if venda.cliente_nome %}<h1>{{ venda.cliente_nome }}</h1>{% endif %}
+    {% if venda.cliente and venda.cliente.tem_endereco %}<div class="meta">{{ venda.cliente.endereco_completo }}</div>{% endif %}
+
+    <table>
+      <thead><tr><th>Item</th><th class="r">Qtd</th><th class="r">Valor</th></tr></thead>
+      <tbody>
+      {% for it in venda.itens %}
+        <tr>
+          <td>{{ it.peca.nome }}{% if it.tamanho %} <span style="color:var(--soft)">({{ it.tamanho }})</span>{% endif %}</td>
+          <td class="r">{{ it.quantidade | num }}</td>
+          <td class="r">{{ it.subtotal_receita | moeda }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="tot">
+      <div class="linha"><span>Subtotal dos itens</span><span>{{ venda.receita_itens | moeda }}</span></div>
+      {% if venda.frete and not venda.frete_cortesia %}<div class="linha"><span>Frete</span><span>{{ venda.frete | moeda }}</span></div>{% endif %}
+      {% if venda.desconto_geral > 0 %}<div class="linha"><span>Desconto</span><span>− {{ venda.desconto_geral | moeda }}</span></div>{% endif %}
+      <div class="linha total"><span>Total</span><span>{{ venda.receita | moeda }}</span></div>
+    </div>
+
+    {% if venda.quitado %}
+      <div class="status ok">Pagamento quitado ✅</div>
+    {% else %}
+      <div class="status pend">Pago {{ venda.total_pago | moeda }} · Saldo a receber {{ venda.saldo_receber | moeda }}</div>
+    {% endif %}
+
+    <div class="rodape">Obrigada pela preferência! 💛<br>Sabrina Hansen Atelier</div>
+  </div>
+
+  <div class="acoes">
+    <button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+    <a href="{{ url_for('main.visualizar_venda', venda_id=venda.id) }}" class="voltar">voltar ao pedido</a>
+  </div>
+</body>
+</html>

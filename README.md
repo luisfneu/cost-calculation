@@ -68,6 +68,41 @@ cost-calculation/
     └── templates/         # páginas HTML (Jinja2)
 ```
 
+## Migrações de banco (Alembic / Flask-Migrate)
+
+O schema é versionado com Alembic. No boot, o app aplica as migrações
+automaticamente (`upgrade`); a migração manual antiga ficou só como fallback.
+
+Para mudar o schema (novos campos/tabelas):
+
+```bash
+export FLASK_APP=run
+# 1) altere os modelos em app/models.py
+# 2) gere a migração:
+.venv/bin/flask db migrate -m "descrição da mudança"
+# 3) revise o arquivo em migrations/versions/ e aplique:
+.venv/bin/flask db upgrade
+```
+
+Úteis: `flask db current`, `flask db history`, `flask db downgrade`.
+O SQLite usa *batch mode* (ALTER TABLE) automaticamente.
+
+## HTTPS na rede local (celular / câmera do scanner)
+
+```bash
+./gerar_cert.sh    # gera o certificado com o IP da rede (rode de novo se o IP mudar)
+python run.py      # sobe em HTTPS ligado à rede local
+```
+
+No celular (mesma rede): `https://<ip-do-notebook>:8000`, aceite o aviso do
+certificado uma vez — isso libera a câmera do leitor de QR (contexto seguro).
+
+## Testes
+
+```bash
+.venv/bin/python -m pytest
+```
+
 ## Notas
 
 - Valores aceitam vírgula ou ponto como separador decimal (ex.: `0,50` ou `0.50`).

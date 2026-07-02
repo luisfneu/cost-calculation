@@ -26,8 +26,10 @@
         {% for cat, m in msgs %}<div class="alert alert-{{ 'danger' if cat=='erro' else 'success' }} py-2">{{ m }}</div>{% endfor %}
       {% endwith %}
       <form method="post">
-        <input type="password" name="senha" class="form-control mb-3" placeholder="Senha" autofocus required>
+        <input type="text" name="login" class="form-control mb-2" placeholder="Usuário" autofocus autocomplete="username">
+        <input type="password" name="senha" class="form-control mb-3" placeholder="Senha" autocomplete="current-password" required>
         <button class="btn btn-primary w-100" style="background:#b08a4f;border-color:#b08a4f">Entrar</button>
+        <div class="text-muted mt-2" style="font-size:.75rem">Deixe o usuário em branco para entrar com a senha-mestre.</div>
       </form>
     </div>
   </div>

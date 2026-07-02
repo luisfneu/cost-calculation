@@ -4,6 +4,7 @@ import io
 import math
 import os
 import re
+import unicodedata
 import uuid
 from datetime import date, datetime
 
@@ -23,6 +24,7 @@ from werkzeug.utils import secure_filename
 
 from .models import (
     TAMANHOS,
+    Auditoria,
     Cliente,
     Cupom,
     Despesa,
@@ -39,6 +41,7 @@ from .models import (
     Parametro,
     Peca,
     PecaInsumo,
+    Usuario,
     Vale,
     Venda,
     VendaItem,
@@ -60,20 +63,58 @@ def _exigir_login():
     return None
 
 
+def _usuario_atual():
+    """Nome do usuário logado (ou 'Admin' se entrou pela senha-mestre)."""
+    return session.get("usuario", "")
+
+
+def _is_admin():
+    return bool(session.get("admin"))
+
+
+def _log(acao, detalhe=""):
+    """Registra uma ação na trilha de auditoria (login, vendas, estoque)."""
+    db.session.add(Auditoria(usuario=_usuario_atual() or "?", acao=acao, detalhe=detalhe[:255]))
+    # Commit deixado a cargo de quem chama, mas garantimos que persista:
+    db.session.commit()
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("senha", "") == current_app.config["APP_SENHA"]:
+        login_txt = request.form.get("login", "").strip()
+        senha = request.form.get("senha", "")
+        destino = request.args.get("next") or url_for("main.index")
+
+        # 1) Usuário individual (se informado login e existir usuário ativo).
+        if login_txt:
+            u = Usuario.query.filter(db.func.lower(Usuario.login) == login_txt.lower()).first()
+            if u and u.ativo and u.conferir_senha(senha):
+                session["logado"] = True
+                session["usuario"] = u.nome
+                session["admin"] = u.admin
+                _log("login", f"usuário {u.login}")
+                return redirect(destino)
+            flash("Login ou senha inválidos.", "erro")
+            return render_template("login.html")
+
+        # 2) Senha-mestre (acesso admin de emergência).
+        if senha == current_app.config["APP_SENHA"]:
             session["logado"] = True
-            destino = request.args.get("next") or url_for("main.index")
+            session["usuario"] = "Admin"
+            session["admin"] = True
+            _log("login", "senha-mestre")
             return redirect(destino)
-        flash("Senha incorreta.", "erro")
+
+        flash("Login ou senha inválidos.", "erro")
     return render_template("login.html")
 
 
 @bp.route("/logout")
 def logout():
-    session.pop("logado", None)
+    if session.get("logado"):
+        _log("logout")
+    session.clear()
     flash("Você saiu do sistema.", "sucesso")
     return redirect(url_for("main.login"))
 
@@ -682,6 +723,7 @@ def ajustar_estoque_peca(peca_id):
         )
     )
     db.session.commit()
+    _log("estoque", f"ajuste manual {peca.nome} tam {tamanho} → {nova_qtd:g}")
     flash(f"Estoque do tamanho {tamanho} ajustado para {nova_qtd:g}.", "sucesso")
     return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
@@ -738,6 +780,7 @@ def inventario():
                 linha.estoque_minimo = novo_min
 
     db.session.commit()
+    _log("estoque", f"inventário de peças: {ajustes} ajuste(s)")
     flash(f"Inventário aplicado. {ajustes} ajuste(s) de quantidade.", "sucesso")
     return redirect(url_for("main.inventario"))
 
@@ -795,6 +838,7 @@ def reservar_peca(peca_id):
         observacao=(request.form.get("observacao") or "Reserva").strip(),
     ))
     db.session.commit()
+    _log("estoque", f"reserva {qtd:g}x {peca.nome} tam {tamanho}")
     flash(f"{qtd:g} un. reservada(s) no tamanho {tamanho}.", "sucesso")
     return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
@@ -935,6 +979,7 @@ def concluir_ordem(ordem_id):
     ordem.status = "concluida"
     ordem.concluido_em = datetime.now()
     db.session.commit()
+    _log("estoque", f"produção concluída ordem #{ordem.id}: {ordem.total_unidades:g} peça(s)")
     flash(f"Ordem #{ordem.id} concluída: {ordem.total_unidades:g} peça(s) produzida(s).", "sucesso")
     return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
 
@@ -1211,6 +1256,7 @@ def _processar_pedido(modo):
 
     venda = Venda(**_dados_pedido_do_form())
     venda.tipo = modo
+    venda.vendedor = _usuario_atual()
     db.session.add(venda)
     for l in linhas:
         db.session.add(VendaItem(
@@ -1235,6 +1281,7 @@ def _processar_pedido(modo):
         # Venda: pedido é fechado sem pagamento (status "Pedido feito"); baixa estoque.
         _baixar_estoque_venda(venda)
         db.session.commit()
+        _log("venda", f"pedido #{venda.id} registrado ({_brl(venda.receita)})")
         flash("Pedido registrado. Agora registre o pagamento.", "sucesso")
         return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
 
@@ -1242,6 +1289,7 @@ def _processar_pedido(modo):
     _aplicar_pagamentos(venda, _pagamentos_do_form())
     venda.estoque_baixado = False
     db.session.commit()
+    _log("encomenda", f"encomenda #{venda.id} registrada ({_brl(venda.receita)})")
     flash("Encomenda registrada. Produza as peças e use 'Baixar estoque'.", "sucesso")
     return redirect(url_for("main.listar_encomendas"))
 
@@ -1312,10 +1360,225 @@ def alterar_status_venda(venda_id, novo):
     return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
 
 
+def _brl(v):
+    return ("R$ " + f"{float(v or 0):,.2f}").replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+# --------------------------------------------------------------------------- #
+# Pix "copia e cola" (BR Code / EMV) — sem dependências externas
+# --------------------------------------------------------------------------- #
+def _pix_ascii(texto, limite):
+    """Remove acentos, mantém ASCII e recorta (nome/cidade do recebedor)."""
+    t = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii")
+    return t.upper().strip()[:limite]
+
+
+def _emv(tag, valor):
+    return f"{tag}{len(valor):02d}{valor}"
+
+
+def _pix_crc16(payload):
+    crc = 0xFFFF
+    for byte in payload.encode("utf-8"):
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if (crc & 0x8000) else (crc << 1)
+            crc &= 0xFFFF
+    return f"{crc:04X}"
+
+
+def _pix_payload(chave, nome, cidade, valor=0.0, txid="***"):
+    """Monta o código Pix 'copia e cola' (payload BR Code) para uma chave estática."""
+    chave = (chave or "").strip()
+    if not chave:
+        return ""
+    nome = _pix_ascii(nome, 25) or "RECEBEDOR"
+    cidade = _pix_ascii(cidade, 15) or "CIDADE"
+    txid = re.sub(r"[^A-Za-z0-9]", "", txid or "***")[:25] or "***"
+
+    mai = _emv("00", "br.gov.bcb.pix") + _emv("01", chave)
+    campos = _emv("00", "01") + _emv("26", mai) + _emv("52", "0000") + _emv("53", "986")
+    if valor and valor > 0:
+        campos += _emv("54", f"{valor:.2f}")
+    campos += _emv("58", "BR") + _emv("59", nome) + _emv("60", cidade)
+    campos += _emv("62", _emv("05", txid))
+    campos += "6304"
+    return campos + _pix_crc16(campos)
+
+
+def _pix_da_venda(venda):
+    """Retorna (payload, valor) para o saldo da venda, ou (None, 0) se não configurado."""
+    chave = Parametro.obter("pix_chave", "")
+    if not chave:
+        return None, 0.0
+    valor = venda.saldo_receber if venda.saldo_receber > 0.01 else venda.receita
+    payload = _pix_payload(
+        chave, Parametro.obter("pix_nome", ""), Parametro.obter("pix_cidade", ""),
+        valor=valor, txid=f"PEDIDO{venda.id}",
+    )
+    return payload, valor
+
+
+def _texto_recibo(venda):
+    """Recibo em texto puro para enviar no WhatsApp."""
+    linhas = [
+        "*Sabrina Hansen Atelier*",
+        f"Recibo do pedido #{venda.id}",
+        venda.criado_em.strftime("%d/%m/%Y") if venda.criado_em else "",
+    ]
+    if venda.cliente_nome:
+        linhas.append(f"Cliente: {venda.cliente_nome}")
+    linhas.append("")
+    for it in venda.itens:
+        tam = f" ({it.tamanho})" if it.tamanho else ""
+        linhas.append(f"• {it.quantidade:g}x {it.peca.nome}{tam} — {_brl(it.subtotal_receita)}")
+    linhas.append("")
+    if venda.frete and not venda.frete_cortesia:
+        linhas.append(f"Frete: {_brl(venda.frete)}")
+    if venda.desconto_geral > 0:
+        linhas.append(f"Desconto: -{_brl(venda.desconto_geral)}")
+    linhas.append(f"*Total: {_brl(venda.receita)}*")
+    if venda.saldo_receber > 0.01:
+        linhas.append(f"Pago: {_brl(venda.total_pago)} · Saldo: {_brl(venda.saldo_receber)}")
+    else:
+        linhas.append("Pagamento: quitado ✅")
+    linhas.append("")
+    linhas.append("Obrigada pela preferência! 💛")
+    return "\n".join(l for l in linhas if l is not None)
+
+
 @bp.route("/vendas/<int:venda_id>")
 def visualizar_venda(venda_id):
     venda = Venda.query.get_or_404(venda_id)
-    return render_template("venda_detalhe.html", venda=venda)
+    chave = Parametro.obter("pix_chave", "")
+    pix_cfg = None
+    if chave:
+        pix_cfg = {
+            "chave": chave,
+            "nome": Parametro.obter("pix_nome", ""),
+            "cidade": Parametro.obter("pix_cidade", ""),
+        }
+    return render_template(
+        "venda_detalhe.html", venda=venda, recibo_texto=_texto_recibo(venda),
+        pix_cfg=pix_cfg,
+    )
+
+
+@bp.route("/vendas/<int:venda_id>/recibo")
+def recibo_venda(venda_id):
+    venda = Venda.query.get_or_404(venda_id)
+    return render_template("recibo.html", venda=venda)
+
+
+@bp.route("/configuracoes", methods=["GET", "POST"])
+def configuracoes():
+    if request.method == "POST":
+        Parametro.definir("pix_chave", request.form.get("pix_chave", "").strip())
+        Parametro.definir("pix_nome", request.form.get("pix_nome", "").strip())
+        Parametro.definir("pix_cidade", request.form.get("pix_cidade", "").strip())
+        Parametro.definir("meta_mensal", _to_float(request.form.get("meta_mensal")))
+        db.session.commit()
+        flash("Configurações salvas.", "sucesso")
+        return redirect(url_for("main.configuracoes"))
+
+    # Prévia do Pix com R$ 1,00 para o usuário conferir.
+    previa = _pix_payload(
+        Parametro.obter("pix_chave", ""), Parametro.obter("pix_nome", ""),
+        Parametro.obter("pix_cidade", ""), valor=1.0, txid="TESTE",
+    )
+    cfg = {
+        "pix_chave": Parametro.obter("pix_chave", ""),
+        "pix_nome": Parametro.obter("pix_nome", ""),
+        "pix_cidade": Parametro.obter("pix_cidade", ""),
+        "meta_mensal": Parametro.obter("meta_mensal", "0"),
+    }
+    return render_template("configuracoes.html", cfg=cfg, pix_previa=previa)
+
+
+# --------------------------------------------------------------------------- #
+# Usuários e auditoria
+# --------------------------------------------------------------------------- #
+def _exigir_admin():
+    if not _is_admin():
+        flash("Acesso restrito a administradores.", "erro")
+        return redirect(url_for("main.index"))
+    return None
+
+
+@bp.route("/usuarios")
+def listar_usuarios():
+    barrado = _exigir_admin()
+    if barrado:
+        return barrado
+    usuarios = Usuario.query.order_by(Usuario.ativo.desc(), Usuario.nome).all()
+    return render_template("usuarios.html", usuarios=usuarios)
+
+
+@bp.route("/usuarios/novo", methods=["POST"])
+def novo_usuario():
+    barrado = _exigir_admin()
+    if barrado:
+        return barrado
+    nome = request.form.get("nome", "").strip()
+    login_txt = request.form.get("login", "").strip()
+    senha = request.form.get("senha", "")
+    if not nome or not login_txt or not senha:
+        flash("Preencha nome, login e senha.", "erro")
+        return redirect(url_for("main.listar_usuarios"))
+    if Usuario.query.filter(db.func.lower(Usuario.login) == login_txt.lower()).first():
+        flash("Já existe um usuário com esse login.", "erro")
+        return redirect(url_for("main.listar_usuarios"))
+    u = Usuario(nome=nome, login=login_txt, admin=bool(request.form.get("admin")))
+    u.set_senha(senha)
+    db.session.add(u)
+    db.session.commit()
+    flash(f"Usuário {u.login} criado.", "sucesso")
+    return redirect(url_for("main.listar_usuarios"))
+
+
+@bp.route("/usuarios/<int:usuario_id>/senha", methods=["POST"])
+def redefinir_senha_usuario(usuario_id):
+    barrado = _exigir_admin()
+    if barrado:
+        return barrado
+    u = Usuario.query.get_or_404(usuario_id)
+    senha = request.form.get("senha", "")
+    if not senha:
+        flash("Informe a nova senha.", "erro")
+        return redirect(url_for("main.listar_usuarios"))
+    u.set_senha(senha)
+    db.session.commit()
+    flash(f"Senha de {u.login} redefinida.", "sucesso")
+    return redirect(url_for("main.listar_usuarios"))
+
+
+@bp.route("/usuarios/<int:usuario_id>/toggle", methods=["POST"])
+def toggle_usuario(usuario_id):
+    barrado = _exigir_admin()
+    if barrado:
+        return barrado
+    u = Usuario.query.get_or_404(usuario_id)
+    u.ativo = not u.ativo
+    db.session.commit()
+    return redirect(url_for("main.listar_usuarios"))
+
+
+@bp.route("/usuarios/<int:usuario_id>/excluir", methods=["POST"])
+def excluir_usuario(usuario_id):
+    barrado = _exigir_admin()
+    if barrado:
+        return barrado
+    u = Usuario.query.get_or_404(usuario_id)
+    db.session.delete(u)
+    db.session.commit()
+    flash("Usuário excluído.", "sucesso")
+    return redirect(url_for("main.listar_usuarios"))
+
+
+@bp.route("/auditoria")
+def auditoria():
+    registros = Auditoria.query.order_by(Auditoria.criado_em.desc()).limit(500).all()
+    return render_template("auditoria.html", registros=registros)
 
 
 @bp.route("/vendas/<int:venda_id>/editar", methods=["GET", "POST"])
@@ -1397,8 +1660,10 @@ def excluir_venda(venda_id):
                 peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=it.quantidade,
                 observacao=f"Estorno por exclusão de venda #{venda.id}",
             ))
+    vid = venda.id
     db.session.delete(venda)
     db.session.commit()
+    _log("venda", f"pedido #{vid} excluído")
     flash("Venda excluída.", "sucesso")
     return redirect(url_for("main.listar_vendas"))
 
@@ -1475,7 +1740,9 @@ def receber_pagamentos(venda_id):
     if venda.pago and venda.status == "realizado":
         venda.status = "pago"
     db.session.commit()
-    msg = f"Pagamento registrado (R$ {sum(p['valor'] for p in novos):.2f})."
+    total_novos = sum(p["valor"] for p in novos)
+    _log("pagamento", f"pedido #{venda.id}: {_brl(total_novos)}")
+    msg = f"Pagamento registrado (R$ {total_novos:.2f})."
     if troco > 0.01:
         msg += f" Troco: R$ {troco:.2f}."
     flash(msg, "sucesso")
@@ -1869,6 +2136,23 @@ def calcular_frete():
 def listar_cupons():
     cupons = Cupom.query.order_by(Cupom.ativo.desc(), Cupom.codigo).all()
     return render_template("cupons.html", cupons=cupons)
+
+
+@bp.route("/cupons/validar", methods=["POST"])
+def validar_cupom():
+    """Valida um cupom e devolve tipo/valor (JSON) para prévia do desconto na venda."""
+    cod = request.form.get("codigo", "").strip().upper()
+    if not cod:
+        return {"ok": False, "erro": "Informe um código."}
+    cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
+    if not cupom:
+        return {"ok": False, "erro": "Cupom não encontrado."}
+    if not cupom.valido:
+        return {"ok": False, "erro": "Cupom inválido ou expirado."}
+    return {
+        "ok": True, "codigo": cupom.codigo, "tipo": cupom.tipo, "valor": cupom.valor,
+        "rotulo": (f"{cupom.valor:g}%" if cupom.tipo == "percentual" else _brl(cupom.valor)),
+    }
 
 
 @bp.route("/cupons/novo", methods=["POST"])

@@ -2,9 +2,16 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4 no-print">
   <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-link">← Voltar</a>
-  <div>
+  <div class="d-flex flex-wrap gap-2">
     <a href="{{ url_for('main.devolucao_venda', venda_id=venda.id) }}" class="btn btn-outline-secondary">↩ Devolução</a>
     <a href="{{ url_for('main.editar_venda', venda_id=venda.id) }}" class="btn btn-outline-secondary">Editar</a>
+    <a href="{{ url_for('main.recibo_venda', venda_id=venda.id) }}" target="_blank" class="btn btn-outline-secondary"><i class="bi bi-receipt"></i> Recibo</a>
+    {% if venda.cliente and venda.cliente.whatsapp_numero %}
+      <a href="https://wa.me/{{ venda.cliente.whatsapp_numero }}?text={{ recibo_texto | urlencode }}" target="_blank"
+         class="btn {{ 'btn-success' if venda.quitado else 'btn-outline-success' }}">
+        <i class="bi bi-whatsapp"></i> Enviar recibo
+      </a>
+    {% endif %}
     <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir pedido</button>
   </div>
 </div>
@@ -46,6 +53,7 @@
 </div>
 {% endif %}
 
+
 <div class="card bg-white area-impressao" style="max-width:820px; margin:0 auto;">
   <div class="card-body">
     <!-- Cabeçalho do pedido -->
@@ -57,6 +65,7 @@
       <div class="text-end">
         <div class="h5 mb-0">Pedido #{{ venda.id }}</div>
         <div class="small text-muted">{{ venda.criado_em | dt }}</div>
+        {% if venda.vendedor %}<div class="small text-muted">Vendedor: {{ venda.vendedor }}</div>{% endif %}
       </div>
     </div>
 
@@ -127,6 +136,7 @@
           <thead class="table-light"><tr><th>Forma</th><th>Valor (R$)</th><th>Parcelas</th><th>Taxa %</th><th></th></tr></thead>
           <tbody id="linhas-pagamentos"></tbody>
         </table>
+        <div class="small text-muted mb-2" id="pix-hint" style="display:none"><i class="bi bi-qr-code"></i> Forma Pix: clique no ícone ao lado do valor para gerar o QR.</div>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
           <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar forma</button>
           <button type="button" class="btn btn-link btn-sm p-0" id="pagar-tudo">preencher com o saldo</button>
@@ -150,54 +160,144 @@
         <button class="btn btn-sm btn-outline-primary">Aplicar vale</button>
       </form>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
     (function () {
       const SALDO = {{ venda.saldo_receber }};
+      const PIX = {{ pix_cfg | tojson }};
+      const PEDIDO_ID = "{{ venda.id }}";
       const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto'];
       const corpo = document.getElementById('linhas-pagamentos');
       const brl = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
       const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
       const numBR = v => Number(v||0).toFixed(2).replace('.', ',');  // formata NÚMERO (não texto digitado)
+
+      // ---- Pix "copia e cola" (espelho do gerador do servidor) ----
+      const pixAscii = (t, lim) => (t||'').normalize('NFKD').replace(/[̀-ͯ]/g,'').toUpperCase().trim().slice(0, lim);
+      const emv = (tag, val) => tag + String(val.length).padStart(2, '0') + val;
+      function crc16(payload) {
+        let crc = 0xFFFF;
+        for (let i = 0; i < payload.length; i++) {
+          crc ^= payload.charCodeAt(i) << 8;
+          for (let j = 0; j < 8; j++) { crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1); crc &= 0xFFFF; }
+        }
+        return crc.toString(16).toUpperCase().padStart(4, '0');
+      }
+      function pixPayload(valor) {
+        if (!PIX || !PIX.chave) return '';
+        const nome = pixAscii(PIX.nome, 25) || 'RECEBEDOR';
+        const cidade = pixAscii(PIX.cidade, 15) || 'CIDADE';
+        const txid = ('PEDIDO' + PEDIDO_ID).replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***';
+        const mai = emv('00', 'br.gov.bcb.pix') + emv('01', PIX.chave);
+        let campos = emv('00', '01') + emv('26', mai) + emv('52', '0000') + emv('53', '986');
+        if (valor > 0) campos += emv('54', valor.toFixed(2));
+        campos += emv('58', 'BR') + emv('59', nome) + emv('60', cidade);
+        campos += emv('62', emv('05', txid));
+        campos += '6304';
+        return campos + crc16(campos);
+      }
+      function abrirPix(valor) {
+        const payload = pixPayload(valor);
+        if (!payload) return;
+        document.getElementById('mp-qr').innerHTML = '';
+        new QRCode(document.getElementById('mp-qr'), { text: payload, width: 190, height: 190, colorDark: '#2c2620', colorLight: '#ffffff' });
+        document.getElementById('mp-code').value = payload;
+        document.getElementById('mp-valor').textContent = valor > 0 ? '· ' + brl(valor) : '';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modal-pix')).show();
+      }
+      const btnCopiar = document.getElementById('mp-copiar');
+      if (btnCopiar) btnCopiar.addEventListener('click', async () => {
+        const code = document.getElementById('mp-code');
+        try { await navigator.clipboard.writeText(code.value); }
+        catch (e) { code.select(); document.execCommand('copy'); }
+        const ok = document.getElementById('mp-ok'); ok.style.display = 'inline';
+        setTimeout(() => { ok.style.display = 'none'; }, 2000);
+      });
+
       function linha(forma, valor) {
         const tr = document.createElement('tr'); tr.className = 'pag-row';
         tr.innerHTML = `
           <td><select name="pag_forma" class="form-select form-select-sm pg-forma">${FORMAS.map(f=>`<option ${f===forma?'selected':''}>${f}</option>`).join('')}</select></td>
-          <td><input type="text" name="pag_valor" class="form-control form-control-sm pg-valor" value="${valor||''}" style="width:110px"></td>
+          <td><div class="input-group input-group-sm" style="width:150px">
+            <input type="text" name="pag_valor" class="form-control pg-valor" value="${valor||''}">
+            <button type="button" class="btn btn-outline-secondary pg-pix" title="Gerar QR Pix" style="display:none"><i class="bi bi-qr-code"></i></button>
+          </div></td>
           <td><input type="text" name="pag_parcelas" class="form-control form-control-sm" value="1" style="width:60px"></td>
           <td><input type="text" name="pag_taxa" class="form-control form-control-sm" value="0" style="width:70px"></td>
           <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
         corpo.appendChild(tr);
       }
       function recalc() {
-        let informado = 0, dinheiro = 0, naoDinheiro = 0;
+        let informado = 0, dinheiro = 0, naoDinheiro = 0, temPix = false;
         corpo.querySelectorAll('.pag-row').forEach(tr => {
-          const cash = tr.querySelector('.pg-forma').value === 'Dinheiro';
+          const forma = tr.querySelector('.pg-forma').value;
+          const cash = forma === 'Dinheiro';
           const v = num(tr.querySelector('.pg-valor').value);
           informado += v;
           if (cash) dinheiro += v; else naoDinheiro += v;
-          // Formas não-dinheiro não podem passar do saldo — destaca em vermelho.
           const inp = tr.querySelector('.pg-valor');
           inp.classList.toggle('is-invalid', !cash && v > SALDO + 0.01);
+          // Botão de QR Pix aparece quando a forma é Pix e o Pix está configurado.
+          const btnPix = tr.querySelector('.pg-pix');
+          const mostrar = PIX && forma === 'Pix';
+          btnPix.style.display = mostrar ? '' : 'none';
+          if (mostrar) temPix = true;
         });
         document.getElementById('p-pago').textContent = brl(informado);
         const restante = Math.max(0, SALDO - informado);
         const s = document.getElementById('p-saldo');
         s.textContent = brl(restante); s.className = restante > 0.01 ? 'text-danger' : 'text-success';
-        // Troco só existe se o excesso for dinheiro.
         const aplicadoDinheiro = Math.max(0, Math.min(dinheiro, SALDO - naoDinheiro));
         const troco = dinheiro - aplicadoDinheiro;
         document.getElementById('troco-info').innerHTML = troco > 0.01 ? ` · Troco: <b>${brl(troco)}</b>` : '';
+        const hint = document.getElementById('pix-hint');
+        if (hint) hint.style.display = temPix ? '' : 'none';
       }
       document.getElementById('add-pagamento').addEventListener('click', () => linha('Dinheiro',''));
       document.getElementById('pagar-tudo').addEventListener('click', () => {
-        let r = corpo.querySelector('.pag-row'); if (!r) { linha('Dinheiro',''); r = corpo.querySelector('.pag-row'); }
-        r.querySelector('.pg-valor').value = numBR(SALDO); recalc();
+        const linhas = corpo.querySelectorAll('.pag-row');
+        let alvo = linhas.length ? linhas[linhas.length - 1] : null;
+        if (!alvo) { linha('Dinheiro',''); alvo = corpo.querySelector('.pag-row'); }
+        // Soma o que já foi informado nas OUTRAS linhas e preenche o alvo com o que falta.
+        let outras = 0;
+        corpo.querySelectorAll('.pag-row').forEach(tr => { if (tr !== alvo) outras += num(tr.querySelector('.pg-valor').value); });
+        const falta = Math.max(0, Math.round((SALDO - outras) * 100) / 100);
+        alvo.querySelector('.pg-valor').value = numBR(falta);
+        recalc();
       });
       corpo.addEventListener('input', recalc); corpo.addEventListener('change', recalc);
-      corpo.addEventListener('click', e => { if (e.target.classList.contains('pg-rem')) { e.target.closest('.pag-row').remove(); recalc(); } });
+      corpo.addEventListener('click', e => {
+        if (e.target.classList.contains('pg-rem')) { e.target.closest('.pag-row').remove(); recalc(); return; }
+        const btnPix = e.target.closest('.pg-pix');
+        if (btnPix) {
+          const tr = btnPix.closest('.pag-row');
+          let v = num(tr.querySelector('.pg-valor').value);
+          if (v <= 0) v = SALDO;  // sem valor digitado: usa o saldo
+          abrirPix(v);
+        }
+      });
       linha('Dinheiro', numBR(SALDO)); recalc();
     })();
     </script>
+
+    <!-- Modal: QR Pix -->
+    <div class="modal fade no-print" id="modal-pix" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-qr-code"></i> Pix <span id="mp-valor" class="text-muted"></span></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body text-center">
+            <div id="mp-qr" class="d-flex justify-content-center"></div>
+            <label class="form-label small text-muted mt-3">Pix copia e cola</label>
+            <textarea id="mp-code" class="form-control form-control-sm" rows="3" readonly style="font-family:monospace"></textarea>
+            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="mp-copiar">📋 Copiar código</button>
+            <span class="small text-success ms-2" id="mp-ok" style="display:none">copiado!</span>
+          </div>
+        </div>
+      </div>
+    </div>
     {% endif %}
 
     <!-- Bloco interno: não aparece na impressão, oculto por padrão -->
