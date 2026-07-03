@@ -8,35 +8,29 @@
 </div>
 <p class="text-muted">Registro de acessos e ações de venda e estoque (mais recentes primeiro).</p>
 
-<form method="get" class="row g-2 mb-3">
-  <div class="col-6 col-md-3">
-    <select name="usuario" class="form-select" onchange="this.form.submit()">
-      <option value="">Todos os usuários</option>
-      {% for u in usuarios %}<option value="{{ u }}" {{ 'selected' if f_usuario == u }}>{{ u }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="col-6 col-md-3">
-    <select name="acao" class="form-select" onchange="this.form.submit()">
-      <option value="">Todas as ações</option>
-      {% for a in acoes %}<option value="{{ a }}" {{ 'selected' if f_acao == a }}>{{ a }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="col-6 col-md-2">
-    <input type="date" name="de" class="form-control" value="{{ de }}" title="De">
-  </div>
-  <div class="col-6 col-md-2">
-    <input type="date" name="ate" class="form-control" value="{{ ate }}" title="Até">
-  </div>
-  <div class="col-md-2 d-flex gap-1">
-    <button class="btn btn-outline-secondary flex-grow-1">Filtrar</button>
-    {% if f_usuario or f_acao or de or ate %}<a href="{{ url_for('main.auditoria') }}" class="btn btn-outline-secondary">×</a>{% endif %}
-  </div>
-</form>
-
 <div class="card bg-white">
   <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h2 class="h5 mb-0">Registros</h2>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+          <select name="usuario" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+            <option value="">Todos os usuários</option>
+            {% for u in usuarios %}<option value="{{ u }}" {{ 'selected' if f_usuario == u }}>{{ u }}</option>{% endfor %}
+          </select>
+          <select name="acao" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+            <option value="">Todas as ações</option>
+            {% for a in acoes %}<option value="{{ a }}" {{ 'selected' if f_acao == a }}>{{ a }}</option>{% endfor %}
+          </select>
+          <input type="date" name="de" class="form-control form-control-sm" style="width:auto" value="{{ de }}" title="De">
+          <input type="date" name="ate" class="form-control form-control-sm" style="width:auto" value="{{ ate }}" title="Até">
+          <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+          {% if f_usuario or f_acao or de or ate %}<a href="{{ url_for('main.auditoria') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+        </form>
+        {{ ui.por_pagina() }}
+      </div>
+    </div>
     {% if registros %}
-    <div class="d-flex justify-content-end mb-2">{{ ui.por_pagina() }}</div>
     <table class="table table-sm align-middle tabela-cartao">
       <thead class="table-light"><tr><th style="width:170px">Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead>
       <tbody>

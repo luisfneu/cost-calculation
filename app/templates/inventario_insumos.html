@@ -10,8 +10,9 @@
 
 {% if insumos %}
 <form method="post">
+  <div class="card bg-white"><div class="card-body">
   <div class="table-responsive">
-    <table class="table align-middle bg-white">
+    <table class="table table-hover align-middle">
       <thead class="table-light">
         <tr>
           <th style="min-width:220px">Insumo</th>
@@ -59,6 +60,7 @@
   <div class="text-end">
     <button class="btn btn-primary">Aplicar inventário</button>
   </div>
+  </div></div>
 </form>
 {% else %}
 {{ ui.vazio('bi-box-seam', 'Nenhum insumo cadastrado', 'Cadastre insumos para controlar o estoque.', '+ Novo insumo', url_for('main.form_insumo')) }}

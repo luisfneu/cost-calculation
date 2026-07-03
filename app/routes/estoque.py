@@ -57,9 +57,47 @@ from .helpers import *  # noqa: F401,F403
 
 @bp.route("/historico")
 def historico():
-    mov_pecas = MovimentoPeca.query.order_by(MovimentoPeca.criado_em.desc()).limit(300).all()
-    mov_insumos = MovimentoEstoque.query.order_by(MovimentoEstoque.criado_em.desc()).limit(300).all()
-    return render_template("historico.html", mov_pecas=mov_pecas, mov_insumos=mov_insumos)
+    origem = request.args.get("origem", "").strip()   # "peca" | "insumo"
+    tipo = request.args.get("tipo", "").strip()        # entrada|saida|producao|ajuste
+    de = _to_date(request.args.get("de"))
+    ate = _to_date(request.args.get("ate"))
+    q = request.args.get("q", "").strip().lower()
+
+    linhas = []
+    if origem in ("", "peca"):
+        for m in MovimentoPeca.query.all():
+            linhas.append({
+                "data": m.criado_em, "origem": "Peça", "item": m.peca.nome,
+                "detalhe": m.tamanho, "tipo": m.tipo, "quantidade": m.quantidade, "obs": "",
+            })
+    if origem in ("", "insumo"):
+        for m in MovimentoEstoque.query.all():
+            linhas.append({
+                "data": m.criado_em, "origem": "Insumo", "item": m.insumo.nome,
+                "detalhe": m.insumo.unidade, "tipo": m.tipo,
+                "quantidade": m.quantidade, "obs": m.observacao,
+            })
+
+    if tipo:
+        linhas = [l for l in linhas if l["tipo"] == tipo]
+    if de:
+        linhas = [l for l in linhas if l["data"] and l["data"].date() >= de]
+    if ate:
+        linhas = [l for l in linhas if l["data"] and l["data"].date() <= ate]
+    if q:
+        linhas = [l for l in linhas if q in l["item"].lower()]
+
+    linhas.sort(key=lambda l: l["data"] or datetime.min, reverse=True)
+    total = len(linhas)
+    linhas, pagina, total_paginas = _paginar(linhas)
+
+    return render_template(
+        "historico.html", linhas=linhas, total=total,
+        pagina=pagina, total_paginas=total_paginas,
+        origem=origem, f_tipo=tipo, q=request.args.get("q", ""),
+        de=request.args.get("de", ""), ate=request.args.get("ate", ""),
+        tipos=["entrada", "saida", "producao", "ajuste"],
+    )
 
 
 @bp.route("/estoque/inventario", methods=["GET", "POST"])

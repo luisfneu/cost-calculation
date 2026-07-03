@@ -423,6 +423,7 @@ a.stat:hover, .stat.clicavel:hover { box-shadow: 0 6px 20px rgba(44,38,32,.10); 
 }
 /* Acentos de estado (só no ícone, sem fundo pesado) */
 .stat.ok    .ic { background: rgba(109,122,92,.15);  color: #6d7a5c; }
+.stat.ok    .num { color: #6d7a5c; }
 .stat.aviso .ic { background: rgba(165,98,79,.14);   color: #a5624f; }
 .stat.aviso .num { color: #a5624f; }
 

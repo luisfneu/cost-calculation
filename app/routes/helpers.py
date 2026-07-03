@@ -65,7 +65,7 @@ def _is_admin():
 
 def _log(acao, detalhe=""):
     """Registra uma ação na trilha de auditoria (login, vendas, estoque)."""
-    db.session.add(Auditoria(usuario=_usuario_atual() or "?", acao=acao, detalhe=detalhe[:255]))
+    db.session.add(Auditoria(usuario=_usuario_atual() or "sistema", acao=acao, detalhe=detalhe[:255]))
     # Commit deixado a cargo de quem chama, mas garantimos que persista:
     db.session.commit()
 

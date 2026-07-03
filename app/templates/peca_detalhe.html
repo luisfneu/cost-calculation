@@ -203,7 +203,7 @@
           {% endfor %}
           </tbody>
           <tfoot>
-            <tr class="fw-bold"><td colspan="3" class="text-end">Total insumos</td><td>{{ peca.custo_insumos | moeda }}</td><td></td></tr>
+            <tr class="fw-bold"><td colspan="3" class="text-end">Total insumos</td><td class="text-nowrap">{{ peca.custo_insumos | moeda }}</td><td></td></tr>
           </tfoot>
         </table>
         {% else %}

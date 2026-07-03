@@ -5,16 +5,18 @@
   <h1 class="h3 mb-0">Peças</h1>
   <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary">+ Nova peça</a>
 </div>
-<form method="get" class="input-group mb-3" style="max-width:420px">
-  <input type="text" name="q" class="form-control" placeholder="Buscar por nome ou coleção" value="{{ q }}">
-  <button class="btn btn-outline-secondary">Buscar</button>
-  {% if q %}<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-outline-secondary">×</a>{% endif %}
-</form>
-
+<div class="card bg-white"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+      <input type="text" name="q" class="form-control form-control-sm" placeholder="nome, coleção ou tag" value="{{ q }}" style="width:240px">
+      <button class="btn btn-sm btn-outline-secondary">Buscar</button>
+      {% if q %}<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+    </form>
+    {% if pecas %}{{ ui.por_pagina() }}{% endif %}
+  </div>
 {% if pecas %}
-<div class="d-flex justify-content-end mb-2">{{ ui.por_pagina() }}</div>
 <div class="table-responsive">
-<table class="table table-hover align-middle bg-white">
+<table class="table table-hover align-middle">
   <thead class="table-light">
     <tr><th></th><th>Peça</th><th>Estoque</th><th>Custo total</th><th>Margem</th><th>Preço de venda</th><th>Lucro</th><th></th></tr>
   </thead>
@@ -55,4 +57,5 @@
 {% else %}
 {{ ui.vazio('bi-bag', 'Nenhuma peça cadastrada ainda', 'Cadastre sua primeira peça para começar.', '+ Nova peça', url_for('main.form_peca')) }}
 {% endif %}
+</div></div>
 {% endblock %}

@@ -20,14 +20,32 @@
     <div class="col-md-3 mb-3">
       <label class="form-label">Coleção</label>
       {% set atual_col = peca.colecao if peca else '' %}
-      <select name="colecao" class="form-select">
-        <option value="">— sem coleção —</option>
-        {% for c in colecoes %}<option value="{{ c }}" {{ 'selected' if atual_col == c }}>{{ c }}</option>{% endfor %}
-        {% if atual_col and atual_col not in colecoes %}<option value="{{ atual_col }}" selected>{{ atual_col }} (inativa)</option>{% endif %}
-      </select>
-      <small class="text-muted">Cadastre em <a href="{{ url_for('main.listar_colecoes') }}" target="_blank">Coleções</a>.</small>
+      <div class="d-flex align-items-center gap-2">
+        <img id="colecao-preview" class="foto-thumb {{ '' if colecao_fotos.get(atual_col) else 'd-none' }}"
+             src="{{ url_for('static', filename='uploads/' ~ colecao_fotos.get(atual_col)) if colecao_fotos.get(atual_col) else '' }}" alt="">
+        <select name="colecao" id="sel-colecao" class="form-select" data-fotos='{{ colecao_fotos | tojson }}'>
+          <option value="">— sem coleção —</option>
+          {% for c in colecoes %}<option value="{{ c }}" {{ 'selected' if atual_col == c }}>{{ c }}</option>{% endfor %}
+          {% if atual_col and atual_col not in colecoes %}<option value="{{ atual_col }}" selected>{{ atual_col }} (inativa)</option>{% endif %}
+        </select>
+      </div>
+      <small class="text-muted">Cadastre em <a href="{{ url_for('main.listar_colecoes') }}" target="_blank" class="link-atelier">Coleções</a>.</small>
     </div>
   </div>
+  <script>
+    // Mostra a foto da coleção selecionada.
+    (function () {
+      const sel = document.getElementById('sel-colecao');
+      const img = document.getElementById('colecao-preview');
+      if (!sel || !img) return;
+      const fotos = JSON.parse(sel.dataset.fotos || '{}');
+      sel.addEventListener('change', function () {
+        const f = fotos[sel.value];
+        if (f) { img.src = "{{ url_for('static', filename='uploads/') }}" + f; img.classList.remove('d-none'); }
+        else { img.classList.add('d-none'); img.removeAttribute('src'); }
+      });
+    })();
+  </script>
   <div class="mb-3">
     <label class="form-label">Tags</label>
     <input type="text" name="tags" class="form-control"
