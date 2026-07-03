@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Recibo · Pedido #{{ venda.id }}</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <style>
     :root { --gold:#b08a4f; --ink:#2c2620; --soft:#6b5f52; --line:#e6ddcf; }
@@ -36,6 +36,7 @@
 <body>
   <div class="recibo">
     <div class="cab">
+      <img src="{{ url_for('static', filename='monograma.svg') }}" alt="sh" style="height:44px; margin-bottom:2px;">
       <div class="marca">Sabrina Hansen</div>
       <div class="sub">Atelier</div>
       <div class="meta">

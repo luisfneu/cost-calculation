@@ -35,7 +35,8 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
   border-bottom: 1px solid var(--gold-soft);
   box-shadow: 0 1px 12px rgba(44, 38, 32, .08);
 }
-.navbar-brand { display: flex; align-items: center; gap: .7rem; }
+.navbar-brand { display: flex; align-items: center; gap: .6rem; padding-top: 0; padding-bottom: 0; }
+.brand-monograma { height: 48px; width: auto; display: block; }
 .brand-monogram {
   font-family: 'Parisienne', cursive;
   font-size: 2.4rem;

@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vitrine · Sabrina Hansen Atelier</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
@@ -21,9 +21,8 @@
 </head>
 <body>
   <div class="topo">
-    <div class="mono">sh</div>
-    <div class="marca">Sabrina Hansen</div>
-    <div style="color:#fff; letter-spacing:4px; font-size:.7rem; text-transform:uppercase">Atelier · Vitrine</div>
+    <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:300px; max-width:80%;">
+    <div style="color:#fff; letter-spacing:4px; font-size:.7rem; text-transform:uppercase; margin-top:4px">Vitrine</div>
   </div>
   <div class="container pb-5">
     {% set total = grupos.values() | map('length') | sum %}

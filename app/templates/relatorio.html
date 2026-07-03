@@ -2,6 +2,9 @@
 {% import "_macros.html" as ui %}
 {% block titulo %}Relatório{% endblock %}
 {% block conteudo %}
+<div class="text-center mb-4">
+  <img src="{{ url_for('static', filename='logo.svg') }}" alt="Sabrina Hansen Atelier" style="height:120px; max-width:100%;">
+</div>
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
   <h1 class="h3 mb-0">Relatório</h1>
   <form method="get" class="d-flex align-items-center gap-2">

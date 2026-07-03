@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Etiqueta · {{ peca.nome }}</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <style>
@@ -30,6 +30,7 @@
 </head>
 <body>
   <div class="etiqueta">
+    <img src="{{ url_for('static', filename='monograma.svg') }}" alt="sh" style="height:42px; margin-bottom:2px;">
     <div class="marca">Sabrina Hansen</div>
     <div class="sub">Atelier</div>
     <div class="nome">{{ peca.nome }}<span class="tam-badge" id="tam-badge" style="{{ '' if tam_sel else 'display:none' }}">{{ tam_sel }}</span></div>

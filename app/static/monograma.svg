@@ -1,8 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#b89a78"/>
-  <rect x="4" y="4" width="56" height="56" rx="11" fill="none" stroke="#f7f1e6" stroke-width="1.5" opacity="0.7"/>
-  <g fill="#f7f1e6" transform="translate(0.455,17.444) scale(0.04107)">
-    <g transform="translate(0,1024) scale(0.1,-0.1)"><path d="M9540 9194 c-285 -54 -572 -320 -857 -794 -327 -545 -742 -1459
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="90 51 1356 606" width="1356" height="606" preserveAspectRatio="xMidYMid meet">
+<g transform="translate(0.000000,1024.000000) scale(0.100000,-0.100000)" fill="#b08a4f" stroke="none">
+<path d="M9540 9194 c-285 -54 -572 -320 -857 -794 -327 -545 -742 -1459
 -1039 -2293 l-39 -108 -165 -108 c-237 -156 -557 -347 -812 -485 l-87 -47 -5
 33 c-7 46 -53 347 -67 442 l-12 79 44 36 c201 164 303 307 315 443 11 125 -61
 198 -196 198 -168 0 -317 -146 -376 -370 -17 -65 -23 -211 -14 -319 l4 -55
@@ -33,6 +32,6 @@
 -65 -1 -215 -168 -379 l-91 -90 -3 69 c-4 92 12 162 59 255 64 129 155 194
 203 145z m-418 -1406 c-9 -110 -50 -293 -90 -399 -125 -335 -370 -535 -546
 -446 -85 42 -112 121 -86 247 36 170 168 335 396 492 77 54 308 188 324 188 5
-0 6 -36 2 -82z"/></g>
-  </g>
+0 6 -36 2 -82z"/>
+</g>
 </svg>

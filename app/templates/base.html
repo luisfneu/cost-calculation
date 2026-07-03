@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block titulo %}CRM{% endblock %} · Sabrina Hansen Atelier</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
@@ -15,7 +15,7 @@
   <nav class="navbar navbar-expand-lg atelier-nav mb-4">
     <div class="container">
       <a class="navbar-brand" href="{{ url_for('main.index') }}">
-        <span class="brand-monogram">sh</span>
+        <img src="{{ url_for('static', filename='monograma.svg') }}" class="brand-monograma" alt="sh">
         <span class="brand-name">
           <span class="brand-title">Sabrina Hansen</span>
           <span class="brand-sub">Atelier</span>
