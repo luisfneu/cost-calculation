@@ -1,4 +1,5 @@
 """Rotas da aplicação."""
+import calendar
 import csv
 import io
 import math
@@ -39,6 +40,7 @@ from .models import (
     OrdemProducaoItem,
     Pagamento,
     Parametro,
+    Parcela,
     Peca,
     PecaInsumo,
     Usuario,
@@ -1349,12 +1351,14 @@ def alterar_status_venda(venda_id, novo):
     if novo not in Venda.FLUXO:
         flash("Status inválido.", "erro")
         return redirect(request.referrer or url_for("main.listar_vendas"))
-    # Só libera envio/entrega depois do pagamento (na venda).
-    if novo in ("enviado", "entregue") and venda.saldo_receber > 0.01:
+    # Só libera envio/entrega depois do pagamento — crediário já é liberado.
+    if novo in ("enviado", "entregue") and venda.saldo_receber > 0.01 and not venda.eh_crediario:
         flash("Registre o pagamento antes de enviar/entregar o pedido.", "erro")
         return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
     venda.status = novo
-    venda.pago = novo in ("pago", "enviado", "entregue")
+    # Crediário: o 'pago' fica a cargo do pagamento das parcelas (não força aqui).
+    if not venda.eh_crediario:
+        venda.pago = novo in ("pago", "enviado", "entregue")
     db.session.commit()
     flash(f"Pedido #{venda.id}: {venda.status_label}.", "sucesso")
     return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
@@ -1704,11 +1708,53 @@ def receber_pagamento(venda_id):
     return redirect(request.referrer or url_for("main.contabilidade"))
 
 
+def _add_meses(d, k):
+    """Retorna a data d + k meses (ajustando o dia ao fim do mês quando preciso)."""
+    total = d.month - 1 + k
+    ano = d.year + total // 12
+    mes = total % 12 + 1
+    dia = min(d.day, calendar.monthrange(ano, mes)[1])
+    return date(ano, mes, dia)
+
+
+def _gerar_parcelas(venda, total, n, inicio):
+    """Cria n parcelas somando 'total', mensais a partir de 'inicio'."""
+    n = max(1, int(n))
+    base = round(total / n, 2)
+    acumulado = 0.0
+    for k in range(n):
+        valor = round(total - acumulado, 2) if k == n - 1 else base
+        acumulado += valor
+        db.session.add(Parcela(
+            venda=venda, numero=k + 1, total=n, valor=valor,
+            vencimento=_add_meses(inicio, k),
+        ))
+
+
 @bp.route("/vendas/<int:venda_id>/pagamentos", methods=["POST"])
 def receber_pagamentos(venda_id):
     """Adiciona pagamentos (múltiplas formas). Só dinheiro pode exceder o saldo
     (o excesso vira troco). Formas eletrônicas não podem passar do saldo."""
     venda = Venda.query.get_or_404(venda_id)
+
+    # Crediário: cobre todo o saldo em parcelas (não marca como pago).
+    formas = request.form.getlist("pag_forma")
+    if "Crediário" in formas:
+        if venda.parcelas:
+            flash("Este pedido já tem um crediário.", "erro")
+            return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+        n = int(_to_float(request.form.get("cred_parcelas"), padrao=1)) or 1
+        inicio = _to_date(request.form.get("cred_inicio")) or date.today()
+        total = round(venda.saldo_receber, 2)
+        _gerar_parcelas(venda, total, n, inicio)
+        if venda.status == "realizado":
+            venda.status = "crediario"
+        db.session.commit()
+        _log("crediario", f"pedido #{venda.id}: {n}x de {_brl(total / n)}")
+        flash(f"Crediário criado: {n} parcela(s). O pedido foi liberado e as parcelas "
+              f"estão em Contas a receber.", "sucesso")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+
     pags = _pagamentos_do_form()
     if not pags:
         flash("Adicione ao menos um pagamento com valor.", "erro")
@@ -1881,6 +1927,44 @@ def listar_despesas():
     despesas = Despesa.query.order_by(Despesa.pago, Despesa.vencimento).all()
     total_pendente = sum(d.valor for d in despesas if not d.pago)
     return render_template("despesas.html", despesas=despesas, total_pendente=total_pendente)
+
+
+@bp.route("/contas-a-receber")
+def contas_a_receber():
+    """Parcelas de crediário em aberto + pedidos com saldo pendente."""
+    from datetime import date as _date
+    parcelas = [p for p in Parcela.query.all() if not p.pago]
+    parcelas.sort(key=lambda p: (p.vencimento or _date.max, p.venda_id, p.numero))
+    # Pedidos com saldo pendente que NÃO são crediário (pagamento parcial etc.).
+    outros = [v for v in Venda.query.all() if v.saldo_receber > 0.01 and not v.parcelas]
+    outros.sort(key=lambda v: (v.vencimento or _date.max, v.id))
+
+    total = sum(p.valor for p in parcelas) + sum(v.saldo_receber for v in outros)
+    total_vencido = (sum(p.valor for p in parcelas if p.vencida)
+                     + sum(v.saldo_receber for v in outros if v.vencida))
+    return render_template(
+        "contas_a_receber.html", parcelas=parcelas, outros=outros,
+        total=total, total_vencido=total_vencido, hoje=date.today(),
+    )
+
+
+@bp.route("/parcelas/<int:parcela_id>/pagar", methods=["POST"])
+def pagar_parcela(parcela_id):
+    p = Parcela.query.get_or_404(parcela_id)
+    if p.pago:
+        flash("Parcela já recebida.", "erro")
+        return redirect(request.referrer or url_for("main.contas_a_receber"))
+    p.pago = True
+    p.pago_em = datetime.now()
+    venda = p.venda
+    db.session.add(Pagamento(venda=venda, forma=f"Crediário {p.rotulo}", valor=p.valor))
+    venda.pago = venda.total_pago >= venda.receita - 0.01
+    if venda.crediario_quitado and venda.status == "crediario":
+        venda.status = "pago"
+    db.session.commit()
+    _log("pagamento", f"parcela {p.rotulo} pedido #{venda.id}: {_brl(p.valor)}")
+    flash(f"Parcela {p.rotulo} do pedido #{venda.id} recebida.", "sucesso")
+    return redirect(request.referrer or url_for("main.contas_a_receber"))
 
 
 @bp.route("/despesas/nova", methods=["POST"])
