@@ -173,7 +173,8 @@
         <button class="btn btn-sm btn-outline-primary">Aplicar vale</button>
       </form>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pix.js') }}"></script>
     <script>
     (function () {
       const SALDO = {{ venda.saldo_receber }};
@@ -185,29 +186,10 @@
       const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
       const numBR = v => Number(v||0).toFixed(2).replace('.', ',');  // formata NÚMERO (não texto digitado)
 
-      // ---- Pix "copia e cola" (espelho do gerador do servidor) ----
-      const pixAscii = (t, lim) => (t||'').normalize('NFKD').replace(/[̀-ͯ]/g,'').toUpperCase().trim().slice(0, lim);
-      const emv = (tag, val) => tag + String(val.length).padStart(2, '0') + val;
-      function crc16(payload) {
-        let crc = 0xFFFF;
-        for (let i = 0; i < payload.length; i++) {
-          crc ^= payload.charCodeAt(i) << 8;
-          for (let j = 0; j < 8; j++) { crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1); crc &= 0xFFFF; }
-        }
-        return crc.toString(16).toUpperCase().padStart(4, '0');
-      }
+      // Pix "copia e cola" — gerador compartilhado em static/js/pix.js.
       function pixPayload(valor) {
         if (!PIX || !PIX.chave) return '';
-        const nome = pixAscii(PIX.nome, 25) || 'RECEBEDOR';
-        const cidade = pixAscii(PIX.cidade, 15) || 'CIDADE';
-        const txid = ('PEDIDO' + PEDIDO_ID).replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***';
-        const mai = emv('00', 'br.gov.bcb.pix') + emv('01', PIX.chave);
-        let campos = emv('00', '01') + emv('26', mai) + emv('52', '0000') + emv('53', '986');
-        if (valor > 0) campos += emv('54', valor.toFixed(2));
-        campos += emv('58', 'BR') + emv('59', nome) + emv('60', cidade);
-        campos += emv('62', emv('05', txid));
-        campos += '6304';
-        return campos + crc16(campos);
+        return AtelierPix.payload(PIX.chave, PIX.nome, PIX.cidade, valor, 'PEDIDO' + PEDIDO_ID);
       }
       function abrirPix(valor) {
         const payload = pixPayload(valor);

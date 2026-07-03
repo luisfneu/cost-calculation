@@ -24,9 +24,12 @@ if __name__ == "__main__":
 
     if os.path.exists(cert) and os.path.exists(key):
         # HTTPS na rede local: aceite o aviso de certificado uma vez no navegador.
+        # debug=False (segurança): NUNCA expor o debugger interativo do Werkzeug
+        # na rede — em uma exceção ele permitiria executar código no servidor.
         # threaded=True atende as requisições em paralelo (evita a lentidão de
         # ficar serializando os handshakes TLS de CSS/JS/ícones).
-        app.run(host="0.0.0.0", port=porta, debug=True, threaded=True,
+        app.run(host="0.0.0.0", port=porta, debug=False, threaded=True,
                 ssl_context=(cert, key))
     else:
+        # Só localhost: debug ligado é seguro e conveniente (auto-reload).
         app.run(host="127.0.0.1", port=porta, debug=True, threaded=True)

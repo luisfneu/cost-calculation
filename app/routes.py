@@ -321,14 +321,6 @@ def index():
     )
 
 
-@bp.route("/meta", methods=["POST"])
-def salvar_meta():
-    Parametro.definir("meta_mensal", _to_float(request.form.get("meta_mensal")))
-    db.session.commit()
-    flash("Meta mensal atualizada.", "sucesso")
-    return redirect(url_for("main.index"))
-
-
 @bp.route("/vitrine")
 def vitrine():
     """Vitrine para mostrar ao cliente: foto + preço de etiqueta, por coleção."""
@@ -1244,15 +1236,36 @@ def _pecas_com_estoque():
     return [p for p in Peca.query.order_by(Peca.nome).all() if p.disponivel_total >= 1]
 
 
-def _render_form_pedido(modo, prefill_itens=None, prefill_pedido=None):
-    # Venda: só peças com estoque. Encomenda: todas.
+def _render_form_pedido(modo, prefill_itens=None, prefill_pedido=None, acao=None, venda=None):
+    # Venda: só peças com estoque. Encomenda/edição: todas (mantém itens do pedido).
     pecas = _pecas_com_estoque() if modo == "venda" else Peca.query.order_by(Peca.nome).all()
     kits = Kit.query.filter_by(ativo=True).order_by(Kit.nome).all()
     return render_template(
         "venda_nova.html", modo=modo, pecas=pecas, kits=kits,
         clientes=Cliente.query.order_by(Cliente.nome).all(),
         prefill_itens=prefill_itens or [], prefill_pedido=prefill_pedido or {},
+        acao=acao, venda=venda,
     )
+
+
+def _pfnum(v):
+    """Formata número para prefill de campo (vazio quando 0)."""
+    return "" if not v else (f"{v:g}")
+
+
+def _prefill_de_venda(venda):
+    itens = [{
+        "peca_id": it.peca_id, "tamanho": it.tamanho, "quantidade": it.quantidade,
+        "preco": it.preco_unitario, "desconto": it.desconto,
+    } for it in venda.itens]
+    pedido = {
+        "cliente_id": venda.cliente_id,
+        "frete": _pfnum(venda.frete),
+        "frete_cortesia": venda.frete_cortesia,
+        "marketplace_pct": _pfnum(venda.marketplace_pct),
+        "desconto_total": _pfnum(venda.desconto_total),
+    }
+    return itens, pedido
 
 
 def _processar_pedido(modo):
@@ -1603,68 +1616,75 @@ def auditoria():
 @bp.route("/vendas/<int:venda_id>/editar", methods=["GET", "POST"])
 def editar_venda(venda_id):
     venda = Venda.query.get_or_404(venda_id)
+    acao = url_for("main.editar_venda", venda_id=venda.id)
 
-    if request.method == "POST":
-        def _re_render():
-            return render_template(
-                "venda_editar.html", venda=venda, pecas=_pecas_para_venda(),
-                clientes=Cliente.query.order_by(Cliente.nome).all(),
-            )
+    if request.method == "GET":
+        itens, pedido = _prefill_de_venda(venda)
+        return _render_form_pedido("editar", itens, pedido, acao=acao, venda=venda)
 
-        linhas, erro = _itens_do_form()
-        if erro:
-            flash(erro, "erro")
-            return _re_render()
+    def _re_render():
+        return _render_form_pedido("editar", _itens_crus_do_form(), request.form,
+                                   acao=acao, venda=venda)
 
-        # Ajusta o estoque só se a venda já tinha estoque baixado.
-        if venda.estoque_baixado:
-            retornos = {}
-            for it in venda.itens:
-                retornos[(it.peca_id, it.tamanho)] = retornos.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
-            necessarios = _agrupar(linhas)
-            for (pid, tam), need in necessarios.items():
-                peca = Peca.query.get(pid)
-                linha = _linha_estoque_peca(peca, tam)
-                disp = (linha.quantidade if linha else 0.0) + retornos.get((pid, tam), 0.0)
-                if need > disp:
-                    flash(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).", "erro")
-                    return _re_render()
-            for chave in set(retornos) | set(necessarios):
-                pid, tam = chave
-                net = necessarios.get(chave, 0.0) - retornos.get(chave, 0.0)
-                if net == 0:
-                    continue
-                peca = Peca.query.get(pid)
-                linha = _linha_estoque_peca(peca, tam, criar=True)
-                linha.quantidade -= net
-                db.session.add(MovimentoPeca(
-                    peca=peca, tamanho=tam, tipo="saida" if net > 0 else "estorno",
-                    quantidade=abs(net), observacao=f"Edição de venda #{venda.id}",
-                ))
+    linhas, erro = _itens_do_form()
+    if erro:
+        flash(erro, "erro")
+        return _re_render()
 
-        # Refaz os itens e atualiza os dados do pedido (mantém o status atual).
-        for it in list(venda.itens):
-            db.session.delete(it)
-        venda.itens = []
-        for l in linhas:
-            db.session.add(VendaItem(
-                venda=venda, peca=l["peca"], tamanho=l["tamanho"],
-                quantidade=l["quantidade"], preco_unitario=l["preco"],
-                desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
+    # Ajusta o estoque só se a venda já tinha estoque baixado.
+    if venda.estoque_baixado:
+        retornos = {}
+        for it in venda.itens:
+            retornos[(it.peca_id, it.tamanho)] = retornos.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
+        necessarios = _agrupar(linhas)
+        for (pid, tam), need in necessarios.items():
+            peca = Peca.query.get(pid)
+            linha = _linha_estoque_peca(peca, tam)
+            disp = (linha.quantidade if linha else 0.0) + retornos.get((pid, tam), 0.0)
+            if need > disp:
+                flash(f"Estoque insuficiente de '{peca.nome}' tam {tam} (disponível: {disp:g}).", "erro")
+                return _re_render()
+        for chave in set(retornos) | set(necessarios):
+            pid, tam = chave
+            net = necessarios.get(chave, 0.0) - retornos.get(chave, 0.0)
+            if net == 0:
+                continue
+            peca = Peca.query.get(pid)
+            linha = _linha_estoque_peca(peca, tam, criar=True)
+            linha.quantidade -= net
+            db.session.add(MovimentoPeca(
+                peca=peca, tamanho=tam, tipo="saida" if net > 0 else "estorno",
+                quantidade=abs(net), observacao=f"Edição de venda #{venda.id}",
             ))
-        for campo, valor in _dados_pedido_do_form().items():
-            setattr(venda, campo, valor)
-        db.session.flush()
-        _aplicar_pagamentos(venda, _pagamentos_do_form())
 
-        db.session.commit()
-        flash("Venda atualizada.", "sucesso")
-        return redirect(url_for("main.listar_vendas"))
+    # Refaz os itens e atualiza os dados do pedido. NÃO mexe em pagamentos,
+    # vencimento nem parcelas (isso é feito na tela do pedido).
+    for it in list(venda.itens):
+        db.session.delete(it)
+    venda.itens = []
+    for l in linhas:
+        db.session.add(VendaItem(
+            venda=venda, peca=l["peca"], tamanho=l["tamanho"],
+            quantidade=l["quantidade"], preco_unitario=l["preco"],
+            desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
+        ))
+    cid = request.form.get("cliente_id", type=int)
+    venda.frete = _to_float(request.form.get("frete"))
+    venda.frete_cortesia = request.form.get("frete_cortesia") == "on"
+    venda.marketplace_pct = _to_float(request.form.get("marketplace_pct"))
+    venda.desconto_total = _to_float(request.form.get("desconto_total"))
+    venda.cliente_id = cid if cid else None
+    db.session.flush()
 
-    return render_template(
-        "venda_editar.html", venda=venda, pecas=_pecas_para_venda(),
-        clientes=Cliente.query.order_by(Cliente.nome).all(),
-    )
+    # Recalcula o pago com os pagamentos que já existem (a receita pode ter mudado).
+    venda.pago = venda.total_pago >= venda.receita - 0.01
+    if not venda.pago and venda.status == "pago":
+        venda.status = "realizado"
+
+    db.session.commit()
+    _log("venda", f"pedido #{venda.id} editado")
+    flash("Venda atualizada.", "sucesso")
+    return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
 
 
 @bp.route("/vendas/<int:venda_id>/excluir", methods=["POST"])
@@ -2024,8 +2044,29 @@ def excluir_despesa(despesa_id):
 # --------------------------------------------------------------------------- #
 @bp.route("/relatorio")
 def relatorio():
-    vendas = Venda.query.all()
-    # Agrega por mês.
+    todas = Venda.query.all()
+    anos = sorted({v.criado_em.year for v in todas if v.criado_em}, reverse=True)
+    ano_sel = request.args.get("ano", "").strip()
+    if ano_sel.isdigit():
+        vendas = [v for v in todas if v.criado_em and v.criado_em.year == int(ano_sel)]
+    else:
+        ano_sel = ""
+        vendas = todas
+
+    # KPIs do período.
+    receita = sum(v.receita for v in vendas)
+    custo = sum(v.custo_total for v in vendas)
+    lucro = sum(v.lucro for v in vendas)
+    qtd_pecas = sum(v.quantidade_total for v in vendas)
+    n_vendas = len(vendas)
+    kpis = {
+        "receita": receita, "lucro": lucro, "custo": custo,
+        "n_vendas": n_vendas, "qtd_pecas": qtd_pecas,
+        "ticket": (receita / n_vendas) if n_vendas else 0.0,
+        "margem": (lucro / receita * 100) if receita else 0.0,
+    }
+
+    # Série mensal (receita/custo/lucro).
     por_mes = {}
     for v in vendas:
         k = _mes_de(v.criado_em)
@@ -2034,19 +2075,30 @@ def relatorio():
         m["custo"] += v.custo_total
         m["lucro"] += v.lucro
         m["qtd"] += v.quantidade_total
-    meses_ord = sorted(por_mes.keys())
-    serie = [{"mes": k, "label": _mes_label(k), **por_mes[k]} for k in meses_ord]
+    serie = [{"mes": k, "label": _mes_label(k), **por_mes[k]} for k in sorted(por_mes)]
 
-    # Peças mais vendidas (por quantidade).
+    # Ranking de peças (por receita) + curva ABC.
     ranking = {}
     for v in vendas:
         for it in v.itens:
             r = ranking.setdefault(it.peca.nome, {"qtd": 0.0, "receita": 0.0})
             r["qtd"] += it.quantidade
             r["receita"] += it.subtotal_receita
-    mais_vendidas = sorted(ranking.items(), key=lambda x: x[1]["qtd"], reverse=True)[:10]
+    ordenadas = sorted(ranking.items(), key=lambda x: x[1]["receita"], reverse=True)
+    mais_vendidas = [{"nome": n, **r} for n, r in ordenadas[:10]]
+    total_rank = sum(r["receita"] for _, r in ordenadas) or 1.0
+    abc = {"A": 0, "B": 0, "C": 0}
+    curva = []
+    acumulado = 0.0
+    for nome, r in ordenadas:
+        acumulado += r["receita"]
+        pct_acum = acumulado / total_rank * 100
+        classe = "A" if pct_acum <= 80 else ("B" if pct_acum <= 95 else "C")
+        abc[classe] += 1
+        curva.append({"nome": nome, "receita": r["receita"], "qtd": r["qtd"],
+                      "pct_acum": pct_acum, "classe": classe})
 
-    # Lucro por coleção.
+    # Receita por coleção.
     por_colecao = {}
     for v in vendas:
         for it in v.itens:
@@ -2054,8 +2106,17 @@ def relatorio():
             por_colecao[col] = por_colecao.get(col, 0.0) + it.subtotal_receita
     colecoes = sorted(por_colecao.items(), key=lambda x: x[1], reverse=True)
 
+    # Recebido por forma de pagamento (crediário agrupado).
+    formas = {}
+    for v in vendas:
+        for p in v.pagamentos:
+            nome = "Crediário" if p.forma.startswith("Crediário") else (p.forma or "Outros")
+            formas[nome] = formas.get(nome, 0.0) + p.valor
+    formas = sorted(formas.items(), key=lambda x: x[1], reverse=True)
+
     return render_template(
         "relatorio.html", serie=serie, mais_vendidas=mais_vendidas, colecoes=colecoes,
+        kpis=kpis, anos=anos, ano_sel=ano_sel, curva=curva, abc=abc, formas=formas,
     )
 
 

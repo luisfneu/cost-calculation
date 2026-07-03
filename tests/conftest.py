@@ -21,6 +21,7 @@ def app():
     class TestConfig(Config):
         TESTING = True
         APP_SENHA = "test"
+        WTF_CSRF_ENABLED = False  # test client não envia token; CSRF é testado à parte
         SQLALCHEMY_DATABASE_URI = "sqlite:///" + db_path
 
     application = create_app(TestConfig)
