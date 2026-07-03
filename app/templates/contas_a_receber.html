@@ -36,8 +36,12 @@
             {% else %}<span class="text-muted">—</span>{% endif %}
           </td>
           <td data-label="Valor" class="text-end fw-bold">{{ p.valor | moeda }}</td>
-          <td class="text-end">
-            <form method="post" action="{{ url_for('main.pagar_parcela', parcela_id=p.id) }}">
+          <td class="text-end text-nowrap">
+            {% if p.venda.cliente and p.venda.cliente.whatsapp_numero %}
+              {% set msg = 'Olá ' ~ p.venda.cliente.nome ~ '! Passando para lembrar da parcela ' ~ p.rotulo ~ ' do seu pedido #' ~ p.venda_id ~ ' no valor de ' ~ (p.valor | moeda) ~ (' (vence ' ~ p.vencimento.strftime('%d/%m/%Y') ~ ')' if p.vencimento else '') ~ '. Qualquer dúvida, estou à disposição 💛' %}
+              <a href="https://wa.me/{{ p.venda.cliente.whatsapp_numero }}?text={{ msg | urlencode }}" target="_blank" class="btn btn-sm btn-outline-success" title="Cobrar via WhatsApp"><i class="bi bi-whatsapp"></i></a>
+            {% endif %}
+            <form method="post" action="{{ url_for('main.pagar_parcela', parcela_id=p.id) }}" class="d-inline">
               <button class="btn btn-sm btn-success">Receber</button>
             </form>
           </td>

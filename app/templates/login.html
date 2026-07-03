@@ -6,8 +6,8 @@
   <title>Entrar · Sabrina Hansen Atelier</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Jost:wght@300;400&family=Parisienne&display=swap" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
   <style>
     body { background: #b89a78; font-family: 'Jost', sans-serif; min-height: 100vh; display: flex; align-items: center; }
     .cartao { max-width: 360px; margin: 0 auto; background: #f7f1e6; border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.15); }
@@ -26,6 +26,7 @@
         {% for cat, m in msgs %}<div class="alert alert-{{ 'danger' if cat=='erro' else 'success' }} py-2">{{ m }}</div>{% endfor %}
       {% endwith %}
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="text" name="login" class="form-control mb-2" placeholder="Usuário" autofocus autocomplete="username">
         <input type="password" name="senha" class="form-control mb-3" placeholder="Senha" autocomplete="current-password" required>
         <button class="btn btn-primary w-100" style="background:#b08a4f;border-color:#b08a4f">Entrar</button>

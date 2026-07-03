@@ -117,12 +117,7 @@
       <div class="card-body d-flex flex-column">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
           <h2 class="secao-titulo mb-0" style="flex:0 1 auto"><i class="bi bi-bullseye"></i> Meta do mês</h2>
-          <form method="post" action="{{ url_for('main.salvar_meta') }}" class="input-group input-group-sm" style="width:auto">
-            <span class="input-group-text">R$</span>
-            <input type="text" name="meta_mensal" class="form-control" style="width:110px"
-                   value="{{ '%.0f'|format(meta) if meta else '' }}" placeholder="definir">
-            <button class="btn btn-outline-secondary">OK</button>
-          </form>
+          <a href="{{ url_for('main.configuracoes') }}" class="link-atelier small" title="Ajustar em Configurações"><i class="bi bi-gear"></i> </a>
         </div>
         {% if meta %}
           <div class="mt-auto">
@@ -135,7 +130,7 @@
             </div>
           </div>
         {% else %}
-          <p class="text-muted small mb-0 mt-auto">Defina uma meta de faturamento para acompanhar o progresso do mês.</p>
+          <p class="text-muted small mb-0 mt-auto">Defina a meta em <a href="{{ url_for('main.configuracoes') }}" class="link-atelier">Configurações</a> para acompanhar o progresso do mês.</p>
         {% endif %}
       </div>
     </div>

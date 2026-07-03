@@ -6,7 +6,7 @@
   <title>Etiqueta · {{ peca.nome }}</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Jost:wght@300;400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <style>
     body { font-family: 'Jost', sans-serif; background: #f0ece3; margin: 0; padding: 24px; text-align: center; }
     .etiqueta {
@@ -54,7 +54,7 @@
     <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}">voltar</a>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
   <script>
     const SKU = {{ (peca.sku or '') | tojson }};
     const selTam = document.getElementById('sel-tam');

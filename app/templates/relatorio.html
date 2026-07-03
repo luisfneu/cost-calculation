@@ -1,67 +1,144 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Relatório{% endblock %}
 {% block conteudo %}
-<h1 class="h3 mb-4">Relatório</h1>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <h1 class="h3 mb-0">Relatório</h1>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="form-label mb-0 small text-muted">Período:</label>
+    <select name="ano" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+      <option value="">Todos os anos</option>
+      {% for a in anos %}<option value="{{ a }}" {{ 'selected' if ano_sel == a|string }}>{{ a }}</option>{% endfor %}
+    </select>
+    <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ vendas (CSV)</a>
+  </form>
+</div>
 
-<div class="card bg-white mb-4">
-  <div class="card-body">
-    <h2 class="h5 mb-3">Faturamento mensal</h2>
-    {% if serie %}
-      <canvas id="grafico" height="90"></canvas>
-    {% else %}
-      <p class="text-muted">Sem vendas registradas ainda.</p>
-    {% endif %}
-  </div>
+{% if kpis.n_vendas %}
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3 col-lg"><div class="stat">
+    <div class="ic"><i class="bi bi-cash-coin"></i></div>
+    <div><div class="num">{{ kpis.receita | moeda }}</div><div class="lbl">Receita</div></div>
+  </div></div>
+  <div class="col-6 col-md-3 col-lg"><div class="stat ok">
+    <div class="ic"><i class="bi bi-graph-up-arrow"></i></div>
+    <div><div class="num">{{ kpis.lucro | moeda }}</div><div class="lbl">Lucro · {{ '%.0f'|format(kpis.margem) }}%</div></div>
+  </div></div>
+  <div class="col-6 col-md-3 col-lg"><div class="stat">
+    <div class="ic"><i class="bi bi-receipt"></i></div>
+    <div><div class="num">{{ kpis.n_vendas }}</div><div class="lbl">Vendas</div></div>
+  </div></div>
+  <div class="col-6 col-md-3 col-lg"><div class="stat">
+    <div class="ic"><i class="bi bi-bag"></i></div>
+    <div><div class="num">{{ kpis.qtd_pecas | num }}</div><div class="lbl">Peças vendidas</div></div>
+  </div></div>
+  <div class="col-6 col-md-3 col-lg"><div class="stat">
+    <div class="ic"><i class="bi bi-tag"></i></div>
+    <div><div class="num">{{ kpis.ticket | moeda }}</div><div class="lbl">Ticket médio</div></div>
+  </div></div>
+</div>
+
+<!-- Faturamento mensal -->
+<div class="card bg-white mb-4"><div class="card-body">
+  <h2 class="secao-titulo mb-3"><i class="bi bi-bar-chart"></i> Faturamento mensal</h2>
+  <div style="position:relative; height:300px"><canvas id="g-mensal"></canvas></div>
+</div></div>
+
+<div class="row g-4 mb-4">
+  <!-- Mais vendidas (barra horizontal) -->
+  <div class="col-lg-7"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-trophy"></i> Peças mais vendidas (receita)</h2>
+    {% if mais_vendidas %}<div style="position:relative; height:340px"><canvas id="g-top"></canvas></div>{% else %}<p class="text-muted">—</p>{% endif %}
+  </div></div></div>
+  <!-- Formas de pagamento (rosca) -->
+  <div class="col-lg-5"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-credit-card"></i> Recebido por forma</h2>
+    {% if formas %}<div style="position:relative; height:300px"><canvas id="g-formas"></canvas></div>{% else %}<p class="text-muted">—</p>{% endif %}
+  </div></div></div>
 </div>
 
 <div class="row g-4">
-  <div class="col-lg-6">
-    <div class="card bg-white h-100"><div class="card-body">
-      <h2 class="h5">Peças mais vendidas</h2>
-      {% if mais_vendidas %}
-      <table class="table table-sm align-middle">
-        <thead class="table-light"><tr><th>Peça</th><th class="text-end">Qtd</th><th class="text-end">Receita</th></tr></thead>
-        <tbody>
-        {% for nome, r in mais_vendidas %}
-          <tr><td>{{ nome }}</td><td class="text-end">{{ r.qtd | num }}</td><td class="text-end">{{ r.receita | moeda }}</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}<p class="text-muted">—</p>{% endif %}
-    </div></div>
-  </div>
-  <div class="col-lg-6">
-    <div class="card bg-white h-100"><div class="card-body">
-      <h2 class="h5">Receita por coleção</h2>
-      {% if colecoes %}
-      <table class="table table-sm align-middle">
-        <thead class="table-light"><tr><th>Coleção</th><th class="text-end">Receita</th></tr></thead>
-        <tbody>
-        {% for col, valor in colecoes %}
-          <tr><td>{{ col }}</td><td class="text-end fw-bold">{{ valor | moeda }}</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}<p class="text-muted">—</p>{% endif %}
-    </div></div>
-  </div>
+  <!-- Curva ABC -->
+  <div class="col-lg-7"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-diagram-3"></i> Curva ABC de produtos</h2>
+    <p class="small text-muted">A = 80% da receita · B = próximos 15% · C = últimos 5%. Priorize produção/estoque nos itens <b>A</b>.</p>
+    <div class="d-flex gap-2 mb-3">
+      <span class="badge text-bg-success">A: {{ abc.A }}</span>
+      <span class="badge text-bg-warning">B: {{ abc.B }}</span>
+      <span class="badge text-bg-secondary">C: {{ abc.C }}</span>
+    </div>
+    <div class="table-responsive">
+    <table class="table table-sm align-middle tabela-cartao">
+      <thead class="table-light"><tr><th>Peça</th><th class="text-end">Qtd</th><th class="text-end">Receita</th><th class="text-end">% acum.</th><th>Classe</th></tr></thead>
+      <tbody>
+      {% for c in curva %}
+        <tr>
+          <td data-label="Peça">{{ c.nome }}</td>
+          <td data-label="Qtd" class="text-end">{{ c.qtd | num }}</td>
+          <td data-label="Receita" class="text-end">{{ c.receita | moeda }}</td>
+          <td data-label="% acum." class="text-end">{{ '%.1f'|format(c.pct_acum) }}%</td>
+          <td data-label="Classe"><span class="badge {{ {'A':'text-bg-success','B':'text-bg-warning','C':'text-bg-secondary'}[c.classe] }}">{{ c.classe }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div></div></div>
+  <!-- Receita por coleção -->
+  <div class="col-lg-5"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-collection"></i> Receita por coleção</h2>
+    {% if colecoes %}
+    <table class="table table-sm align-middle">
+      <tbody>
+      {% for col, valor in colecoes %}
+        <tr><td>{{ col }}</td><td class="text-end fw-bold">{{ valor | moeda }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="text-muted">—</p>{% endif %}
+  </div></div></div>
 </div>
 
-{% if serie %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script>
+  const OURO='#b08a4f', TERRA='#a5624f', VERDE='#6d7a5c', SOFT='#c9a96a', LINHA='#e5dcc9';
+  Chart.defaults.font.family = 'Jost, sans-serif';
+  Chart.defaults.color = '#6b5f52';
+
   const serie = {{ serie | tojson }};
-  new Chart(document.getElementById('grafico'), {
+  new Chart(document.getElementById('g-mensal'), {
     type: 'bar',
-    data: {
-      labels: serie.map(s => s.label),
-      datasets: [
-        { label: 'Receita', data: serie.map(s => s.receita), backgroundColor: '#b08a4f' },
-        { label: 'Custo', data: serie.map(s => s.custo), backgroundColor: '#a5624f' },
-        { label: 'Lucro', data: serie.map(s => s.lucro), backgroundColor: '#6d7a5c' },
-      ],
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+    data: { labels: serie.map(s => s.label), datasets: [
+      { label: 'Receita', data: serie.map(s => s.receita), backgroundColor: OURO, borderRadius: 4 },
+      { label: 'Custo', data: serie.map(s => s.custo), backgroundColor: TERRA, borderRadius: 4 },
+      { label: 'Lucro', data: serie.map(s => s.lucro), backgroundColor: VERDE, borderRadius: 4 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+               scales: { x: { grid: { display: false } }, y: { grid: { color: LINHA } } } },
   });
+
+  {% if mais_vendidas %}
+  const topPecas = {{ mais_vendidas | tojson }};
+  new Chart(document.getElementById('g-top'), {
+    type: 'bar',
+    data: { labels: topPecas.map(t => t.nome), datasets: [
+      { label: 'Receita', data: topPecas.map(t => t.receita), backgroundColor: OURO, borderRadius: 4 } ]},
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+  });
+  {% endif %}
+
+  {% if formas %}
+  const formas = {{ formas | tojson }};
+  new Chart(document.getElementById('g-formas'), {
+    type: 'doughnut',
+    data: { labels: formas.map(f => f[0]), datasets: [
+      { data: formas.map(f => f[1]), backgroundColor: [OURO, VERDE, TERRA, SOFT, '#8a7a63', '#c2b280'] } ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+  });
+  {% endif %}
 </script>
+{% else %}
+{{ ui.vazio('bi-bar-chart', 'Sem vendas no período', 'Registre vendas para ver os indicadores e gráficos.', '+ Nova venda', url_for('main.registrar_venda')) }}
 {% endif %}
 {% endblock %}

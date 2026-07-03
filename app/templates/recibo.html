@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Recibo · Pedido #{{ venda.id }}</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <style>
     :root { --gold:#b08a4f; --ink:#2c2620; --soft:#6b5f52; --line:#e6ddcf; }
     * { box-sizing: border-box; }
@@ -71,6 +71,25 @@
       <div class="status ok">Pagamento quitado ✅</div>
     {% else %}
       <div class="status pend">Pago {{ venda.total_pago | moeda }} · Saldo a receber {{ venda.saldo_receber | moeda }}</div>
+    {% endif %}
+
+    {% if venda.parcelas %}
+    <div style="margin-top:16px">
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.05rem; border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:6px">Carnê de parcelas</div>
+      <table>
+        <thead><tr><th>Parcela</th><th>Vencimento</th><th class="r">Valor</th><th class="r">Situação</th></tr></thead>
+        <tbody>
+        {% for p in venda.parcelas %}
+          <tr>
+            <td>{{ p.rotulo }}</td>
+            <td>{{ p.vencimento.strftime('%d/%m/%Y') if p.vencimento else '—' }}</td>
+            <td class="r">{{ p.valor | moeda }}</td>
+            <td class="r">{% if p.pago %}<span style="color:#3f6b3f">paga ✓</span>{% else %}em aberto{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% endif %}
 
     <div class="rodape">Obrigada pela preferência! 💛<br>Sabrina Hansen Atelier</div>
