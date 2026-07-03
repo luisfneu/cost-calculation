@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block titulo %}Inventário{% endblock %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -58,6 +59,6 @@
   </div>
 </form>
 {% else %}
-<p class="text-muted">Nenhuma peça cadastrada.</p>
+{{ ui.vazio('bi-bag', 'Nenhuma peça cadastrada', 'Cadastre peças para fazer o inventário.', '+ Nova peça', url_for('main.form_peca')) }}
 {% endif %}
 {% endblock %}

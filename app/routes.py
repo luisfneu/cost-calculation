@@ -298,10 +298,25 @@ def index():
     receita_mes = sum(v.receita for v in vendas if _mes_de(v.criado_em) == mes_atual)
     meta = _to_float(Parametro.obter("meta_mensal", "0"))
     meta_pct = (receita_mes / meta * 100) if meta else 0
+
+    # Lembretes extras: aniversariantes do mês e parcelas de crediário a receber.
+    clientes = Cliente.query.all()
+    aniversariantes = sorted(
+        [c for c in clientes if c.aniversario_no_mes],
+        key=lambda c: c.nascimento.day,
+    )
+    parcelas_abertas = [p for p in Parcela.query.all() if not p.pago]
+    parcelas_vencidas = [p for p in parcelas_abertas if p.vencida]
+    lembretes = {
+        "aniversariantes": aniversariantes,
+        "parcelas_abertas": len(parcelas_abertas),
+        "parcelas_vencidas": len(parcelas_vencidas),
+        "parcelas_valor_vencido": sum(p.valor for p in parcelas_vencidas),
+    }
     return render_template(
         "index.html", pecas=pecas, insumos=insumos, alertas=alertas,
-        pecas_repor=pecas_repor,
-        totais_venda=totais_venda, n_clientes=Cliente.query.count(),
+        pecas_repor=pecas_repor, lembretes=lembretes,
+        totais_venda=totais_venda, n_clientes=len(clientes),
         meta=meta, receita_mes=receita_mes, meta_pct=meta_pct,
     )
 

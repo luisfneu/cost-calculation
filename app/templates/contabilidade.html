@@ -18,14 +18,22 @@
 
 <!-- KPIs -->
 <div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card text-bg-success h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ kpis.recebido | moeda }}</div><div class="small">Recebido (entradas)</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-danger h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ kpis.saidas | moeda }}</div><div class="small">Saídas (insumos + despesas)</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-primary h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ kpis.saldo | moeda }}</div><div class="small">Saldo de caixa</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-secondary h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ kpis.a_receber | moeda }}</div><div class="small">A receber (no mês)</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="stat ok">
+    <div class="ic"><i class="bi bi-arrow-down-circle"></i></div>
+    <div><div class="num">{{ kpis.recebido | moeda }}</div><div class="lbl">Recebido</div></div>
+  </div></div>
+  <div class="col-6 col-md-3"><div class="stat aviso">
+    <div class="ic"><i class="bi bi-arrow-up-circle"></i></div>
+    <div><div class="num">{{ kpis.saidas | moeda }}</div><div class="lbl">Saídas</div></div>
+  </div></div>
+  <div class="col-6 col-md-3"><div class="stat">
+    <div class="ic"><i class="bi bi-wallet2"></i></div>
+    <div><div class="num">{{ kpis.saldo | moeda }}</div><div class="lbl">Saldo de caixa</div></div>
+  </div></div>
+  <div class="col-6 col-md-3"><a class="stat" href="{{ url_for('main.contas_a_receber') }}">
+    <div class="ic"><i class="bi bi-hourglass-split"></i></div>
+    <div><div class="num">{{ kpis.a_receber | moeda }}</div><div class="lbl">A receber (mês)</div></div>
+  </a></div>
 </div>
 <div class="row g-3 mb-4">
   <div class="col-md-4"><div class="card bg-white h-100"><div class="card-body">

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Peças</h1>
@@ -51,6 +52,6 @@
 </div>
 {% include "_paginacao.html" %}
 {% else %}
-<p class="text-muted">Nenhuma peça cadastrada ainda.</p>
+{{ ui.vazio('bi-bag', 'Nenhuma peça cadastrada ainda', 'Cadastre sua primeira peça para começar.', '+ Nova peça', url_for('main.form_peca')) }}
 {% endif %}
 {% endblock %}

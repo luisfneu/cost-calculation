@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <h1 class="h3 mb-4">Kits / combos</h1>
 
@@ -76,7 +77,7 @@
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="text-muted">Nenhum kit cadastrado.</p>{% endif %}
+    {% else %}{{ ui.vazio('bi-box-seam', 'Nenhum kit cadastrado', 'Monte combos de peças com preço especial.') }}{% endif %}
   </div>
 </div>
 

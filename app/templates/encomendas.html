@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Encomendas</h1>
@@ -49,7 +50,7 @@
     </div>
     {% include "_paginacao.html" %}
     {% else %}
-    <p class="text-muted">Nenhuma encomenda registrada. <a href="{{ url_for('main.registrar_encomenda') }}">Registrar a primeira</a>.</p>
+    {{ ui.vazio('bi-journal-text', 'Nenhuma encomenda registrada', 'Encomendas vendem sem estoque e produzem depois.', '+ Nova encomenda', url_for('main.registrar_encomenda')) }}
     {% endif %}
   </div>
 </div>

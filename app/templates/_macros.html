@@ -1,0 +1,9 @@
+{# Estado vazio padrão para listas sem registros. #}
+{% macro vazio(icone, frase, dica='', link_texto='', link_url='') %}
+<div class="estado-vazio">
+  <i class="bi {{ icone }} ic"></i>
+  <div class="frase">{{ frase }}</div>
+  {% if dica %}<div class="dica">{{ dica }}</div>{% endif %}
+  {% if link_texto %}<div class="acao"><a href="{{ link_url }}" class="btn btn-primary btn-sm">{{ link_texto }}</a></div>{% endif %}
+</div>
+{% endmacro %}

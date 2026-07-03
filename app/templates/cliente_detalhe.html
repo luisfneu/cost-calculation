@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
@@ -50,12 +51,18 @@
 
 <!-- Resumo -->
 <div class="row g-3 mb-4">
-  <div class="col-md-4"><div class="card text-bg-primary"><div class="card-body">
-    <div class="h4 mb-0">{{ cliente.total_compras | moeda }}</div><div class="small">Total em compras</div></div></div></div>
-  <div class="col-md-4"><div class="card text-bg-success"><div class="card-body">
-    <div class="h4 mb-0">{{ cliente.total_pago | moeda }}</div><div class="small">Pago</div></div></div></div>
-  <div class="col-md-4"><div class="card text-bg-danger"><div class="card-body">
-    <div class="h4 mb-0">{{ cliente.total_pendente | moeda }}</div><div class="small">Pendente</div></div></div></div>
+  <div class="col-6 col-md-4"><div class="stat">
+    <div class="ic"><i class="bi bi-bag-heart"></i></div>
+    <div><div class="num">{{ cliente.total_compras | moeda }}</div><div class="lbl">Total em compras</div></div>
+  </div></div>
+  <div class="col-6 col-md-4"><div class="stat ok">
+    <div class="ic"><i class="bi bi-check-circle"></i></div>
+    <div><div class="num">{{ cliente.total_pago | moeda }}</div><div class="lbl">Pago</div></div>
+  </div></div>
+  <div class="col-6 col-md-4"><div class="stat {{ 'aviso' if cliente.total_pendente > 0 }}">
+    <div class="ic"><i class="bi bi-hourglass-split"></i></div>
+    <div><div class="num">{{ cliente.total_pendente | moeda }}</div><div class="lbl">Pendente</div></div>
+  </div></div>
 </div>
 
 <!-- Histórico de compras -->
@@ -86,7 +93,7 @@
     </table>
     </div>
     {% else %}
-    <p class="text-muted">Nenhuma compra registrada para este cliente.</p>
+    {{ ui.vazio('bi-bag', 'Nenhuma compra registrada', 'As compras deste cliente aparecerão aqui.') }}
     {% endif %}
   </div>
 </div>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Insumos / Estoque</h1>
@@ -86,6 +87,6 @@
 </table>
 </div>
 {% else %}
-<p class="text-muted">Nenhum insumo cadastrado. Comece cadastrando tecidos, etiquetas, linhas, botões etc.</p>
+{{ ui.vazio('bi-box-seam', 'Nenhum insumo cadastrado', 'Comece cadastrando tecidos, etiquetas, linhas, botões etc.', '+ Novo insumo', url_for('main.form_insumo')) }}
 {% endif %}
 {% endblock %}

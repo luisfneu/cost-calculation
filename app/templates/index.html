@@ -1,97 +1,149 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Painel{% endblock %}
 {% block conteudo %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="h3 mb-0">Painel</h1>
+
+<!-- Cabeçalho -->
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-4">
   <div>
-    <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary">+ Nova peça</a>
-    <a href="{{ url_for('main.form_insumo') }}" class="btn btn-outline-secondary">+ Novo insumo</a>
+    <h1 class="painel-saudacao mb-0">Olá{% if session.usuario %}, {{ session.usuario }}{% endif %}</h1>
+    <div class="painel-data" id="painel-data"></div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('main.registrar_venda') }}" class="btn btn-primary"><i class="bi bi-bag-plus"></i> Nova venda</a>
+    <a href="{{ url_for('main.form_peca') }}" class="btn btn-outline-secondary">+ Peça</a>
   </div>
 </div>
 
+<!-- Indicadores -->
 <div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card text-bg-primary h-100"><div class="card-body">
-      <div class="h2 mb-0">{{ pecas|length }}</div><div>Peças cadastradas</div>
-    </div></div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-bg-secondary h-100"><div class="card-body">
-      <div class="h2 mb-0">{{ insumos|length }}</div><div>Insumos no estoque</div>
-    </div></div>
-  </div>
-  <div class="col-md-3">
-    <a href="{{ url_for('main.listar_clientes') }}" class="text-decoration-none">
-      <div class="card text-bg-dark h-100"><div class="card-body">
-        <div class="h2 mb-0">{{ n_clientes }}</div><div>Clientes cadastrados</div>
-      </div></div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <a class="stat" href="{{ url_for('main.listar_pecas') }}">
+      <div class="ic"><i class="bi bi-bag"></i></div>
+      <div><div class="num">{{ pecas|length }}</div><div class="lbl">Peças</div></div>
     </a>
   </div>
-  <div class="col-md-3">
-    <div class="card {{ 'text-bg-danger' if alertas else 'text-bg-success' }} h-100"><div class="card-body">
-      <div class="h2 mb-0">{{ alertas|length }}</div><div>Insumos com estoque baixo</div>
-    </div></div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <a class="stat" href="{{ url_for('main.listar_insumos') }}">
+      <div class="ic"><i class="bi bi-box-seam"></i></div>
+      <div><div class="num">{{ insumos|length }}</div><div class="lbl">Insumos</div></div>
+    </a>
   </div>
-</div>
-
-{% if alertas %}
-<div class="alert alert-warning">
-  <strong>⚠️ Estoque baixo (insumos):</strong>
-  {{ alertas | map(attribute='nome') | join(', ') }}.
-  <a href="{{ url_for('main.listar_insumos') }}">Repor estoque</a>.
-</div>
-{% endif %}
-
-{% if pecas_repor %}
-<div class="alert alert-warning">
-  <strong>⚠️ Peças abaixo do estoque mínimo:</strong>
-  {% for p in pecas_repor %}
-    <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}">{{ p.nome }}</a>
-    ({% for f in p.abaixo_minimo %}{{ f.tamanho }} {{ f.quantidade|int }}/{{ f.minimo|int }}{{ ', ' if not loop.last }}{% endfor %}){{ '; ' if not loop.last }}
-  {% endfor %}
-  · <a href="{{ url_for('main.nova_ordem_from_minimos') }}">Gerar ordem de produção</a>.
-</div>
-{% endif %}
-
-<!-- Totalizadores de vendas -->
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="h5 mb-0">Vendas</h2>
-  <a href="{{ url_for('main.contabilidade') }}" class="btn btn-sm btn-outline-primary">Ver contabilidade →</a>
-</div>
-<div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card text-bg-secondary h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ totais_venda.qtd | num }}</div><div class="small">Peças vendidas</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-primary h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ totais_venda.receita | moeda }}</div><div class="small">Receita</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-success h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ totais_venda.lucro | moeda }}</div><div class="small">Lucro</div></div></div></div>
-  <div class="col-md-3"><div class="card text-bg-danger h-100"><div class="card-body">
-    <div class="h4 mb-0">{{ totais_venda.a_receber | moeda }}</div><div class="small">A receber</div></div></div></div>
-</div>
-
-<!-- Meta do mês -->
-<div class="card bg-white mb-4">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-      <h2 class="h6 mb-0 text-muted">Meta do mês</h2>
-      <form method="post" action="{{ url_for('main.salvar_meta') }}" class="input-group input-group-sm" style="width:auto">
-        <span class="input-group-text">R$</span>
-        <input type="text" name="meta_mensal" class="form-control" style="width:120px"
-               value="{{ '%.0f'|format(meta) if meta else '' }}" placeholder="definir meta">
-        <button class="btn btn-outline-secondary">Salvar</button>
-      </form>
+  <div class="col-6 col-md-4 col-lg-2">
+    <a class="stat" href="{{ url_for('main.listar_clientes') }}">
+      <div class="ic"><i class="bi bi-people"></i></div>
+      <div><div class="num">{{ n_clientes }}</div><div class="lbl">Clientes</div></div>
+    </a>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat">
+      <div class="ic"><i class="bi bi-cash-coin"></i></div>
+      <div><div class="num">{{ totais_venda.receita | moeda }}</div><div class="lbl">Receita</div></div>
     </div>
-    {% if meta %}
-      <div class="progress" style="height:22px">
-        <div class="progress-bar bg-success" role="progressbar" style="width: {{ [meta_pct, 100]|min }}%">{{ '%.0f'|format(meta_pct) }}%</div>
-      </div>
-      <div class="small text-muted mt-1">{{ receita_mes | moeda }} de {{ meta | moeda }} neste mês</div>
-    {% else %}
-      <p class="text-muted small mb-0">Defina uma meta de faturamento para acompanhar o progresso do mês.</p>
-    {% endif %}
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat ok">
+      <div class="ic"><i class="bi bi-graph-up-arrow"></i></div>
+      <div><div class="num">{{ totais_venda.lucro | moeda }}</div><div class="lbl">Lucro</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <a class="stat {{ 'aviso' if totais_venda.a_receber > 0 }}" href="{{ url_for('main.contas_a_receber') }}">
+      <div class="ic"><i class="bi bi-hourglass-split"></i></div>
+      <div><div class="num">{{ totais_venda.a_receber | moeda }}</div><div class="lbl">A receber</div></div>
+    </a>
   </div>
 </div>
 
-<h2 class="h5 mb-3">Peças recentes</h2>
+<div class="row g-4 mb-4">
+  <!-- Lembretes -->
+  <div class="col-lg-7">
+    <div class="card bg-white h-100">
+      <div class="card-body">
+        <h2 class="secao-titulo mb-3"><i class="bi bi-bell"></i> Lembretes</h2>
+        {% set tem_avisos = alertas or pecas_repor or lembretes.parcelas_abertas or lembretes.aniversariantes %}
+        <div class="avisos">
+          {% if lembretes.parcelas_vencidas %}
+          <a class="aviso urgente" href="{{ url_for('main.contas_a_receber') }}">
+            <div class="ic"><i class="bi bi-exclamation-octagon"></i></div>
+            <div class="txt"><b>{{ lembretes.parcelas_vencidas }} parcela(s) de crediário vencida(s)</b>
+              <div class="sub">{{ lembretes.parcelas_valor_vencido | moeda }} em atraso</div></div>
+            <div class="seta"><i class="bi bi-chevron-right"></i></div>
+          </a>
+          {% endif %}
+          {% if alertas %}
+          <a class="aviso urgente" href="{{ url_for('main.listar_insumos') }}">
+            <div class="ic"><i class="bi bi-box2"></i></div>
+            <div class="txt"><b>{{ alertas|length }} insumo(s) com estoque baixo</b>
+              <div class="sub">{{ alertas | map(attribute='nome') | join(', ') | truncate(70) }}</div></div>
+            <div class="seta"><i class="bi bi-chevron-right"></i></div>
+          </a>
+          {% endif %}
+          {% if pecas_repor %}
+          <a class="aviso urgente" href="{{ url_for('main.nova_ordem_from_minimos') }}">
+            <div class="ic"><i class="bi bi-tags"></i></div>
+            <div class="txt"><b>{{ pecas_repor|length }} peça(s) abaixo do estoque mínimo</b>
+              <div class="sub">Clique para gerar uma ordem de produção</div></div>
+            <div class="seta"><i class="bi bi-chevron-right"></i></div>
+          </a>
+          {% endif %}
+          {% if lembretes.parcelas_abertas and not lembretes.parcelas_vencidas %}
+          <a class="aviso" href="{{ url_for('main.contas_a_receber') }}">
+            <div class="ic"><i class="bi bi-calendar-check"></i></div>
+            <div class="txt"><b>{{ lembretes.parcelas_abertas }} parcela(s) de crediário em aberto</b>
+              <div class="sub">Nenhuma vencida — em dia</div></div>
+            <div class="seta"><i class="bi bi-chevron-right"></i></div>
+          </a>
+          {% endif %}
+          {% if lembretes.aniversariantes %}
+          <a class="aviso" href="{{ url_for('main.crm') }}">
+            <div class="ic"><i class="bi bi-gift"></i></div>
+            <div class="txt"><b>{{ lembretes.aniversariantes|length }} aniversariante(s) no mês</b>
+              <div class="sub">{{ lembretes.aniversariantes | map(attribute='nome') | join(', ') | truncate(60) }}</div></div>
+            <div class="seta"><i class="bi bi-chevron-right"></i></div>
+          </a>
+          {% endif %}
+          {% if not tem_avisos %}
+          <div class="avisos-vazio">Tudo em dia por aqui ✨</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Meta do mês -->
+  <div class="col-lg-5">
+    <div class="card bg-white h-100">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <h2 class="secao-titulo mb-0" style="flex:0 1 auto"><i class="bi bi-bullseye"></i> Meta do mês</h2>
+          <form method="post" action="{{ url_for('main.salvar_meta') }}" class="input-group input-group-sm" style="width:auto">
+            <span class="input-group-text">R$</span>
+            <input type="text" name="meta_mensal" class="form-control" style="width:110px"
+                   value="{{ '%.0f'|format(meta) if meta else '' }}" placeholder="definir">
+            <button class="btn btn-outline-secondary">OK</button>
+          </form>
+        </div>
+        {% if meta %}
+          <div class="mt-auto">
+            <div class="d-flex justify-content-between align-items-end mb-1">
+              <span class="num" style="font-family:'Cormorant Garamond',serif; font-size:1.8rem">{{ receita_mes | moeda }}</span>
+              <span class="text-muted small">de {{ meta | moeda }}</span>
+            </div>
+            <div class="progress meta-bar">
+              <div class="progress-bar" role="progressbar" style="width: {{ [meta_pct, 100]|min }}%">{{ '%.0f'|format(meta_pct) }}%</div>
+            </div>
+          </div>
+        {% else %}
+          <p class="text-muted small mb-0 mt-auto">Defina uma meta de faturamento para acompanhar o progresso do mês.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Peças recentes -->
+<h2 class="secao-titulo mb-3"><i class="bi bi-stars"></i> Peças recentes</h2>
 {% if pecas %}
 <div class="row g-4">
   {% for peca in pecas[:8] %}
@@ -113,6 +165,14 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="text-muted">Nenhuma peça cadastrada ainda. <a href="{{ url_for('main.form_peca') }}">Crie a primeira</a>.</p>
+{{ ui.vazio('bi-bag', 'Nenhuma peça cadastrada ainda', 'Comece criando sua primeira peça.', '+ Nova peça', url_for('main.form_peca')) }}
 {% endif %}
+
+<script>
+  // Data por extenso em pt-BR no cabeçalho.
+  (function () {
+    const el = document.getElementById('painel-data');
+    if (el) el.textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  })();
+</script>
 {% endblock %}

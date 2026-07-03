@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <h1 class="h3 mb-4">Vales (crédito de loja)</h1>
 
@@ -30,17 +31,17 @@
 <div class="card bg-white">
   <div class="card-body">
     {% if vales %}
-    <table class="table align-middle">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light"><tr><th>Código</th><th>Tipo</th><th>Cliente</th><th class="text-end">Valor</th><th class="text-end">Saldo</th><th>Obs.</th><th></th></tr></thead>
       <tbody>
       {% for v in vales %}
         <tr class="{{ '' if v.disponivel else 'text-muted' }}">
-          <td><strong>{{ v.codigo }}</strong></td>
-          <td><span class="badge {{ 'text-bg-info' if v.tipo=='presente' else 'text-bg-warning' }}">{{ v.tipo_label }}</span></td>
-          <td>{{ v.cliente.nome if v.cliente else '—' }}</td>
-          <td class="text-end">{{ v.valor_inicial | moeda }}</td>
-          <td class="text-end fw-bold {{ 'text-success' if v.saldo > 0.01 else 'text-muted' }}">{{ v.saldo | moeda }}</td>
-          <td class="small text-muted">{{ v.observacao }}</td>
+          <td data-label="Código"><strong>{{ v.codigo }}</strong></td>
+          <td data-label="Tipo"><span class="badge {{ 'text-bg-info' if v.tipo=='presente' else 'text-bg-warning' }}">{{ v.tipo_label }}</span></td>
+          <td data-label="Cliente">{{ v.cliente.nome if v.cliente else '—' }}</td>
+          <td data-label="Valor" class="text-end">{{ v.valor_inicial | moeda }}</td>
+          <td data-label="Saldo" class="text-end fw-bold {{ 'text-success' if v.saldo > 0.01 else 'text-muted' }}">{{ v.saldo | moeda }}</td>
+          <td data-label="Obs." class="small text-muted">{{ v.observacao }}</td>
           <td class="text-end">
             <form method="post" action="{{ url_for('main.desativar_vale', vale_id=v.id) }}">
               <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if v.ativo else 'Ativar' }}</button>
@@ -50,7 +51,7 @@
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="text-muted">Nenhum vale emitido.</p>{% endif %}
+    {% else %}{{ ui.vazio('bi-gift', 'Nenhum vale emitido', 'Vales-presente e de troca aparecem aqui.') }}{% endif %}
   </div>
 </div>
 {% endblock %}
