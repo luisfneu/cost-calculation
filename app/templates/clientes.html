@@ -26,13 +26,13 @@
       <td data-label="Nome"><strong>{{ c.nome }}</strong></td>
       <td data-label="Contato">
         {% if c.instagram_handle %}
-          <a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank" class="text-decoration-none me-2" title="Instagram">
+          <a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank" class="text-decoration-none link-insta me-2" title="Instagram">
             <i class="bi bi-instagram"></i> {{ c.instagram_handle }}
           </a>
         {% endif %}
         {% if c.whatsapp_numero %}
           <a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-decoration-none text-success" title="WhatsApp">
-            <i class="bi bi-whatsapp"></i> {{ c.telefone }}
+            <i class="bi bi-whatsapp"></i> {{ c.telefone_formatado }}
           </a>
         {% endif %}
       </td>

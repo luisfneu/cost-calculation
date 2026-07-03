@@ -422,6 +422,18 @@ class Cliente(db.Model):
             d = "55" + d
         return d
 
+    @property
+    def telefone_formatado(self) -> str:
+        """Telefone com máscara BR: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX."""
+        d = re.sub(r"\D", "", self.telefone or "")
+        if d.startswith("55") and len(d) > 11:  # remove DDI para exibir
+            d = d[2:]
+        if len(d) == 11:
+            return f"({d[:2]}) {d[2:7]}-{d[7:]}"
+        if len(d) == 10:
+            return f"({d[:2]}) {d[2:6]}-{d[6:]}"
+        return self.telefone or ""
+
     # ----- Histórico -----
     @property
     def total_compras(self) -> float:
@@ -824,6 +836,8 @@ class Cupom(db.Model):
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     usos = db.Column(db.Integer, nullable=False, default=0)
     max_usos = db.Column(db.Integer)  # None = ilimitado
+    # Cupom pessoal (ex.: presente de aniversário). None = cupom geral.
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))
     criado_em = db.Column(db.DateTime, default=_agora)
 
     @property

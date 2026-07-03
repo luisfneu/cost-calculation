@@ -8,6 +8,19 @@
 </div>
 {% endmacro %}
 
+{# Dropzone de foto única (arquivo, arrastar ou colar). Mantém input[name=foto]. #}
+{% macro foto_unica(atual='', label='Foto') %}
+<div class="mb-3 foto-unica">
+  <label class="form-label">{{ label }}</label>
+  <input type="file" name="foto" class="d-none foto-unica-input" accept="image/*">
+  <div class="fotos-dropzone foto-unica-zone">
+    <i class="bi bi-image"></i>
+    <div>Clique para escolher, <b>arraste</b> ou <b>cole</b> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) uma imagem</div>
+  </div>
+  <div class="fotos-grid foto-unica-grid mt-2" data-atual="{{ url_for('static', filename='uploads/' ~ atual) if atual else '' }}"></div>
+</div>
+{% endmacro %}
+
 {# Seletor "itens por página". Lê o valor atual da URL e preserva os demais filtros. #}
 {% macro por_pagina(opcoes=[15, 30, 60]) %}
   {% set atual = request.args.get('por_pagina', '15') | int %}
@@ -23,14 +36,27 @@
 </form>
 {% endmacro %}
 
-{# Carrossel de fotos de uma peça (foto principal + galeria + foto da coleção). #}
-{% macro carrossel(peca, colecao_fotos={}, img_class='vitrine-foto') %}
+{# Carrossel de fotos de uma peça (foto principal + galeria + foto da coleção).
+   lightbox=True: o card vira miniatura clicável que abre o lightbox ampliado. #}
+{% macro carrossel(peca, colecao_fotos={}, img_class='vitrine-foto', lightbox=False) %}
   {% set imgs = [] %}
   {% if peca.foto %}{% set _ = imgs.append(peca.foto) %}{% endif %}
   {% for f in peca.fotos %}{% set _ = imgs.append(f.arquivo) %}{% endfor %}
   {% set col_foto = colecao_fotos.get(peca.colecao) %}
   {% if col_foto and col_foto not in imgs %}{% set _ = imgs.append(col_foto) %}{% endif %}
-  {% if imgs | length > 1 %}
+  {% if lightbox %}
+    {% set urls = [] %}
+    {% for f in imgs %}{% set _ = urls.append(url_for('static', filename='uploads/' ~ f)) %}{% endfor %}
+    {% if imgs %}
+      <div class="vitrine-thumb" data-nome="{{ peca.nome }}" data-fotos='{{ urls | tojson }}' title="Clique para ampliar">
+        <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}">
+        {% if imgs | length > 1 %}<span class="thumb-multi"><i class="bi bi-images"></i> {{ imgs | length }}</span>{% endif %}
+        <span class="thumb-zoom"><i class="bi bi-arrows-fullscreen"></i></span>
+      </div>
+    {% else %}
+      <div class="{{ img_class }} sem-foto d-flex align-items-center justify-content-center text-muted">sem foto</div>
+    {% endif %}
+  {% elif imgs | length > 1 %}
     <div id="carousel-p{{ peca.id }}" class="carousel slide vitrine-carrossel" data-bs-ride="false">
       <div class="carousel-inner">
         {% for img in imgs %}

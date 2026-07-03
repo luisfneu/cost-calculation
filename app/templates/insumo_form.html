@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <h1 class="h3 mb-4">{{ 'Editar insumo' if insumo else 'Novo insumo' }}</h1>
 
@@ -22,14 +23,7 @@
              value="{{ insumo.fornecedor if insumo else '' }}" placeholder="Ex.: Armarinho Central...">
     </div>
   </div>
-  <div class="mb-3 foto-campo">
-    <label class="form-label">Foto do insumo</label>
-    <input type="file" name="foto" class="form-control" accept="image/*">
-    <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
-    {% if insumo and insumo.foto %}
-      <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
-    {% endif %}
-  </div>
+  {{ ui.foto_unica(insumo.foto if insumo else '', 'Foto do insumo') }}
   <div class="row">
     <div class="col-md-6 mb-3">
       <label class="form-label">Unidade de medida</label>

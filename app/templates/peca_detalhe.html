@@ -4,12 +4,12 @@
   <div>
     <h1 class="h3 mb-1">{{ peca.nome }}{% if peca.colecao %} <span class="badge text-bg-light align-middle">{{ peca.colecao }}</span>{% endif %}</h1>
     {% if peca.tags_lista %}
-      <div class="mb-1">{% for t in peca.tags_lista %}<span class="badge badge-materia me-1">#{{ t }}</span>{% endfor %}</div>
+      <div class="mb-1">{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>
     {% endif %}
     {% if peca.descricao %}<p class="text-muted mb-0">{{ peca.descricao }}</p>{% endif %}
   </div>
   <div class="text-nowrap">
-    <a href="{{ url_for('main.etiqueta_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-qr-code"></i> Etiqueta</a>
+    <a href="{{ url_for('main.etiqueta_peca', peca_id=peca.id) }}" class="btn btn-sm btn-primary" target="_blank"><i class="bi bi-qr-code"></i> Etiqueta</a>
     <form method="post" action="{{ url_for('main.duplicar_peca', peca_id=peca.id) }}" class="d-inline">
       <button class="btn btn-sm btn-outline-secondary" title="Criar uma cópia desta peça">Duplicar</button>
     </form>

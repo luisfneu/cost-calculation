@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block titulo %}{{ 'Editar coleção' if colecao else 'Nova coleção' }}{% endblock %}
 {% block conteudo %}
 <h1 class="h3 mb-4">{{ 'Editar coleção' if colecao else 'Nova coleção' }}</h1>
@@ -14,14 +15,7 @@
     <input type="text" name="slogan" class="form-control"
            value="{{ colecao.slogan if colecao else '' }}" placeholder="Ex.: Leveza e cor para os dias quentes">
   </div>
-  <div class="mb-3 foto-campo">
-    <label class="form-label">Foto principal da coleção</label>
-    <input type="file" name="foto" class="form-control" accept="image/*">
-    <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
-    {% if colecao and colecao.foto %}
-      <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ colecao.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
-    {% endif %}
-  </div>
+  {{ ui.foto_unica(colecao.foto if colecao else '', 'Foto principal da coleção') }}
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" name="ativa" id="ativa"
            {{ 'checked' if not colecao or colecao.ativa }}>

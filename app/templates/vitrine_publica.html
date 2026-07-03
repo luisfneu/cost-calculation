@@ -34,7 +34,7 @@
           {% for peca in pecas %}
           <div class="col-6 col-md-4 col-lg-3">
             <div class="card h-100 text-center">
-              {{ ui.carrossel(peca, colecao_fotos) }}
+              {{ ui.carrossel(peca, colecao_fotos, lightbox=True) }}
               <div class="card-body">
                 <div class="vitrine-nome">{{ peca.nome }}</div>
                 {% if peca.em_promocao %}
@@ -62,5 +62,6 @@
     {% endif %}
   </div>
   <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+  {% include "_lightbox.html" %}
 </body>
 </html>

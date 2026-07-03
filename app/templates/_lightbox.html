@@ -1,0 +1,93 @@
+{# Lightbox de fotos: abre ao clicar num .vitrine-thumb (usa data-fotos + data-nome).
+   Carrossel ampliado com navegação e zoom estilo lupa ao passar o mouse. #}
+<div class="modal fade" id="lightbox" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content lightbox-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title" id="lightbox-nome"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="lightbox-carousel" class="carousel slide" data-bs-ride="false">
+          <div class="carousel-inner" id="lightbox-inner"></div>
+          <button class="carousel-control-prev" type="button" data-bs-target="#lightbox-carousel" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span></button>
+          <button class="carousel-control-next" type="button" data-bs-target="#lightbox-carousel" data-bs-slide="next"><span class="carousel-control-next-icon"></span></button>
+        </div>
+        <p class="text-center small text-muted mt-2 mb-1"><i class="bi bi-search"></i> Passe o mouse sobre a foto para ampliar</p>
+        <div class="lightbox-thumbs" id="lightbox-thumbs"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const modalEl = document.getElementById('lightbox');
+  if (!modalEl) return;
+  const carouselEl = document.getElementById('lightbox-carousel');
+  const inner = document.getElementById('lightbox-inner');
+  const thumbs = document.getElementById('lightbox-thumbs');
+  const nomeEl = document.getElementById('lightbox-nome');
+
+  function marcarThumb(i) {
+    thumbs.querySelectorAll('img').forEach(function (im, idx) {
+      im.classList.toggle('ativa', idx === i);
+    });
+  }
+  // Sincroniza a miniatura ativa quando o carrossel troca de slide.
+  carouselEl.addEventListener('slid.bs.carousel', function (e) { marcarThumb(e.to); });
+
+  function ativarZoom(zona) {
+    const img = zona.querySelector('img');
+    zona.addEventListener('mousemove', function (e) {
+      const r = zona.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width) * 100;
+      const y = ((e.clientY - r.top) / r.height) * 100;
+      img.style.transformOrigin = x + '% ' + y + '%';
+      img.style.transform = 'scale(2.3)';
+    });
+    zona.addEventListener('mouseleave', function () { img.style.transform = ''; });
+  }
+
+  function abrir(nome, fotos) {
+    nomeEl.textContent = nome || '';
+    inner.innerHTML = '';
+    thumbs.innerHTML = '';
+    fotos.forEach(function (src, i) {
+      const item = document.createElement('div');
+      item.className = 'carousel-item' + (i === 0 ? ' active' : '');
+      const zona = document.createElement('div');
+      zona.className = 'lb-zoom';
+      zona.innerHTML = '<img src="' + src + '" alt="">';
+      item.appendChild(zona);
+      inner.appendChild(item);
+      ativarZoom(zona);
+      // Miniatura correspondente (clicável).
+      const th = document.createElement('img');
+      th.src = src;
+      th.className = i === 0 ? 'ativa' : '';
+      th.dataset.index = i;
+      thumbs.appendChild(th);
+    });
+    // Só mostra controles e faixa de miniaturas quando há mais de uma foto.
+    const varias = fotos.length > 1;
+    modalEl.querySelectorAll('.carousel-control-prev,.carousel-control-next')
+      .forEach(function (el) { el.style.display = varias ? '' : 'none'; });
+    thumbs.style.display = varias ? '' : 'none';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+
+  // Clique na miniatura navega o carrossel.
+  thumbs.addEventListener('click', function (e) {
+    if (e.target.tagName !== 'IMG') return;
+    bootstrap.Carousel.getOrCreateInstance(carouselEl).to(parseInt(e.target.dataset.index, 10));
+  });
+
+  document.addEventListener('click', function (e) {
+    const t = e.target.closest('.vitrine-thumb');
+    if (!t) return;
+    let fotos = [];
+    try { fotos = JSON.parse(t.dataset.fotos || '[]'); } catch (_) {}
+    if (fotos.length) abrir(t.dataset.nome, fotos);
+  });
+})();
+</script>

@@ -48,9 +48,12 @@
   </script>
   <div class="mb-3">
     <label class="form-label">Tags</label>
-    <input type="text" name="tags" class="form-control"
-           value="{{ peca.tags if peca else '' }}" placeholder="Ex.: floral, algodão, lançamento (separe por vírgula)">
-    <small class="text-muted">Etiquetas livres para organizar e buscar as peças.</small>
+    <div class="tags-input form-control" id="tags-box">
+      <input type="hidden" name="tags" id="tags-hidden" value="{{ peca.tags if peca else '' }}">
+      <span id="tags-chips"></span>
+      <input type="text" id="tags-entrada" class="tags-entrada" placeholder="digite e use vírgula...">
+    </div>
+    <small class="text-muted">Digite e pressione <kbd>,</kbd> ou <kbd>Enter</kbd> para criar cada tag.</small>
   </div>
   <div class="mb-3">
     <label class="form-label">Descrição</label>
@@ -93,19 +96,23 @@
       <small class="text-muted">Padrão SH-00000000 (id da peça). Usado na busca e leitura por câmera.</small>
     </div>
   </div>
-  <div class="mb-3 foto-campo">
-    <label class="form-label">Foto principal</label>
-    <input type="file" name="foto" class="form-control" accept="image/*">
-    <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
-    {% if peca and peca.foto %}
-      <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
-    {% endif %}
-  </div>
   <div class="mb-3">
-    <label class="form-label">Fotos adicionais (galeria)</label>
-    <input type="file" name="fotos" class="form-control" accept="image/*" multiple>
-    <small class="text-muted">Pode selecionar várias. Gerencie/remova depois na tela da peça.</small>
+    <label class="form-label">Fotos da peça</label>
+    <div id="fotos-uploader" class="fotos-uploader">
+      <input type="file" id="fotos-input" name="fotos" class="d-none" accept="image/*" multiple>
+      <input type="hidden" name="principal" id="fotos-principal" value="{{ 'existente:' ~ peca.foto if peca and peca.foto else '' }}">
+      <div id="fotos-remover"></div>
+      <div id="fotos-dropzone" class="fotos-dropzone">
+        <i class="bi bi-images"></i>
+        <div>Clique para escolher, <b>arraste</b> ou <b>cole</b> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) — várias imagens</div>
+      </div>
+      <div id="fotos-grid" class="fotos-grid"></div>
+      <small class="text-muted d-block mt-2">Clique na <i class="bi bi-star-fill text-warning"></i> para definir a <b>foto principal</b>. Use o × para remover.</small>
+    </div>
   </div>
+  {% set _existentes = ([peca.foto] if peca and peca.foto else []) + (peca.fotos | map(attribute='arquivo') | list if peca else []) %}
+  <script id="fotos-existentes" type="application/json">{{ _existentes | tojson }}</script>
+  <script>window.__UPLOADS_URL = "{{ url_for('static', filename='uploads/') }}";</script>
 
   <div class="section-titulo">Envio (opcional — para cálculo de frete)</div>
   <div class="row">
@@ -213,4 +220,6 @@
 })();
 </script>
 {% endif %}
+<script src="{{ url_for('static', filename='js/fotos-uploader.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tags-input.js') }}"></script>
 {% endblock %}
