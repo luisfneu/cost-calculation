@@ -13,6 +13,7 @@
   <div class="card-body">
     <p class="text-muted small">Pedidos vendidos <strong>sem estoque</strong>. Produza as peças e clique em <strong>Baixar estoque</strong> quando prontas.</p>
     {% if encomendas %}
+    <div class="d-flex justify-content-end mb-2">{{ ui.por_pagina() }}</div>
     <div class="table-responsive">
     <table class="table align-middle">
       <thead class="table-light">

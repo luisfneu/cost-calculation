@@ -4,15 +4,28 @@
 
 <form method="post" enctype="multipart/form-data" class="card card-body bg-white" style="max-width:820px">
   <div class="row">
-    <div class="col-md-7 mb-3">
+    <div class="col-md-6 mb-3">
       <label class="form-label">Nome *</label>
       <input type="text" name="nome" class="form-control" required
              value="{{ peca.nome if peca else '' }}" placeholder="Ex.: Camiseta básica gola redonda">
     </div>
-    <div class="col-md-5 mb-3">
+    <div class="col-md-3 mb-3">
+      <label class="form-label">Tipo de peça</label>
+      <input type="text" name="tipo" class="form-control" list="lista-tipos"
+             value="{{ peca.tipo if peca else '' }}" placeholder="Ex.: Vestido">
+      <datalist id="lista-tipos">
+        {% for t in tipos %}<option value="{{ t }}">{% endfor %}
+      </datalist>
+    </div>
+    <div class="col-md-3 mb-3">
       <label class="form-label">Coleção</label>
-      <input type="text" name="colecao" class="form-control"
-             value="{{ peca.colecao if peca else '' }}" placeholder="Ex.: Verão 2026">
+      {% set atual_col = peca.colecao if peca else '' %}
+      <select name="colecao" class="form-select">
+        <option value="">— sem coleção —</option>
+        {% for c in colecoes %}<option value="{{ c }}" {{ 'selected' if atual_col == c }}>{{ c }}</option>{% endfor %}
+        {% if atual_col and atual_col not in colecoes %}<option value="{{ atual_col }}" selected>{{ atual_col }} (inativa)</option>{% endif %}
+      </select>
+      <small class="text-muted">Cadastre em <a href="{{ url_for('main.listar_colecoes') }}" target="_blank">Coleções</a>.</small>
     </div>
   </div>
   <div class="mb-3">
@@ -56,10 +69,10 @@
       <small class="text-muted">Se preenchido, vira o preço da venda e mostra o preço cheio riscado.</small>
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">SKU / código de barras</label>
-      <input type="text" name="sku" class="form-control"
-             value="{{ peca.sku if peca else '' }}" placeholder="Ex.: SH-0001">
-      <small class="text-muted">Usado na busca e leitura por câmera na venda.</small>
+      <label class="form-label">SKU (gerado automaticamente)</label>
+      <input type="text" class="form-control bg-light" readonly
+             value="{{ peca.sku if peca else 'gerado ao salvar' }}">
+      <small class="text-muted">Padrão SH-00000000 (id da peça). Usado na busca e leitura por câmera.</small>
     </div>
   </div>
   <div class="mb-3 foto-campo">

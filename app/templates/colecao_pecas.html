@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}{{ colecao.nome }} · peças{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ colecao.nome }}
+      {% if not colecao.ativa %}<span class="badge text-bg-secondary">inativa</span>{% endif %}
+    </h1>
+    {% if colecao.slogan %}<div class="text-muted fst-italic">"{{ colecao.slogan }}"</div>{% endif %}
+  </div>
+  <a href="{{ url_for('main.listar_colecoes') }}" class="btn btn-outline-secondary btn-sm">← Coleções</a>
+</div>
+
+{% if pecas %}
+<div class="table-responsive">
+<table class="table table-hover align-middle bg-white">
+  <thead class="table-light">
+    <tr>
+      <th></th><th>Peça</th><th>Tipo</th><th>SKU</th>
+      {% for t in tamanhos_glob %}<th class="text-center">{{ t }}</th>{% endfor %}
+      <th class="text-end">Total</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for p in pecas %}
+    <tr>
+      <td>
+        {% if p.foto %}<img src="{{ url_for('static', filename='uploads/' ~ p.foto) }}" class="foto-thumb" alt="">
+        {% else %}<div class="foto-thumb sem-foto">—</div>{% endif %}
+      </td>
+      <td><strong>{{ p.nome }}</strong></td>
+      <td>{{ p.tipo or '—' }}</td>
+      <td class="small text-muted">{{ p.sku }}</td>
+      {% for t in tamanhos_glob %}
+        {% set q = p.estoque_por_tamanho[t] %}
+        <td class="text-center {{ 'text-muted' if not q }}">{{ q | num if q else '·' }}</td>
+      {% endfor %}
+      <td class="text-end fw-bold">{{ p.estoque_total | num }}</td>
+      <td class="text-end"><a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+{{ ui.vazio('bi-bag', 'Nenhuma peça nesta coleção', 'Vincule peças a esta coleção pelo cadastro da peça.', '+ Nova peça', url_for('main.form_peca')) }}
+{% endif %}
+{% endblock %}

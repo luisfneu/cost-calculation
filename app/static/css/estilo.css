@@ -251,6 +251,30 @@ main.container { max-width: 1100px; }
   font-size: 1.1rem;
   color: var(--ink);
 }
+/* Carrossel de fotos na vitrine */
+.vitrine-carrossel { position: relative; }
+.vitrine-carrossel .carousel-control-prev-icon,
+.vitrine-carrossel .carousel-control-next-icon {
+  background-color: rgba(44, 38, 32, .45);
+  border-radius: 50%;
+  padding: 10px;
+  background-size: 55%;
+}
+.vitrine-carrossel .carousel-indicators { margin-bottom: .4rem; }
+.vitrine-carrossel .carousel-indicators [data-bs-target] {
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.8);
+}
+.carrossel-tag {
+  position: absolute; top: 8px; left: 8px;
+  background: var(--gold); color: #fff;
+  font-size: .65rem; letter-spacing: 1px; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 6px;
+}
+/* Insumo com estoque zerado: linha inteira apagada, inclusive a foto. */
+tr.linha-zerada { background: #eeece8; color: #a49c90; }
+tr.linha-zerada strong { color: #a49c90; font-weight: 500; }
+tr.linha-zerada img { filter: grayscale(1); opacity: .5; }
 .vitrine-preco {
   color: var(--gold);
   font-weight: 500;

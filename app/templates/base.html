@@ -25,7 +25,7 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       {% set ep = request.endpoint %}
-      {% set g_cat = ['main.listar_pecas','main.form_peca','main.detalhe_peca','main.listar_insumos','main.form_insumo','main.detalhe_insumo','main.listar_kits','main.vitrine'] %}
+      {% set g_cat = ['main.listar_pecas','main.form_peca','main.detalhe_peca','main.listar_insumos','main.form_insumo','main.detalhe_insumo','main.listar_kits','main.vitrine','main.listar_colecoes','main.form_colecao'] %}
       {% set g_est = ['main.inventario','main.inventario_insumos','main.listar_ordens','main.detalhe_ordem','main.nova_ordem','main.nova_ordem_from_minimos','main.historico'] %}
       {% set g_ven = ['main.listar_vendas','main.registrar_venda','main.visualizar_venda','main.editar_venda','main.listar_encomendas','main.registrar_encomenda','main.listar_cupons','main.listar_vales','main.devolucao_venda'] %}
       {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm'] %}
@@ -40,6 +40,7 @@
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_pecas' }}" href="{{ url_for('main.listar_pecas') }}">Peças</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_insumos' }}" href="{{ url_for('main.listar_insumos') }}">Insumos</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_kits' }}" href="{{ url_for('main.listar_kits') }}">Kits / combos</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_colecoes','main.form_colecao'] }}" href="{{ url_for('main.listar_colecoes') }}">Coleções</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.vitrine' }}" href="{{ url_for('main.vitrine') }}">Vitrine</a></li>
             </ul>

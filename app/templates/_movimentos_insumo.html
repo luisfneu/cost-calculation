@@ -1,0 +1,35 @@
+{# Fragmento: movimentação de um insumo (carregado no modal via fetch). #}
+{% if movs %}
+<table class="table table-sm align-middle mb-2">
+  <thead class="table-light">
+    <tr><th>Quando</th><th>Tipo</th><th class="text-end">Qtd</th><th class="text-end">Custo un.</th><th>Observação</th></tr>
+  </thead>
+  <tbody>
+  {% for m in movs %}
+    <tr>
+      <td class="small text-muted">{{ m.criado_em | dt }}</td>
+      <td>
+        {% if m.tipo == 'entrada' %}<span class="badge text-bg-success">entrada</span>
+        {% else %}<span class="badge text-bg-danger">saída</span>{% endif %}
+      </td>
+      <td class="text-end">{{ m.quantidade | num }} {{ insumo.unidade }}</td>
+      <td class="text-end">{{ m.custo_unitario | moeda }}</td>
+      <td class="small">{{ m.observacao }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if total_paginas > 1 %}
+<nav>
+  <ul class="pagination pagination-sm mb-0 flex-wrap">
+    {% for p in range(1, total_paginas + 1) %}
+      <li class="page-item {{ 'active' if p == pagina }}">
+        <a class="page-link hist-page" href="{{ url_for('main.movimentos_insumo', insumo_id=insumo.id, pagina=p) }}">{{ p }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+{% else %}
+<p class="text-muted mb-0">Nenhuma movimentação registrada para este insumo.</p>
+{% endif %}

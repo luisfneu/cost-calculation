@@ -156,16 +156,30 @@ def _linha_estoque_peca(peca, tamanho, criar=False):
     return linha
 
 
-def _paginar(itens, por_pagina=24):
-    """Pagina uma lista em memória. Retorna (itens_da_pagina, pagina, total_paginas)."""
+def _por_pagina(padrao=15):
+    """Lê 'por_pagina' da URL (default 15). Valor <= 0 significa 'todos'."""
+    try:
+        return int(request.args.get("por_pagina", padrao))
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _paginar(itens, por_pagina=None):
+    """Pagina uma lista em memória. Retorna (itens_da_pagina, pagina, total_paginas).
+
+    O tamanho vem da URL (?por_pagina=N); o argumento define o default da tela.
+    """
+    pp = _por_pagina(por_pagina or 15)
+    if pp <= 0:  # "todos"
+        pp = max(1, len(itens))
     try:
         pagina = max(1, int(request.args.get("pagina", 1)))
     except (TypeError, ValueError):
         pagina = 1
-    total = max(1, (len(itens) + por_pagina - 1) // por_pagina)
+    total = max(1, (len(itens) + pp - 1) // pp)
     pagina = min(pagina, total)
-    ini = (pagina - 1) * por_pagina
-    return itens[ini:ini + por_pagina], pagina, total
+    ini = (pagina - 1) * pp
+    return itens[ini:ini + pp], pagina, total
 
 
 def _validar_estoque_pecas(agrupado):
@@ -352,6 +366,8 @@ def _itens_crus_do_form():
 def _render_historico():
     q = request.args.get("q", "").strip()
     status = request.args.get("status", "").strip()  # "pago" | "pendente" | ""
+    de = _to_date(request.args.get("de"))
+    ate = _to_date(request.args.get("ate"))
     vendas = Venda.query.order_by(Venda.criado_em.desc()).all()
     if q:
         ql = q.lower()
@@ -360,6 +376,10 @@ def _render_historico():
         vendas = [v for v in vendas if v.pago]
     elif status == "pendente":
         vendas = [v for v in vendas if not v.pago]
+    if de:
+        vendas = [v for v in vendas if v.criado_em and v.criado_em.date() >= de]
+    if ate:
+        vendas = [v for v in vendas if v.criado_em and v.criado_em.date() <= ate]
     totais = {
         "receita": sum(v.receita for v in vendas),
         "custo": sum(v.custo_total for v in vendas),
@@ -369,7 +389,9 @@ def _render_historico():
     vendas_pag, pagina, total_paginas = _paginar(vendas)
     return render_template(
         "vendas_historico.html", vendas=vendas_pag, totais=totais,
-        q=q, status=status, pagina=pagina, total_paginas=total_paginas,
+        q=q, status=status,
+        de=request.args.get("de", ""), ate=request.args.get("ate", ""),
+        pagina=pagina, total_paginas=total_paginas,
     )
 
 

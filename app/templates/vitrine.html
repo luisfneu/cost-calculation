@@ -15,10 +15,38 @@
     <h2 class="h5 section-titulo">{{ colecao }}</h2>
     <div class="row g-4 mb-4">
       {% for peca in pecas %}
+      {# Monta a lista de imagens: foto principal + galeria + foto da coleção. #}
+      {% set imgs = [] %}
+      {% if peca.foto %}{% set _ = imgs.append(peca.foto) %}{% endif %}
+      {% for f in peca.fotos %}{% set _ = imgs.append(f.arquivo) %}{% endfor %}
+      {% set col_foto = colecao_fotos.get(peca.colecao) %}
+      {% if col_foto and col_foto not in imgs %}{% set _ = imgs.append(col_foto) %}{% endif %}
       <div class="col-6 col-md-4 col-lg-3">
         <div class="card h-100 text-center">
-          {% if peca.foto %}
-            <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="vitrine-foto card-img-top" alt="{{ peca.nome }}">
+          {% if imgs | length > 1 %}
+            <div id="carousel-p{{ peca.id }}" class="carousel slide vitrine-carrossel" data-bs-ride="false">
+              <div class="carousel-inner">
+                {% for img in imgs %}
+                <div class="carousel-item {{ 'active' if loop.first }}">
+                  <img src="{{ url_for('static', filename='uploads/' ~ img) }}" class="vitrine-foto card-img-top" alt="{{ peca.nome }}">
+                  {% if col_foto and img == col_foto %}<span class="carrossel-tag">coleção</span>{% endif %}
+                </div>
+                {% endfor %}
+              </div>
+              <button class="carousel-control-prev" type="button" data-bs-target="#carousel-p{{ peca.id }}" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon"></span>
+              </button>
+              <button class="carousel-control-next" type="button" data-bs-target="#carousel-p{{ peca.id }}" data-bs-slide="next">
+                <span class="carousel-control-next-icon"></span>
+              </button>
+              <div class="carousel-indicators">
+                {% for img in imgs %}
+                <button type="button" data-bs-target="#carousel-p{{ peca.id }}" data-bs-slide-to="{{ loop.index0 }}" class="{{ 'active' if loop.first }}"></button>
+                {% endfor %}
+              </div>
+            </div>
+          {% elif imgs | length == 1 %}
+            <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="vitrine-foto card-img-top" alt="{{ peca.nome }}">
           {% else %}
             <div class="vitrine-foto sem-foto">sem foto</div>
           {% endif %}

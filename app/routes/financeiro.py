@@ -104,6 +104,8 @@ def contabilidade():
             "descricao": d.descricao, "detalhe": "", "valor": d.valor, "pago": d.pago,
         })
     ledger.sort(key=lambda x: x["data"], reverse=True)
+    total_movimentos = len(ledger)
+    ledger, pagina, total_paginas = _paginar(ledger)
 
     recebido = sum(v.total_pago for v in vendas_f)
     a_receber = sum(v.saldo_receber for v in vendas_f)
@@ -146,6 +148,7 @@ def contabilidade():
     return render_template(
         "contabilidade.html", ledger=ledger, kpis=kpis, formas=formas,
         pendentes=pendentes, a_pagar=a_pagar, meses=meses, mes_atual=mes, mes_label=_mes_label,
+        pagina=pagina, total_paginas=total_paginas, total_movimentos=total_movimentos,
     )
 
 

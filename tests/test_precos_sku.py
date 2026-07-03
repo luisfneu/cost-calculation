@@ -31,14 +31,25 @@ def test_vitrine_mostra_de_por(client, app):
     assert "89,90" in body and "120,00" in body
 
 
-def test_form_peca_salva_sku_e_promo(client, app, seed):
+def test_form_peca_sku_autogerado_e_promo(client, app, seed):
     from app.models import Peca
+    # O SKU enviado é ignorado: é sempre gerado a partir do id (SH-00000000).
     r = client.post(f"/pecas/{seed['peca']}/editar", data={
         "nome": "Vestido Flor", "preco_promocional": "149,90", "sku": "SH-9999",
     }, follow_redirects=True)
     assert r.status_code == 200
     with app.app_context():
         p = Peca.query.get(seed["peca"])
-        assert p.sku == "SH-9999"
+        assert p.sku == Peca.gerar_sku(seed["peca"])  # ex.: SH-00000001
         assert p.preco_promocional == 149.9
         assert p.preco_etiqueta == 200.0  # não zerou os demais campos
+
+
+def test_nova_peca_recebe_sku_automatico(client, app):
+    from app.models import Peca
+    r = client.post("/pecas/nova", data={"nome": "Nova Peça", "preco_etiqueta": "50"},
+                    follow_redirects=True)
+    assert r.status_code == 200
+    with app.app_context():
+        p = Peca.query.filter_by(nome="Nova Peça").first()
+        assert p.sku == Peca.gerar_sku(p.id)

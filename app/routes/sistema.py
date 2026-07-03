@@ -28,6 +28,7 @@ from ..models import (
     TAMANHOS,
     Auditoria,
     Cliente,
+    Colecao,
     Cupom,
     Despesa,
     EstoquePeca,
@@ -128,11 +129,13 @@ def index():
         "parcelas_vencidas": len(parcelas_vencidas),
         "parcelas_valor_vencido": sum(p.valor for p in parcelas_vencidas),
     }
+    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
     return render_template(
         "index.html", pecas=pecas, insumos=insumos, alertas=alertas,
         pecas_repor=pecas_repor, lembretes=lembretes,
         totais_venda=totais_venda, n_clientes=len(clientes),
         meta=meta, receita_mes=receita_mes, meta_pct=meta_pct,
+        colecao_fotos=colecao_fotos,
     )
 
 
@@ -143,6 +146,9 @@ def configuracoes():
         Parametro.definir("pix_nome", request.form.get("pix_nome", "").strip())
         Parametro.definir("pix_cidade", request.form.get("pix_cidade", "").strip())
         Parametro.definir("meta_mensal", _to_float(request.form.get("meta_mensal")))
+        # WhatsApp para pedidos na vitrine pública (só dígitos, com DDI/DDD).
+        whats = re.sub(r"\D", "", request.form.get("whatsapp", ""))
+        Parametro.definir("whatsapp", whats)
         db.session.commit()
         flash("Configurações salvas.", "sucesso")
         return redirect(url_for("main.configuracoes"))
@@ -157,6 +163,7 @@ def configuracoes():
         "pix_nome": Parametro.obter("pix_nome", ""),
         "pix_cidade": Parametro.obter("pix_cidade", ""),
         "meta_mensal": Parametro.obter("meta_mensal", "0"),
+        "whatsapp": Parametro.obter("whatsapp", ""),
     }
     return render_template("configuracoes.html", cfg=cfg, pix_previa=previa)
 
@@ -233,8 +240,35 @@ def excluir_usuario(usuario_id):
 
 @bp.route("/auditoria")
 def auditoria():
-    registros = Auditoria.query.order_by(Auditoria.criado_em.desc()).limit(500).all()
-    return render_template("auditoria.html", registros=registros)
+    usuario = request.args.get("usuario", "").strip()
+    acao = request.args.get("acao", "").strip()
+    de = _to_date(request.args.get("de"))
+    ate = _to_date(request.args.get("ate"))
+
+    query = Auditoria.query
+    if usuario:
+        query = query.filter(Auditoria.usuario == usuario)
+    if acao:
+        query = query.filter(Auditoria.acao == acao)
+    if de:
+        query = query.filter(db.func.date(Auditoria.criado_em) >= de.isoformat())
+    if ate:
+        query = query.filter(db.func.date(Auditoria.criado_em) <= ate.isoformat())
+
+    registros = query.order_by(Auditoria.criado_em.desc()).all()
+    registros, pagina, total_paginas = _paginar(registros)
+
+    # Opções dos filtros (valores distintos existentes).
+    usuarios = [r[0] for r in db.session.query(Auditoria.usuario)
+                .filter(Auditoria.usuario != "").distinct().order_by(Auditoria.usuario).all()]
+    acoes = [r[0] for r in db.session.query(Auditoria.acao)
+             .distinct().order_by(Auditoria.acao).all()]
+    return render_template(
+        "auditoria.html", registros=registros, pagina=pagina, total_paginas=total_paginas,
+        usuarios=usuarios, acoes=acoes,
+        f_usuario=usuario, f_acao=acao,
+        de=request.args.get("de", ""), ate=request.args.get("ate", ""),
+    )
 
 
 @bp.route("/backup")

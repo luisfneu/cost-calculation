@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar coleção' if colecao else 'Nova coleção' }}{% endblock %}
+{% block conteudo %}
+<h1 class="h3 mb-4">{{ 'Editar coleção' if colecao else 'Nova coleção' }}</h1>
+
+<form method="post" enctype="multipart/form-data" class="card card-body bg-white" style="max-width:620px">
+  <div class="mb-3">
+    <label class="form-label">Nome *</label>
+    <input type="text" name="nome" class="form-control" required
+           value="{{ colecao.nome if colecao else '' }}" placeholder="Ex.: Verão 2026, Alfazema...">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Slogan</label>
+    <input type="text" name="slogan" class="form-control"
+           value="{{ colecao.slogan if colecao else '' }}" placeholder="Ex.: Leveza e cor para os dias quentes">
+  </div>
+  <div class="mb-3 foto-campo">
+    <label class="form-label">Foto principal da coleção</label>
+    <input type="file" name="foto" class="form-control" accept="image/*">
+    <div class="foto-paste-zone">📋 Ou tire um print e cole aqui com <kbd>Ctrl</kbd>+<kbd>V</kbd> <span class="foto-colada-ok">✔ imagem colada</span></div>
+    {% if colecao and colecao.foto %}
+      <div class="mt-2"><img src="{{ url_for('static', filename='uploads/' ~ colecao.foto) }}" class="foto-thumb"> <span class="small text-muted">foto atual (enviar/colar nova substitui)</span></div>
+    {% endif %}
+  </div>
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" name="ativa" id="ativa"
+           {{ 'checked' if not colecao or colecao.ativa }}>
+    <label class="form-check-label" for="ativa">
+      Ativa <span class="text-muted small">(coleções inativas não aparecem no select de peças)</span>
+    </label>
+  </div>
+  <p class="small text-muted">As peças são vinculadas à coleção pelo <b>nome</b>. Ao renomear aqui, as peças dessa coleção são atualizadas automaticamente.</p>
+  <div>
+    <button class="btn btn-primary">Salvar</button>
+    <a href="{{ url_for('main.listar_colecoes') }}" class="btn btn-link">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
