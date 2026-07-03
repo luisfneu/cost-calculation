@@ -360,3 +360,129 @@ main.container { max-width: 1100px; }
   font-style: italic;
   font-size: .95rem;
 }
+
+/* ==========================================================================
+   Painel (dashboard) — cartões suaves na identidade do atelier
+   ========================================================================== */
+.painel-saudacao { font-size: 1.9rem; margin: 0; }
+.painel-data { color: var(--ink-soft); font-size: .85rem; letter-spacing: .5px; }
+
+/* Cartão de indicador (KPI) */
+.stat {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+a.stat, .stat a { text-decoration: none; color: inherit; }
+a.stat:hover, .stat.clicavel:hover { box-shadow: 0 6px 20px rgba(44,38,32,.10); transform: translateY(-2px); }
+.stat .ic {
+  width: 44px; height: 44px; flex: 0 0 44px;
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.25rem;
+  background: rgba(176,138,79,.12);
+  color: var(--gold);
+}
+.stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.7rem; line-height: 1; color: var(--ink);
+}
+.stat .lbl {
+  font-size: .72rem; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--ink-soft); margin-top: 3px;
+}
+/* Acentos de estado (só no ícone, sem fundo pesado) */
+.stat.ok    .ic { background: rgba(109,122,92,.15);  color: #6d7a5c; }
+.stat.aviso .ic { background: rgba(165,98,79,.14);   color: #a5624f; }
+.stat.aviso .num { color: #a5624f; }
+
+/* Central de lembretes */
+.avisos { display: flex; flex-direction: column; }
+.aviso {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none; color: var(--ink);
+}
+.aviso:last-child { border-bottom: none; }
+.aviso:hover { background: var(--cream-soft); border-radius: 8px; }
+.aviso .ic {
+  width: 34px; height: 34px; flex: 0 0 34px;
+  border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  background: rgba(176,138,79,.12); color: var(--gold); font-size: 1rem;
+}
+.aviso.urgente .ic { background: rgba(165,98,79,.14); color: #a5624f; }
+.aviso .txt { flex: 1; min-width: 0; }
+.aviso .txt b { font-family: 'Jost', sans-serif; font-weight: 500; }
+.aviso .txt .sub { font-size: .8rem; color: var(--ink-soft); }
+.aviso .seta { color: var(--gold-soft); align-self: center; }
+.avisos-vazio {
+  text-align: center; color: var(--ink-soft); padding: 22px 0;
+  font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.05rem;
+}
+
+/* Barra de progresso dourada da meta */
+.progress.meta-bar { height: 22px; background: var(--cream-soft); border: 1px solid var(--line); border-radius: 30px; }
+.progress.meta-bar .progress-bar { background: linear-gradient(90deg, var(--gold-soft), var(--gold)); border-radius: 30px; font-weight: 400; }
+
+/* Título de seção com traço dourado */
+.secao-titulo {
+  font-family: 'Cormorant Garamond', serif; font-size: 1.35rem;
+  display: flex; align-items: center; gap: 10px; margin: 0;
+}
+.secao-titulo::after { content: ''; flex: 1; height: 1px; background: var(--gold-soft); opacity: .5; }
+
+/* ---------- Menu: ícones e item ativo ------------------------------------- */
+.atelier-nav .nav-link i { margin-right: 5px; opacity: .75; }
+.atelier-nav .nav-link.ativo,
+.atelier-nav .dropdown.ativo > .nav-link { color: var(--gold); }
+.atelier-nav .nav-link.ativo i,
+.atelier-nav .dropdown.ativo > .nav-link i { opacity: 1; }
+.atelier-nav .dropdown-item.ativo { color: var(--gold); background: rgba(176,138,79,.08); }
+
+/* ---------- Estado vazio (listas sem registros) --------------------------- */
+.estado-vazio { text-align: center; padding: 44px 20px; color: var(--ink-soft); }
+.estado-vazio .ic { font-size: 2.6rem; color: var(--gold-soft); display: block; margin-bottom: 10px; }
+.estado-vazio .frase {
+  font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-style: italic; color: var(--ink);
+}
+.estado-vazio .dica { font-size: .9rem; margin-top: 4px; }
+.estado-vazio .acao { margin-top: 14px; }
+
+/* ---------- Toasts (feedback discreto) ------------------------------------ */
+.toast-container { z-index: 1090; }
+.atelier-toast {
+  background: var(--cream); border: 1px solid var(--line);
+  border-left: 4px solid var(--gold); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(44,38,32,.14); color: var(--ink);
+}
+.atelier-toast.erro { border-left-color: #a5624f; }
+.atelier-toast .toast-body { display: flex; align-items: center; gap: 10px; font-size: .95rem; }
+.atelier-toast .ic { color: var(--gold); font-size: 1.15rem; }
+.atelier-toast.erro .ic { color: #a5624f; }
+
+/* ---------- Tabela vira cartão no celular --------------------------------- */
+@media (max-width: 576px) {
+  .tabela-cartao thead { display: none; }
+  .tabela-cartao, .tabela-cartao tbody, .tabela-cartao tr, .tabela-cartao td { display: block; width: 100%; }
+  .tabela-cartao tfoot { display: none; }
+  .tabela-cartao tr {
+    background: var(--cream); border: 1px solid var(--line); border-radius: 12px;
+    margin-bottom: 12px; padding: 8px 14px;
+  }
+  .tabela-cartao td {
+    border: none; padding: 6px 0; text-align: right;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .tabela-cartao td::before {
+    content: attr(data-label); font-weight: 500; color: var(--ink-soft);
+    text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .tabela-cartao td:empty { display: none; }
+}

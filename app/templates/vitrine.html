@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4 no-print">
   <h1 class="h3 mb-0">Vitrine</h1>
@@ -40,6 +41,6 @@
     </div>
   {% endfor %}
 {% else %}
-  <p class="text-muted">Nenhuma peça cadastrada para exibir.</p>
+  {{ ui.vazio('bi-shop', 'Vitrine vazia', 'Cadastre peças para exibi-las na vitrine.', '+ Nova peça', url_for('main.form_peca')) }}
 {% endif %}
 {% endblock %}

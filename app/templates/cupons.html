@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <h1 class="h3 mb-4">Cupons de desconto</h1>
 
@@ -37,16 +38,16 @@
 <div class="card bg-white">
   <div class="card-body">
     {% if cupons %}
-    <table class="table align-middle">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light"><tr><th>Código</th><th>Desconto</th><th>Validade</th><th>Usos</th><th>Status</th><th></th></tr></thead>
       <tbody>
       {% for c in cupons %}
         <tr class="{{ '' if c.valido else 'text-muted' }}">
-          <td><strong>{{ c.codigo }}</strong></td>
-          <td>{% if c.tipo == 'percentual' %}{{ c.valor | num }}%{% else %}{{ c.valor | moeda }}{% endif %}</td>
-          <td>{{ c.validade.strftime('%d/%m/%Y') if c.validade else '—' }}</td>
-          <td>{{ c.usos }}{% if c.max_usos %} / {{ c.max_usos }}{% endif %}</td>
-          <td>{% if c.valido %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">inativo/expirado</span>{% endif %}</td>
+          <td data-label="Código"><strong>{{ c.codigo }}</strong></td>
+          <td data-label="Desconto">{% if c.tipo == 'percentual' %}{{ c.valor | num }}%{% else %}{{ c.valor | moeda }}{% endif %}</td>
+          <td data-label="Validade">{{ c.validade.strftime('%d/%m/%Y') if c.validade else '—' }}</td>
+          <td data-label="Usos">{{ c.usos }}{% if c.max_usos %} / {{ c.max_usos }}{% endif %}</td>
+          <td data-label="Status">{% if c.valido %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">inativo/expirado</span>{% endif %}</td>
           <td class="text-end text-nowrap">
             <form method="post" action="{{ url_for('main.toggle_cupom', cupom_id=c.id) }}" class="d-inline">
               <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if c.ativo else 'Ativar' }}</button>
@@ -59,7 +60,7 @@
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="text-muted">Nenhum cupom cadastrado.</p>{% endif %}
+    {% else %}{{ ui.vazio('bi-ticket-perforated', 'Nenhum cupom cadastrado', 'Crie cupons de desconto para suas campanhas.') }}{% endif %}
   </div>
 </div>
 {% endblock %}

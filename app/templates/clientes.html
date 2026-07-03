@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Clientes</h1>
@@ -12,15 +13,15 @@
 
 {% if clientes %}
 <div class="table-responsive">
-<table class="table table-hover align-middle bg-white">
+<table class="table table-hover align-middle bg-white tabela-cartao">
   <thead class="table-light">
     <tr><th>Nome</th><th>Contato</th><th class="text-end">Compras</th><th class="text-end">Pendente</th><th></th></tr>
   </thead>
   <tbody>
   {% for c in clientes %}
     <tr>
-      <td><strong>{{ c.nome }}</strong></td>
-      <td>
+      <td data-label="Nome"><strong>{{ c.nome }}</strong></td>
+      <td data-label="Contato">
         {% if c.instagram_handle %}
           <a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank" class="text-decoration-none me-2" title="Instagram">
             <i class="bi bi-instagram"></i> {{ c.instagram_handle }}
@@ -32,8 +33,8 @@
           </a>
         {% endif %}
       </td>
-      <td class="text-end">{{ c.total_compras | moeda }}</td>
-      <td class="text-end {{ 'text-danger' if c.total_pendente }}">{{ c.total_pendente | moeda }}</td>
+      <td data-label="Compras" class="text-end">{{ c.total_compras | moeda }}</td>
+      <td data-label="Pendente" class="text-end {{ 'text-danger' if c.total_pendente }}">{{ c.total_pendente | moeda }}</td>
       <td class="text-end"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}" class="btn btn-sm btn-outline-primary">Abrir</a></td>
     </tr>
   {% endfor %}
@@ -42,6 +43,6 @@
 </div>
 {% include "_paginacao.html" %}
 {% else %}
-<p class="text-muted">Nenhum cliente cadastrado. <a href="{{ url_for('main.form_cliente') }}">Cadastre o primeiro</a>.</p>
+{{ ui.vazio('bi-people', 'Nenhum cliente cadastrado', 'Cadastre clientes para acompanhar compras e crediário.', '+ Novo cliente', url_for('main.form_cliente')) }}
 {% endif %}
 {% endblock %}

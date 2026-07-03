@@ -11,16 +11,16 @@
   <div class="card-body">
     <h2 class="h5 mb-3"><i class="bi bi-gift"></i> Aniversariantes do mês</h2>
     {% if aniversariantes %}
-    <table class="table align-middle">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light"><tr><th>Dia</th><th>Cliente</th><th>Idade</th><th>Tam.</th><th>Contato</th><th></th></tr></thead>
       <tbody>
       {% for c in aniversariantes %}
         <tr class="{{ 'table-warning' if c.aniversario_hoje }}">
-          <td class="fw-bold">{{ c.nascimento.strftime('%d/%m') }}{% if c.aniversario_hoje %} <span class="badge text-bg-warning">hoje 🎉</span>{% elif c.dias_para_aniversario is not none %} <span class="small text-muted">em {{ c.dias_para_aniversario }}d</span>{% endif %}</td>
-          <td><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">{{ c.nome }}</a></td>
-          <td>{{ c.idade if c.idade is not none else '—' }}</td>
-          <td>{% if c.tamanho_preferido %}<span class="badge text-bg-light">{{ c.tamanho_preferido }}</span>{% else %}—{% endif %}</td>
-          <td class="small">
+          <td data-label="Dia" class="fw-bold">{{ c.nascimento.strftime('%d/%m') }}{% if c.aniversario_hoje %} <span class="badge text-bg-warning">hoje 🎉</span>{% elif c.dias_para_aniversario is not none %} <span class="small text-muted">em {{ c.dias_para_aniversario }}d</span>{% endif %}</td>
+          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">{{ c.nome }}</a></td>
+          <td data-label="Idade">{{ c.idade if c.idade is not none else '—' }}</td>
+          <td data-label="Tam.">{% if c.tamanho_preferido %}<span class="badge text-bg-light">{{ c.tamanho_preferido }}</span>{% else %}—{% endif %}</td>
+          <td data-label="Contato" class="small">
             {% if c.instagram_handle %}<a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank"><i class="bi bi-instagram"></i></a>{% endif %}
             {% if c.whatsapp_numero %}<a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-success"><i class="bi bi-whatsapp"></i> {{ c.telefone }}</a>{% endif %}
           </td>
@@ -52,16 +52,16 @@
       </form>
     </div>
     {% if reativar %}
-    <table class="table align-middle">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light"><tr><th>Cliente</th><th>Última compra</th><th>Total gasto</th><th>Tam.</th><th>Contato</th><th></th></tr></thead>
       <tbody>
       {% for c in reativar %}
         <tr>
-          <td><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">{{ c.nome }}</a></td>
-          <td class="small">{{ c.ultima_compra | dt }} <span class="badge text-bg-danger">{{ c.dias_desde_ultima_compra }}d</span></td>
-          <td>{{ c.total_compras | moeda }}</td>
-          <td>{% if c.tamanho_preferido %}<span class="badge text-bg-light">{{ c.tamanho_preferido }}</span>{% else %}—{% endif %}</td>
-          <td class="small">
+          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">{{ c.nome }}</a></td>
+          <td data-label="Última compra" class="small">{{ c.ultima_compra | dt }} <span class="badge text-bg-danger">{{ c.dias_desde_ultima_compra }}d</span></td>
+          <td data-label="Total gasto">{{ c.total_compras | moeda }}</td>
+          <td data-label="Tam.">{% if c.tamanho_preferido %}<span class="badge text-bg-light">{{ c.tamanho_preferido }}</span>{% else %}—{% endif %}</td>
+          <td data-label="Contato" class="small">
             {% if c.instagram_handle %}<a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank"><i class="bi bi-instagram"></i></a>{% endif %}
             {% if c.whatsapp_numero %}<a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-success"><i class="bi bi-whatsapp"></i> {{ c.telefone }}</a>{% endif %}
           </td>

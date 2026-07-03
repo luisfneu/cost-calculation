@@ -4,12 +4,18 @@
 <h1 class="h3 mb-4">Contas a receber</h1>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-4"><div class="card text-bg-primary"><div class="card-body">
-    <div class="h4 mb-0">{{ total | moeda }}</div><div class="small">Total a receber</div></div></div></div>
-  <div class="col-md-4"><div class="card {{ 'text-bg-danger' if total_vencido else 'text-bg-secondary' }}"><div class="card-body">
-    <div class="h4 mb-0">{{ total_vencido | moeda }}</div><div class="small">Vencido</div></div></div></div>
-  <div class="col-md-4"><div class="card text-bg-dark"><div class="card-body">
-    <div class="h4 mb-0">{{ parcelas|length }}</div><div class="small">Parcelas em aberto</div></div></div></div>
+  <div class="col-md-4"><div class="stat">
+    <div class="ic"><i class="bi bi-cash-stack"></i></div>
+    <div><div class="num">{{ total | moeda }}</div><div class="lbl">Total a receber</div></div>
+  </div></div>
+  <div class="col-md-4"><div class="stat {{ 'aviso' if total_vencido }}">
+    <div class="ic"><i class="bi bi-exclamation-octagon"></i></div>
+    <div><div class="num">{{ total_vencido | moeda }}</div><div class="lbl">Vencido</div></div>
+  </div></div>
+  <div class="col-md-4"><div class="stat">
+    <div class="ic"><i class="bi bi-calendar-check"></i></div>
+    <div><div class="num">{{ parcelas|length }}</div><div class="lbl">Parcelas em aberto</div></div>
+  </div></div>
 </div>
 
 <!-- Parcelas de crediário -->
@@ -17,19 +23,19 @@
   <div class="card-body">
     <h2 class="h5 mb-3">Crediário — parcelas em aberto</h2>
     {% if parcelas %}
-    <table class="table align-middle">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light"><tr><th>Pedido</th><th>Cliente</th><th>Parcela</th><th>Vencimento</th><th class="text-end">Valor</th><th></th></tr></thead>
       <tbody>
       {% for p in parcelas %}
         <tr class="{{ 'table-danger' if p.vencida }}">
-          <td><a href="{{ url_for('main.visualizar_venda', venda_id=p.venda_id) }}" class="link-atelier">#{{ p.venda_id }}</a></td>
-          <td>{{ p.venda.cliente_nome or '—' }}</td>
-          <td>{{ p.rotulo }}</td>
-          <td>
+          <td data-label="Pedido"><a href="{{ url_for('main.visualizar_venda', venda_id=p.venda_id) }}" class="link-atelier">#{{ p.venda_id }}</a></td>
+          <td data-label="Cliente">{{ p.venda.cliente_nome or '—' }}</td>
+          <td data-label="Parcela">{{ p.rotulo }}</td>
+          <td data-label="Vencimento">
             {% if p.vencimento %}{{ p.vencimento.strftime('%d/%m/%Y') }}{% if p.vencida %} <span class="badge text-bg-danger">vencida</span>{% endif %}
             {% else %}<span class="text-muted">—</span>{% endif %}
           </td>
-          <td class="text-end fw-bold">{{ p.valor | moeda }}</td>
+          <td data-label="Valor" class="text-end fw-bold">{{ p.valor | moeda }}</td>
           <td class="text-end">
             <form method="post" action="{{ url_for('main.pagar_parcela', parcela_id=p.id) }}">
               <button class="btn btn-sm btn-success">Receber</button>
@@ -48,17 +54,17 @@
 <div class="card bg-white">
   <div class="card-body">
     <h2 class="h5 mb-3">Outros pedidos com saldo pendente</h2>
-    <table class="table align-middle">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light"><tr><th>Pedido</th><th>Cliente</th><th>Vencimento</th><th class="text-end">Total</th><th class="text-end">Pago</th><th class="text-end">Saldo</th><th></th></tr></thead>
       <tbody>
       {% for v in outros %}
         <tr class="{{ 'table-danger' if v.vencida }}">
-          <td>#{{ v.id }}<div class="small text-muted">{{ v.criado_em | dt }}</div></td>
-          <td>{{ v.cliente_nome or '—' }}</td>
-          <td>{% if v.vencimento %}{{ v.vencimento.strftime('%d/%m/%Y') }}{% if v.vencida %} <span class="badge text-bg-danger">vencido</span>{% endif %}{% else %}<span class="text-muted">sem vencimento</span>{% endif %}</td>
-          <td class="text-end">{{ v.receita | moeda }}</td>
-          <td class="text-end text-success">{{ v.total_pago | moeda }}</td>
-          <td class="text-end fw-bold">{{ v.saldo_receber | moeda }}</td>
+          <td data-label="Pedido">#{{ v.id }}<div class="small text-muted">{{ v.criado_em | dt }}</div></td>
+          <td data-label="Cliente">{{ v.cliente_nome or '—' }}</td>
+          <td data-label="Vencimento">{% if v.vencimento %}{{ v.vencimento.strftime('%d/%m/%Y') }}{% if v.vencida %} <span class="badge text-bg-danger">vencido</span>{% endif %}{% else %}<span class="text-muted">sem vencimento</span>{% endif %}</td>
+          <td data-label="Total" class="text-end">{{ v.receita | moeda }}</td>
+          <td data-label="Pago" class="text-end text-success">{{ v.total_pago | moeda }}</td>
+          <td data-label="Saldo" class="text-end fw-bold">{{ v.saldo_receber | moeda }}</td>
           <td class="text-end"><a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Receber</a></td>
         </tr>
       {% endfor %}

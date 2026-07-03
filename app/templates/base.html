@@ -25,56 +25,63 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navmenu">
         <span class="navbar-toggler-icon"></span>
       </button>
+      {% set ep = request.endpoint %}
+      {% set g_cat = ['main.listar_pecas','main.form_peca','main.detalhe_peca','main.listar_insumos','main.form_insumo','main.detalhe_insumo','main.listar_kits','main.vitrine'] %}
+      {% set g_est = ['main.inventario','main.inventario_insumos','main.listar_ordens','main.detalhe_ordem','main.nova_ordem','main.nova_ordem_from_minimos','main.historico'] %}
+      {% set g_ven = ['main.listar_vendas','main.registrar_venda','main.visualizar_venda','main.editar_venda','main.listar_encomendas','main.registrar_encomenda','main.listar_cupons','main.listar_vales','main.devolucao_venda'] %}
+      {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm'] %}
+      {% set g_fin = ['main.contabilidade','main.contas_a_receber','main.listar_despesas','main.relatorio'] %}
+      {% set g_sys = ['main.listar_usuarios','main.auditoria','main.configuracoes'] %}
       <div class="collapse navbar-collapse justify-content-end" id="navmenu">
         <div class="navbar-nav align-items-lg-center">
-          <a class="nav-link" href="{{ url_for('main.index') }}">Painel</a>
-          <div class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Catálogo</a>
+          <a class="nav-link {{ 'ativo' if ep == 'main.index' }}" href="{{ url_for('main.index') }}"><i class="bi bi-house-door"></i> Painel</a>
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_cat }}">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-bag"></i> Catálogo</a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_pecas') }}">Peças</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_insumos') }}">Insumos</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_kits') }}">Kits / combos</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_pecas' }}" href="{{ url_for('main.listar_pecas') }}">Peças</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_insumos' }}" href="{{ url_for('main.listar_insumos') }}">Insumos</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_kits' }}" href="{{ url_for('main.listar_kits') }}">Kits / combos</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.vitrine') }}">Vitrine</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.vitrine' }}" href="{{ url_for('main.vitrine') }}">Vitrine</a></li>
             </ul>
           </div>
-          <div class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Estoque</a>
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_est }}">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-box-seam"></i> Estoque</a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{{ url_for('main.inventario') }}">Inventário de peças</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.inventario_insumos') }}">Inventário de insumos</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_ordens') }}">Ordens de produção</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.inventario' }}" href="{{ url_for('main.inventario') }}">Inventário de peças</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.inventario_insumos' }}" href="{{ url_for('main.inventario_insumos') }}">Inventário de insumos</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_ordens','main.detalhe_ordem'] }}" href="{{ url_for('main.listar_ordens') }}">Ordens de produção</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.historico') }}">Histórico de movimentações</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.historico' }}" href="{{ url_for('main.historico') }}">Histórico de movimentações</a></li>
             </ul>
           </div>
-          <div class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Vendas</a>
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_ven }}">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-receipt"></i> Vendas</a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_vendas') }}">Vendas</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_encomendas') }}">Encomendas</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_vendas','main.registrar_venda'] }}" href="{{ url_for('main.listar_vendas') }}">Vendas</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_encomendas','main.registrar_encomenda'] }}" href="{{ url_for('main.listar_encomendas') }}">Encomendas</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_cupons') }}">Cupons</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_vales') }}">Vales / crédito</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_cupons' }}" href="{{ url_for('main.listar_cupons') }}">Cupons</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_vales' }}" href="{{ url_for('main.listar_vales') }}">Vales / crédito</a></li>
             </ul>
           </div>
-          <div class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Clientes</a>
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_cli }}">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-people"></i> Clientes</a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_clientes') }}">Todos os clientes</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.crm') }}"><i class="bi bi-heart"></i> CRM (aniversários / reativação)</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_clientes','main.detalhe_cliente'] }}" href="{{ url_for('main.listar_clientes') }}">Todos os clientes</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.crm' }}" href="{{ url_for('main.crm') }}"><i class="bi bi-heart"></i> CRM (aniversários / reativação)</a></li>
             </ul>
           </div>
-          <div class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Financeiro</a>
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_fin }}">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-wallet2"></i> Financeiro</a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{{ url_for('main.contabilidade') }}">Contabilidade</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.contas_a_receber') }}">Contas a receber</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.listar_despesas') }}">Despesas</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.relatorio') }}">Relatório</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.contabilidade' }}" href="{{ url_for('main.contabilidade') }}">Contabilidade</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.contas_a_receber' }}" href="{{ url_for('main.contas_a_receber') }}">Contas a receber</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_despesas' }}" href="{{ url_for('main.listar_despesas') }}">Despesas</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.relatorio' }}" href="{{ url_for('main.relatorio') }}">Relatório</a></li>
             </ul>
           </div>
-          <div class="nav-item dropdown">
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_sys }}">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" title="Conta e sistema">
               <i class="bi bi-person-circle"></i>{% if session.usuario %} {{ session.usuario }}{% endif %}
             </a>
@@ -94,20 +101,36 @@
     </div>
   </nav>
 
-  <main class="container pb-5">
+  <!-- Toasts (feedback discreto) -->
+  <div class="toast-container position-fixed top-0 end-0 p-3">
     {% with mensagens = get_flashed_messages(with_categories=true) %}
       {% for categoria, msg in mensagens %}
-        <div class="alert alert-{{ 'danger' if categoria == 'erro' else 'success' }} alert-dismissible fade show" role="alert">
-          {{ msg }}
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        {% set erro = categoria == 'erro' %}
+        <div class="toast atelier-toast {{ 'erro' if erro }} align-items-center" role="alert" data-bs-delay="4500">
+          <div class="d-flex">
+            <div class="toast-body">
+              <i class="bi {{ 'bi-exclamation-triangle-fill' if erro else 'bi-check-circle-fill' }} ic"></i>
+              <span>{{ msg }}</span>
+            </div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+          </div>
         </div>
       {% endfor %}
     {% endwith %}
+  </div>
+
+  <main class="container pb-5">
 
     {% block conteudo %}{% endblock %}
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/foto-clipboard.js') }}"></script>
+  <script>
+    // Exibe os toasts de feedback (mensagens flash).
+    document.querySelectorAll('.toast').forEach(function (el) {
+      bootstrap.Toast.getOrCreateInstance(el, { autohide: true }).show();
+    });
+  </script>
 </body>
 </html>

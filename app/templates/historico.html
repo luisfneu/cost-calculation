@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
 <h1 class="h3 mb-4">Histórico de movimentações</h1>
 
@@ -10,7 +11,7 @@
         <h2 class="h5">Peças (produção)</h2>
         {% if mov_pecas %}
         <div class="table-responsive">
-        <table class="table table-sm align-middle">
+        <table class="table table-sm align-middle tabela-cartao">
           <thead class="table-light">
             <tr><th>Data</th><th>Peça</th><th>Tam.</th><th>Tipo</th><th class="text-end">Qtd</th></tr>
           </thead>
@@ -18,11 +19,11 @@
           {% for m in mov_pecas %}
             {% set saida = m.tipo == 'saida' %}
             <tr>
-              <td class="small text-muted">{{ m.criado_em | dt }}</td>
-              <td>{{ m.peca.nome }}</td>
-              <td><span class="badge text-bg-light">{{ m.tamanho }}</span></td>
-              <td>{{ m.tipo }}</td>
-              <td class="text-end fw-bold {{ 'text-danger' if saida else 'text-success' }}">
+              <td data-label="Data" class="small text-muted">{{ m.criado_em | dt }}</td>
+              <td data-label="Peça">{{ m.peca.nome }}</td>
+              <td data-label="Tam."><span class="badge text-bg-light">{{ m.tamanho }}</span></td>
+              <td data-label="Tipo">{{ m.tipo }}</td>
+              <td data-label="Qtd" class="text-end fw-bold {{ 'text-danger' if saida else 'text-success' }}">
                 {%- if m.tipo == 'ajuste' -%}
                   {{ '+' if m.quantidade >= 0 else '' }}{{ m.quantidade | num }}
                 {%- elif saida -%}
@@ -37,7 +38,7 @@
         </table>
         </div>
         {% else %}
-        <p class="text-muted">Nenhuma produção registrada ainda.</p>
+        {{ ui.vazio('bi-hammer', 'Nenhuma produção registrada ainda', 'Produza peças para ver o histórico aqui.') }}
         {% endif %}
       </div>
     </div>
@@ -50,33 +51,33 @@
         <h2 class="h5">Insumos (entradas / saídas)</h2>
         {% if mov_insumos %}
         <div class="table-responsive">
-        <table class="table table-sm align-middle">
+        <table class="table table-sm align-middle tabela-cartao">
           <thead class="table-light">
             <tr><th>Data</th><th>Insumo</th><th>Tipo</th><th class="text-end">Qtd</th><th>Observação</th></tr>
           </thead>
           <tbody>
           {% for m in mov_insumos %}
             <tr>
-              <td class="small text-muted">{{ m.criado_em | dt }}</td>
-              <td>{{ m.insumo.nome }}</td>
-              <td>
+              <td data-label="Data" class="small text-muted">{{ m.criado_em | dt }}</td>
+              <td data-label="Insumo">{{ m.insumo.nome }}</td>
+              <td data-label="Tipo">
                 {% if m.tipo == 'entrada' %}
                   <span class="badge text-bg-info">entrada</span>
                 {% else %}
                   <span class="badge text-bg-danger">saída</span>
                 {% endif %}
               </td>
-              <td class="text-end fw-bold {{ 'text-success' if m.tipo == 'entrada' else 'text-danger' }}">
+              <td data-label="Qtd" class="text-end fw-bold {{ 'text-success' if m.tipo == 'entrada' else 'text-danger' }}">
                 {{ '+' if m.tipo == 'entrada' else '−' }}{{ m.quantidade | num }}
               </td>
-              <td class="small text-muted">{{ m.observacao }}</td>
+              <td data-label="Obs." class="small text-muted">{{ m.observacao }}</td>
             </tr>
           {% endfor %}
           </tbody>
         </table>
         </div>
         {% else %}
-        <p class="text-muted">Nenhuma movimentação de insumo ainda.</p>
+        {{ ui.vazio('bi-arrow-left-right', 'Nenhuma movimentação de insumo ainda', 'Entradas e saídas de insumos aparecem aqui.') }}
         {% endif %}
       </div>
     </div>
