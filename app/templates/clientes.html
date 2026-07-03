@@ -5,16 +5,18 @@
   <h1 class="h3 mb-0">Clientes</h1>
   <a href="{{ url_for('main.form_cliente') }}" class="btn btn-primary">+ Novo cliente</a>
 </div>
-<form method="get" class="input-group mb-3" style="max-width:420px">
-  <input type="text" name="q" class="form-control" placeholder="Buscar por nome ou @instagram" value="{{ q }}">
-  <button class="btn btn-outline-secondary">Buscar</button>
-  {% if q %}<a href="{{ url_for('main.listar_clientes') }}" class="btn btn-outline-secondary">×</a>{% endif %}
-</form>
-
+<div class="card bg-white"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+      <input type="text" name="q" class="form-control form-control-sm" placeholder="nome ou @instagram" value="{{ q }}" style="width:240px">
+      <button class="btn btn-sm btn-outline-secondary">Buscar</button>
+      {% if q %}<a href="{{ url_for('main.listar_clientes') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+    </form>
+    {% if clientes %}{{ ui.por_pagina() }}{% endif %}
+  </div>
 {% if clientes %}
-<div class="d-flex justify-content-end mb-2">{{ ui.por_pagina() }}</div>
 <div class="table-responsive">
-<table class="table table-hover align-middle bg-white tabela-cartao">
+<table class="table table-hover align-middle tabela-cartao">
   <thead class="table-light">
     <tr><th>Nome</th><th>Contato</th><th class="text-end">Compras</th><th class="text-end">Pendente</th><th></th></tr>
   </thead>
@@ -46,4 +48,5 @@
 {% else %}
 {{ ui.vazio('bi-people', 'Nenhum cliente cadastrado', 'Cadastre clientes para acompanhar compras e crediário.', '+ Novo cliente', url_for('main.form_cliente')) }}
 {% endif %}
+</div></div>
 {% endblock %}

@@ -1,86 +1,71 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
+{% block titulo %}Histórico de movimentações{% endblock %}
 {% block conteudo %}
-<h1 class="h3 mb-4">Histórico de movimentações</h1>
-
-<div class="row g-4">
-  <!-- Produção / estoque de peças -->
-  <div class="col-lg-6">
-    <div class="card bg-white h-100">
-      <div class="card-body">
-        <h2 class="h5">Peças (produção)</h2>
-        {% if mov_pecas %}
-        <div class="table-responsive">
-        <table class="table table-sm align-middle tabela-cartao">
-          <thead class="table-light">
-            <tr><th>Data</th><th>Peça</th><th>Tam.</th><th>Tipo</th><th class="text-end">Qtd</th></tr>
-          </thead>
-          <tbody>
-          {% for m in mov_pecas %}
-            {% set saida = m.tipo == 'saida' %}
-            <tr>
-              <td data-label="Data" class="small text-muted">{{ m.criado_em | dt }}</td>
-              <td data-label="Peça">{{ m.peca.nome }}</td>
-              <td data-label="Tam."><span class="badge text-bg-light">{{ m.tamanho }}</span></td>
-              <td data-label="Tipo">{{ m.tipo }}</td>
-              <td data-label="Qtd" class="text-end fw-bold {{ 'text-danger' if saida else 'text-success' }}">
-                {%- if m.tipo == 'ajuste' -%}
-                  {{ '+' if m.quantidade >= 0 else '' }}{{ m.quantidade | num }}
-                {%- elif saida -%}
-                  −{{ m.quantidade | num }}
-                {%- else -%}
-                  +{{ m.quantidade | num }}
-                {%- endif -%}
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        </div>
-        {% else %}
-        {{ ui.vazio('bi-hammer', 'Nenhuma produção registrada ainda', 'Produza peças para ver o histórico aqui.') }}
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Movimentações de insumos -->
-  <div class="col-lg-6">
-    <div class="card bg-white h-100">
-      <div class="card-body">
-        <h2 class="h5">Insumos (entradas / saídas)</h2>
-        {% if mov_insumos %}
-        <div class="table-responsive">
-        <table class="table table-sm align-middle tabela-cartao">
-          <thead class="table-light">
-            <tr><th>Data</th><th>Insumo</th><th>Tipo</th><th class="text-end">Qtd</th><th>Observação</th></tr>
-          </thead>
-          <tbody>
-          {% for m in mov_insumos %}
-            <tr>
-              <td data-label="Data" class="small text-muted">{{ m.criado_em | dt }}</td>
-              <td data-label="Insumo">{{ m.insumo.nome }}</td>
-              <td data-label="Tipo">
-                {% if m.tipo == 'entrada' %}
-                  <span class="badge text-bg-info">entrada</span>
-                {% else %}
-                  <span class="badge text-bg-danger">saída</span>
-                {% endif %}
-              </td>
-              <td data-label="Qtd" class="text-end fw-bold {{ 'text-success' if m.tipo == 'entrada' else 'text-danger' }}">
-                {{ '+' if m.tipo == 'entrada' else '−' }}{{ m.quantidade | num }}
-              </td>
-              <td data-label="Obs." class="small text-muted">{{ m.observacao }}</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        </div>
-        {% else %}
-        {{ ui.vazio('bi-arrow-left-right', 'Nenhuma movimentação de insumo ainda', 'Entradas e saídas de insumos aparecem aqui.') }}
-        {% endif %}
-      </div>
-    </div>
-  </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Histórico de movimentações</h1>
+  <a href="{{ url_for('main.auditoria') }}" class="btn btn-outline-secondary btn-sm">Auditoria →</a>
 </div>
+
+<div class="card bg-white"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="h5 mb-0">Movimentos <span class="text-muted small fw-normal">({{ total }})</span></h2>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+        <input type="text" name="q" class="form-control form-control-sm" placeholder="item" value="{{ q }}" style="width:150px">
+        <select name="origem" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+          <option value="">Peças e insumos</option>
+          <option value="peca" {{ 'selected' if origem == 'peca' }}>Só peças</option>
+          <option value="insumo" {{ 'selected' if origem == 'insumo' }}>Só insumos</option>
+        </select>
+        <select name="tipo" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+          <option value="">Todos os tipos</option>
+          {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if f_tipo == t }}>{{ t }}</option>{% endfor %}
+        </select>
+        <input type="date" name="de" class="form-control form-control-sm" style="width:auto" value="{{ de }}" title="De">
+        <input type="date" name="ate" class="form-control form-control-sm" style="width:auto" value="{{ ate }}" title="Até">
+        <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+        {% if q or origem or f_tipo or de or ate %}<a href="{{ url_for('main.historico') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+      </form>
+      {{ ui.por_pagina() }}
+    </div>
+  </div>
+
+  {% if linhas %}
+  <div class="table-responsive">
+  <table class="table table-hover align-middle tabela-cartao">
+    <thead class="table-light">
+      <tr><th>Data</th><th>Origem</th><th>Item</th><th>Tipo</th><th class="text-end">Qtd</th><th>Observação</th></tr>
+    </thead>
+    <tbody>
+    {% for m in linhas %}
+      {% set saida = m.tipo == 'saida' %}
+      <tr>
+        <td data-label="Data" class="small text-muted">{{ m.data | dt }}</td>
+        <td data-label="Origem">
+          <span class="badge {{ 'text-bg-primary' if m.origem == 'Peça' else 'text-bg-secondary' }}">{{ m.origem }}</span>
+        </td>
+        <td data-label="Item">{{ m.item }}{% if m.detalhe %} <span class="text-muted small">({{ m.detalhe }})</span>{% endif %}</td>
+        <td data-label="Tipo">
+          {% if m.tipo == 'entrada' %}<span class="badge text-bg-info">entrada</span>
+          {% elif saida %}<span class="badge text-bg-danger">saída</span>
+          {% elif m.tipo == 'producao' %}<span class="badge text-bg-success">produção</span>
+          {% else %}<span class="badge text-bg-warning">ajuste</span>{% endif %}
+        </td>
+        <td data-label="Qtd" class="text-end fw-bold {{ 'text-danger' if saida else 'text-success' }}">
+          {%- if m.tipo == 'ajuste' -%}{{ '+' if m.quantidade >= 0 else '' }}{{ m.quantidade | num }}
+          {%- elif saida -%}−{{ m.quantidade | num }}
+          {%- else -%}+{{ m.quantidade | num }}{%- endif -%}
+        </td>
+        <td data-label="Obs." class="small text-muted">{{ m.obs }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% include "_paginacao.html" %}
+  {% else %}
+  {{ ui.vazio('bi-arrow-left-right', 'Nenhuma movimentação encontrada', 'Ajuste os filtros ou registre produção/entradas de estoque.') }}
+  {% endif %}
+</div></div>
 {% endblock %}

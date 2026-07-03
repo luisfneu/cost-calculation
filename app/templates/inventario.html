@@ -13,8 +13,9 @@
 
 {% if pecas %}
 <form method="post">
+  <div class="card bg-white"><div class="card-body">
   <div class="table-responsive">
-    <table class="table table-sm align-middle bg-white">
+    <table class="table table-sm table-hover align-middle">
       <thead class="table-light">
         <tr>
           <th style="min-width:180px">Peça</th>
@@ -57,6 +58,7 @@
   <div class="text-end">
     <button class="btn btn-primary">Aplicar inventário</button>
   </div>
+  </div></div>
 </form>
 {% else %}
 {{ ui.vazio('bi-bag', 'Nenhuma peça cadastrada', 'Cadastre peças para fazer o inventário.', '+ Nova peça', url_for('main.form_peca')) }}

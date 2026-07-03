@@ -217,10 +217,18 @@
             <input type="text" name="pag_valor" class="form-control pg-valor" value="${valor||''}">
             <button type="button" class="btn btn-outline-secondary pg-pix" title="Gerar QR Pix" style="display:none"><i class="bi bi-qr-code"></i></button>
           </div></td>
-          <td><input type="text" name="pag_parcelas" class="form-control form-control-sm" value="1" style="width:60px"></td>
-          <td><input type="text" name="pag_taxa" class="form-control form-control-sm" value="0" style="width:70px"></td>
+          <td><input type="text" name="pag_parcelas" class="form-control form-control-sm pg-parc" value="1" style="width:60px"><span class="pg-na text-muted">—</span></td>
+          <td><input type="text" name="pag_taxa" class="form-control form-control-sm pg-taxa" value="0" style="width:70px"><span class="pg-na text-muted">—</span></td>
           <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
         corpo.appendChild(tr);
+        aplicarCartao(tr);
+      }
+      // Parcelas e taxa % só no cartão (crédito/débito).
+      function aplicarCartao(tr) {
+        const cartao = /Cart[ãa]o/.test(tr.querySelector('.pg-forma').value);
+        tr.querySelectorAll('.pg-parc, .pg-taxa').forEach(i => i.style.display = cartao ? '' : 'none');
+        tr.querySelectorAll('.pg-na').forEach(s => s.style.display = cartao ? 'none' : '');
+        if (!cartao) { tr.querySelector('.pg-parc').value = '1'; tr.querySelector('.pg-taxa').value = '0'; }
       }
       const boxCred = document.getElementById('box-crediario');
       function preverParcelas() {
@@ -234,6 +242,7 @@
         let informado = 0, dinheiro = 0, naoDinheiro = 0, temPix = false, temCred = false;
         corpo.querySelectorAll('.pag-row').forEach(tr => {
           const forma = tr.querySelector('.pg-forma').value;
+          aplicarCartao(tr);
           const cred = forma === 'Crediário';
           const cash = forma === 'Dinheiro';
           const inp = tr.querySelector('.pg-valor');

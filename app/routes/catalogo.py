@@ -207,7 +207,9 @@ def form_peca(peca_id=None):
     insumos = Insumo.query.order_by(Insumo.nome).all()
     is_nova = peca is None
     # Coleções ativas (select) + tipos já usados (datalist).
-    colecoes = [c.nome for c in Colecao.query.filter_by(ativa=True).order_by(Colecao.nome).all()]
+    colecoes_ativas = Colecao.query.filter_by(ativa=True).order_by(Colecao.nome).all()
+    colecoes = [c.nome for c in colecoes_ativas]
+    colecao_fotos = {c.nome: c.foto for c in colecoes_ativas if c.foto}
     tipos = [r[0] for r in db.session.query(Peca.tipo)
              .filter(Peca.tipo.isnot(None), Peca.tipo != "")
              .distinct().order_by(Peca.tipo).all()]
@@ -216,7 +218,7 @@ def form_peca(peca_id=None):
         nome = request.form.get("nome", "").strip()
         if not nome:
             flash("O nome da peça é obrigatório.", "erro")
-            return render_template("peca_form.html", peca=peca, insumos=insumos, colecoes=colecoes, tipos=tipos)
+            return render_template("peca_form.html", peca=peca, insumos=insumos, colecoes=colecoes, tipos=tipos, colecao_fotos=colecao_fotos)
 
         # Na criação: lê os insumos selecionados para montar a ficha técnica.
         # (Não dá baixa no estoque — isso só acontece ao Produzir.)
@@ -290,7 +292,7 @@ def form_peca(peca_id=None):
         flash("Peça salva. Use 'Produzir' para fabricar e dar entrada no estoque.", "sucesso")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
-    return render_template("peca_form.html", peca=peca, insumos=insumos, colecoes=colecoes, tipos=tipos)
+    return render_template("peca_form.html", peca=peca, insumos=insumos, colecoes=colecoes, tipos=tipos, colecao_fotos=colecao_fotos)
 
 
 @bp.route("/pecas/<int:peca_id>")
