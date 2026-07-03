@@ -85,6 +85,8 @@ def listar_insumos():
         insumos = [i for i in insumos if not i.ativo]
     elif situacao == "ativo":
         insumos = [i for i in insumos if i.ativo]
+    # Inativos vão para o final da lista (mantendo a ordem alfabética dentro de cada grupo).
+    insumos.sort(key=lambda i: (not i.ativo, i.nome.lower()))
     return render_template("insumos.html", insumos=insumos, q=q, tipo=tipo, situacao=situacao)
 
 
@@ -264,20 +266,46 @@ def form_peca(peca_id=None):
         peca.largura_cm = _num("largura_cm", peca.largura_cm)
         peca.comprimento_cm = _num("comprimento_cm", peca.comprimento_cm)
 
-        # Foto principal (opcional).
-        nova_foto = _salvar_foto(request.files.get("foto"))
-        if nova_foto:
-            _remover_foto(peca.foto)
-            peca.foto = nova_foto
-
-        # Fotos adicionais (galeria) — aceita múltiplos arquivos.
+        # --- Imagens: uploader unificado (várias fotos + escolha da principal) ---
+        # Fotos novas enviadas (preservando a ordem de seleção).
+        novas = []
         for arq in request.files.getlist("fotos"):
             nome_arq = _salvar_foto(arq)
             if nome_arq:
-                if not peca.foto:
-                    peca.foto = nome_arq  # primeira vira a principal se não houver
-                else:
-                    db.session.add(FotoPeca(peca=peca, arquivo=nome_arq))
+                novas.append(nome_arq)
+
+        # Imagens existentes marcadas para remover (por nome de arquivo).
+        remover = set(request.form.getlist("remover_existente"))
+
+        # Conjunto atual (principal + galeria), preservando a ordem.
+        existentes = ([peca.foto] if peca.foto else []) + [f.arquivo for f in peca.fotos]
+        for f in existentes:
+            if f in remover:
+                _remover_foto(f)  # apaga do disco as descartadas
+        mantidas = [f for f in existentes if f not in remover]
+
+        # Lista final e escolha da principal.
+        final = mantidas + novas
+        escolha = request.form.get("principal", "")
+        principal = None
+        if escolha.startswith("nova:"):
+            try:
+                principal = novas[int(escolha.split(":", 1)[1])]
+            except (ValueError, IndexError):
+                principal = None
+        elif escolha.startswith("existente:"):
+            alvo = escolha.split(":", 1)[1]
+            principal = alvo if alvo in final else None
+        if principal is None:
+            principal = final[0] if final else None
+
+        # Reconstrói principal + galeria (a principal fica em primeiro).
+        ordenadas = ([principal] + [f for f in final if f != principal]) if final else []
+        for f in list(peca.fotos):            # recria a galeria do zero
+            db.session.delete(f)
+        peca.foto = ordenadas[0] if ordenadas else None
+        for f in ordenadas[1:]:
+            db.session.add(FotoPeca(peca=peca, arquivo=f))
 
         # Na criação: monta a ficha técnica (quantidade por peça).
         if is_nova and linhas:

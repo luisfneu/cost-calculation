@@ -45,6 +45,7 @@
           const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
           const file = new File([blob], 'colado-' + Date.now() + '.' + ext, { type: blob.type });
           const campo = document.querySelector('.foto-campo');
+          if (!campo) return;  // página sem campo clássico (ex.: uploader unificado)
           const input = campo.querySelector('input[type="file"]');
           injetarArquivo(input, file);
           mostrarPreview(campo, URL.createObjectURL(file));

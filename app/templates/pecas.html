@@ -33,7 +33,7 @@
       <td>
         <strong>{{ peca.nome }}</strong>
         {% if peca.colecao %}<div class="small text-muted">{{ peca.colecao }}</div>{% endif %}
-        {% if peca.tags_lista %}<div>{% for t in peca.tags_lista %}<span class="badge badge-materia me-1">#{{ t }}</span>{% endfor %}</div>{% endif %}
+        {% if peca.tags_lista %}<div>{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>{% endif %}
       </td>
       <td>
         <span class="fw-bold">{{ peca.estoque_total | num }}</span>
@@ -47,7 +47,10 @@
       <td>{{ peca.margem_percentual | num }}%</td>
       <td class="fw-bold text-success">{{ peca.preco_venda | moeda }}</td>
       <td>{{ peca.lucro | moeda }}</td>
-      <td class="text-end"><a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary">Abrir</a></td>
+      <td class="text-end text-nowrap">
+        <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary">Abrir</a>
+        <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Editar</a>
+      </td>
     </tr>
   {% endfor %}
   </tbody>

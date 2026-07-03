@@ -141,7 +141,7 @@
     </form>
 
     <script id="dados-pecas" type="application/json">
-      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "sku": {{ p.sku|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "estoque": {{ (p.disponivel_por_tamanho if modo == 'venda' else p.estoque_por_tamanho)|tojson }}}{{ "," if not loop.last }}{% endfor %}]
+      [{% for p in pecas %}{"id": {{ p.id }}, "nome": {{ p.nome|tojson }}, "sku": {{ p.sku|tojson }}, "foto": {{ p.foto|tojson }}, "preco": {{ p.preco_etiqueta_efetivo }}, "custo": {{ p.custo_total }}, "peso_g": {{ p.peso_g }}, "altura_cm": {{ p.altura_cm }}, "largura_cm": {{ p.largura_cm }}, "comprimento_cm": {{ p.comprimento_cm }}, "estoque": {{ (p.disponivel_por_tamanho if modo == 'venda' else p.estoque_por_tamanho)|tojson }}}{{ "," if not loop.last }}{% endfor %}]
     </script>
     <script id="dados-kits" type="application/json">
       [{% for k in kits %}{"id": {{ k.id }}, "nome": {{ k.nome|tojson }}, "preco": {{ k.preco }}, "itens": [{% for i in k.itens %}{"peca_id": {{ i.peca_id }}, "quantidade": {{ i.quantidade }}}{{ "," if not loop.last }}{% endfor %}]}{{ "," if not loop.last }}{% endfor %}]
@@ -198,25 +198,25 @@
 
 <!-- Modal: cadastro rápido de cliente -->
 <div class="modal fade" id="modal-cliente" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title">Novo cliente</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <div class="mb-2"><label class="form-label">Nome *</label><input type="text" id="mc-nome" class="form-control"></div>
         <div class="row">
-          <div class="col-6 mb-2"><label class="form-label">Instagram</label><input type="text" id="mc-instagram" class="form-control" placeholder="@usuario"></div>
-          <div class="col-6 mb-2"><label class="form-label">Telefone / WhatsApp</label><input type="text" id="mc-telefone" class="form-control"></div>
+          <div class="col-md-6 mb-2"><label class="form-label">Instagram</label><input type="text" id="mc-instagram" class="form-control" placeholder="@usuario"></div>
+          <div class="col-md-6 mb-2"><label class="form-label">Telefone / WhatsApp</label><input type="text" id="mc-telefone" class="form-control" data-mask="tel" placeholder="(00) 00000-0000"></div>
         </div>
         <div class="section-titulo">Endereço <span class="text-muted small" style="letter-spacing:normal;text-transform:none">(opcional)</span></div>
         <div class="row">
-          <div class="col-4 mb-2"><label class="form-label">CEP <span class="small" id="mc-cep-status"></span></label><input type="text" id="mc-cep" class="form-control" maxlength="9" placeholder="00000-000"></div>
-          <div class="col-6 mb-2"><label class="form-label">Logradouro</label><input type="text" id="mc-logradouro" class="form-control"></div>
-          <div class="col-2 mb-2"><label class="form-label">Nº</label><input type="text" id="mc-numero" class="form-control"></div>
-          <div class="col-5 mb-2"><label class="form-label">Complemento</label><input type="text" id="mc-complemento" class="form-control"></div>
-          <div class="col-4 mb-2"><label class="form-label">Bairro</label><input type="text" id="mc-bairro" class="form-control"></div>
-          <div class="col-2 mb-2"><label class="form-label">Cidade</label><input type="text" id="mc-cidade" class="form-control"></div>
-          <div class="col-1 mb-2"><label class="form-label">UF</label><input type="text" id="mc-uf" class="form-control" maxlength="2"></div>
+          <div class="col-md-3 mb-2"><label class="form-label">CEP <span class="small" id="mc-cep-status"></span></label><input type="text" id="mc-cep" class="form-control" maxlength="9" placeholder="00000-000"></div>
+          <div class="col-md-7 mb-2"><label class="form-label">Logradouro</label><input type="text" id="mc-logradouro" class="form-control"></div>
+          <div class="col-md-2 mb-2"><label class="form-label">Nº</label><input type="text" id="mc-numero" class="form-control"></div>
+          <div class="col-md-4 mb-2"><label class="form-label">Complemento</label><input type="text" id="mc-complemento" class="form-control"></div>
+          <div class="col-md-3 mb-2"><label class="form-label">Bairro</label><input type="text" id="mc-bairro" class="form-control"></div>
+          <div class="col-md-3 mb-2"><label class="form-label">Cidade</label><input type="text" id="mc-cidade" class="form-control"></div>
+          <div class="col-md-2 mb-2"><label class="form-label">UF</label><input type="text" id="mc-uf" class="form-control" maxlength="2"></div>
         </div>
         <div class="small text-danger" id="mc-erro"></div>
       </div>
@@ -279,6 +279,28 @@
     box.innerHTML = 'calculando…';
     const fd = new FormData();
     fd.append('cep', (window.__CEP_CLIENTE && window.__CEP_CLIENTE[sel.value]) || '');
+
+    // Dimensões da encomenda a partir de TODOS os itens do carrinho:
+    // peso somado; altura empilhada (soma); largura/comprimento = maior peça.
+    const dadosPec = document.getElementById('dados-pecas');
+    const PEC = dadosPec ? JSON.parse(dadosPec.textContent) : [];
+    const achaPec = id => PEC.find(p => String(p.id) === String(id));
+    const nf = v => parseFloat(String(v || '0').replace(',', '.')) || 0;
+    let peso = 0, altura = 0, largura = 0, comprimento = 0;
+    document.querySelectorAll('.item-row').forEach(tr => {
+      const p = achaPec(tr.querySelector('.picker-value') && tr.querySelector('.picker-value').value);
+      const qtd = nf(tr.querySelector('.in-qtd') && tr.querySelector('.in-qtd').value);
+      if (!p || qtd <= 0) return;
+      peso += (p.peso_g || 0) * qtd;                 // gramas
+      altura += (p.altura_cm || 0) * qtd;            // empilha as peças
+      largura = Math.max(largura, p.largura_cm || 0);
+      comprimento = Math.max(comprimento, p.comprimento_cm || 0);
+    });
+    fd.append('peso', peso);                 // g (backend converte p/ kg)
+    fd.append('altura', altura);             // cm
+    fd.append('largura', largura);           // cm
+    fd.append('comprimento', comprimento);   // cm
+
     const resp = await fetch("{{ url_for('main.calcular_frete') }}", { method: 'POST', body: fd });
     const d = await resp.json();
     if (!d.ok) { box.innerHTML = '<span class="text-danger small">' + (d.erro || 'erro') + '</span>'; return; }
@@ -494,8 +516,8 @@
     const c = CLIENTES.find(x => String(x.id) === selCliente.value);
     if (!c) { box.style.display = 'none'; box.innerHTML = ''; return; }
     const partes = [];
-    if (c.instagram) partes.push(`<i class="bi bi-instagram"></i> <a href="https://instagram.com/${c.instagram}" target="_blank">@${c.instagram}</a>`);
-    if (c.whatsapp) partes.push(`<i class="bi bi-whatsapp text-success"></i> <a href="https://wa.me/${c.whatsapp}" target="_blank" class="text-success">${c.telefone}</a>`);
+    if (c.instagram) partes.push(`<a href="https://instagram.com/${c.instagram}" target="_blank" class="text-decoration-none link-insta"><i class="bi bi-instagram"></i> @${c.instagram}</a>`);
+    if (c.whatsapp) partes.push(`<i class="bi bi-whatsapp text-success"></i> <a href="https://wa.me/${c.whatsapp}" target="_blank" class="text-success">${(window.mascaraTel ? window.mascaraTel(c.telefone) : c.telefone)}</a>`);
     if (c.endereco) partes.push(`<i class="bi bi-geo-alt"></i> ${c.endereco}`);
     box.innerHTML = partes.length ? partes.join(' &nbsp;·&nbsp; ') : '<span class="text-muted">Sem dados de contato/endereço.</span>';
     box.style.display = 'block';

@@ -124,10 +124,78 @@ def crm():
         key=lambda c: c.dias_desde_ultima_compra, reverse=True,
     )
     sem_compra = [c for c in clientes if not c.vendas]
+
+    # Cupom pessoal ativo de cada aniversariante (para exibir e citar no parabéns).
+    ids = [c.id for c in aniversariantes]
+    cupons_aniv = {}
+    if ids:
+        for cup in Cupom.query.filter(Cupom.cliente_id.in_(ids)).all():
+            if cup.valido and cup.cliente_id not in cupons_aniv:
+                cupons_aniv[cup.cliente_id] = cup
+
+    # Mensagem de parabéns (com quebras de linha) por aniversariante.
+    vitrine_url = url_for("main.vitrine_publica", _external=True)
+    msgs_parabens = {}
+    for c in aniversariantes:
+        cup = cupons_aniv.get(c.id)
+        linhas = [f"Feliz aniversário, {c.nome}!"]
+        if cup:
+            linhas.append(
+                f"Desejamos tudo de bom. Como presente, você ganhou o cupom {cup.codigo} "
+                f"de 5% de desconto (válido só hoje)!"
+            )
+            linhas.append(
+                f"Use nossa vitrine {vitrine_url} e, ao fazer seu pedido pelo WhatsApp, "
+                f"informe seu cupom :)"
+            )
+        else:
+            linhas.append("Desejamos tudo de bom.")
+            linhas.append(f"Conheça nossa vitrine: {vitrine_url}")
+        linhas += ["Com carinho,", "", "Sabrina Hansen Atelier."]
+        msgs_parabens[c.id] = "\n".join(linhas)
+
     return render_template(
         "crm.html", aniversariantes=aniversariantes, reativar=reativar,
         sem_compra=sem_compra, dias_inativo=dias_inativo, hoje=date.today(),
+        cupons_aniv=cupons_aniv, msgs_parabens=msgs_parabens,
     )
+
+
+@bp.route("/crm/cupom-aniversario/<int:cliente_id>", methods=["POST"])
+def cupom_aniversario(cliente_id):
+    """Cria um cupom pessoal de 5%, uso único, válido até o dia do aniversário."""
+    c = Cliente.query.get_or_404(cliente_id)
+    if not c.nascimento:
+        flash("Cliente sem data de nascimento cadastrada.", "erro")
+        return redirect(url_for("main.crm"))
+
+    # Já existe cupom válido para este cliente? Não duplica.
+    existente = next((cp for cp in Cupom.query.filter_by(cliente_id=c.id).all() if cp.valido), None)
+    if existente:
+        flash(f"{c.nome} já tem um cupom ativo: {existente.codigo}.", "erro")
+        return redirect(url_for("main.crm"))
+
+    hoje = date.today()
+    try:
+        validade = c.nascimento.replace(year=hoje.year)
+    except ValueError:  # 29/02 em ano não bissexto
+        validade = date(hoje.year, c.nascimento.month, 28)
+
+    # Código único e legível a partir do primeiro nome.
+    base = "NIVER" + re.sub(r"[^A-Z0-9]", "", c.nome.split()[0].upper())[:8]
+    codigo, n = base, 1
+    while Cupom.query.filter_by(codigo=codigo).first():
+        n += 1
+        codigo = f"{base}{n}"
+
+    db.session.add(Cupom(
+        codigo=codigo, tipo="percentual", valor=5.0, validade=validade,
+        ativo=True, max_usos=1, cliente_id=c.id,
+    ))
+    db.session.commit()
+    _log("cupom", f"aniversário {c.nome}: {codigo} 5% val {validade}")
+    flash(f"Cupom {codigo} criado: 5% para {c.nome}, válido até {validade.strftime('%d/%m/%Y')} (uso único).", "sucesso")
+    return redirect(url_for("main.crm"))
 
 
 @bp.route("/clientes/<int:cliente_id>/excluir", methods=["POST"])

@@ -6,13 +6,13 @@
     <h1 class="h3 mb-1">{{ cliente.nome }}</h1>
     <div class="d-flex gap-3">
       {% if cliente.instagram_handle %}
-        <a href="https://instagram.com/{{ cliente.instagram_handle }}" target="_blank" class="text-decoration-none">
+        <a href="https://instagram.com/{{ cliente.instagram_handle }}" target="_blank" class="text-decoration-none link-insta">
           <i class="bi bi-instagram"></i> @{{ cliente.instagram_handle }}
         </a>
       {% endif %}
       {% if cliente.whatsapp_numero %}
         <a href="https://wa.me/{{ cliente.whatsapp_numero }}" target="_blank" class="text-decoration-none text-success">
-          <i class="bi bi-whatsapp"></i> {{ cliente.telefone }}
+          <i class="bi bi-whatsapp"></i> {{ cliente.telefone_formatado }}
         </a>
       {% endif %}
     </div>

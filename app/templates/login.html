@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Entrar · Sabrina Hansen Atelier</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
@@ -19,9 +19,8 @@
 <body>
   <div class="container">
     <div class="cartao">
-      <div class="mono">sh</div>
-      <div class="marca">Sabrina Hansen</div>
-      <div class="sub">Atelier</div>
+      <img src="{{ url_for('static', filename='logo.svg') }}" alt="Sabrina Hansen Atelier" style="width:230px; max-width:100%; margin-bottom:18px;">
+
       {% with msgs = get_flashed_messages(with_categories=true) %}
         {% for cat, m in msgs %}<div class="alert alert-{{ 'danger' if cat=='erro' else 'success' }} py-2">{{ m }}</div>{% endfor %}
       {% endwith %}

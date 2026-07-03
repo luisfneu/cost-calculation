@@ -17,19 +17,31 @@
       {% for c in aniversariantes %}
         <tr class="{{ 'table-warning' if c.aniversario_hoje }}">
           <td data-label="Dia" class="fw-bold">{{ c.nascimento.strftime('%d/%m') }}{% if c.aniversario_hoje %} <span class="badge text-bg-warning">hoje 🎉</span>{% elif c.dias_para_aniversario is not none %} <span class="small text-muted">em {{ c.dias_para_aniversario }}d</span>{% endif %}</td>
-          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">{{ c.nome }}</a></td>
+          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}" class="link-atelier">{{ c.nome }}</a></td>
           <td data-label="Idade">{{ c.idade if c.idade is not none else '—' }}</td>
           <td data-label="Tam.">{% if c.tamanho_preferido %}<span class="badge text-bg-light">{{ c.tamanho_preferido }}</span>{% else %}—{% endif %}</td>
           <td data-label="Contato" class="small">
             {% if c.instagram_handle %}<a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank"><i class="bi bi-instagram"></i></a>{% endif %}
-            {% if c.whatsapp_numero %}<a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-success"><i class="bi bi-whatsapp"></i> {{ c.telefone }}</a>{% endif %}
+            {% if c.whatsapp_numero %}<a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-success"><i class="bi bi-whatsapp"></i> {{ c.telefone_formatado }}</a>{% endif %}
           </td>
-          <td class="text-end">
+          <td class="text-end text-nowrap">
+            {% set cup = cupons_aniv.get(c.id) %}
+            {% if cup %}
+              <span class="badge badge-tag" title="Cupom pessoal ativo · válido até {{ cup.validade.strftime('%d/%m/%Y') }} · uso único">
+                <i class="bi bi-ticket-perforated"></i> {{ cup.codigo }} · 5%
+              </span>
+            {% else %}
+              <form method="post" action="{{ url_for('main.cupom_aniversario', cliente_id=c.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-primary" title="Cupom de 5% válido até o dia do aniversário, uso único">
+                  <i class="bi bi-ticket-perforated"></i> Criar cupom 5%
+                </button>
+              </form>
+            {% endif %}
             {% if c.whatsapp_numero %}
-            <a class="btn btn-sm btn-outline-success" target="_blank"
-               href="https://wa.me/{{ c.whatsapp_numero }}?text={{ ('Feliz aniversário, ' ~ c.nome ~ '! 🎉 Desejamos tudo de bom. Com carinho, Sabrina Hansen Atelier.') | urlencode }}">
-              Parabenizar
-            </a>
+              <a class="btn btn-sm btn-outline-success" target="_blank"
+                 href="https://wa.me/{{ c.whatsapp_numero }}?text={{ msgs_parabens[c.id] | urlencode }}">
+                Parabenizar
+              </a>
             {% endif %}
           </td>
         </tr>
@@ -57,13 +69,13 @@
       <tbody>
       {% for c in reativar %}
         <tr>
-          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">{{ c.nome }}</a></td>
+          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}" class="link-atelier">{{ c.nome }}</a></td>
           <td data-label="Última compra" class="small">{{ c.ultima_compra | dt }} <span class="badge text-bg-danger">{{ c.dias_desde_ultima_compra }}d</span></td>
           <td data-label="Total gasto">{{ c.total_compras | moeda }}</td>
           <td data-label="Tam.">{% if c.tamanho_preferido %}<span class="badge text-bg-light">{{ c.tamanho_preferido }}</span>{% else %}—{% endif %}</td>
           <td data-label="Contato" class="small">
             {% if c.instagram_handle %}<a href="https://instagram.com/{{ c.instagram_handle }}" target="_blank"><i class="bi bi-instagram"></i></a>{% endif %}
-            {% if c.whatsapp_numero %}<a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-success"><i class="bi bi-whatsapp"></i> {{ c.telefone }}</a>{% endif %}
+            {% if c.whatsapp_numero %}<a href="https://wa.me/{{ c.whatsapp_numero }}" target="_blank" class="text-success"><i class="bi bi-whatsapp"></i> {{ c.telefone_formatado }}</a>{% endif %}
           </td>
           <td class="text-end">
             {% if c.whatsapp_numero %}
