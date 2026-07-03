@@ -32,9 +32,12 @@
 
     <!-- Ações do fluxo -->
     <div class="text-center mt-4">
-      {% if venda.saldo_receber > 0.01 %}
+      {% if venda.eh_crediario and venda.saldo_receber > 0.01 %}
+        <div class="small text-muted mb-2">Crediário: {{ venda.crediario_pendente | moeda }} a receber em <a href="{{ url_for('main.contas_a_receber') }}">Contas a receber</a>.</div>
+      {% endif %}
+      {% if venda.saldo_receber > 0.01 and not venda.eh_crediario %}
         <span class="text-muted small">Registre o pagamento abaixo para liberar o envio.</span>
-      {% elif venda.status == 'pago' %}
+      {% elif venda.status in ['pago', 'crediario'] %}
         <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='enviado') }}" class="d-inline">
           <button class="btn btn-primary">📦 Marcar como enviado</button>
         </form>
@@ -137,6 +140,20 @@
           <tbody id="linhas-pagamentos"></tbody>
         </table>
         <div class="small text-muted mb-2" id="pix-hint" style="display:none"><i class="bi bi-qr-code"></i> Forma Pix: clique no ícone ao lado do valor para gerar o QR.</div>
+        <div id="box-crediario" class="border rounded p-2 mb-2 bg-light" style="display:none">
+          <div class="row g-2 align-items-end">
+            <div class="col-auto">
+              <label class="form-label small mb-0">Nº de parcelas</label>
+              <input type="number" name="cred_parcelas" id="cred-parcelas" class="form-control form-control-sm" value="2" min="1" max="36" style="width:90px">
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0">1ª parcela em</label>
+              <input type="date" name="cred_inicio" id="cred-inicio" class="form-control form-control-sm" style="width:160px">
+            </div>
+            <div class="col small text-muted" id="cred-preview"></div>
+          </div>
+          <div class="small text-muted mt-1">O pedido é liberado e fica com status <b>Crediário</b>; as parcelas vão para <b>Contas a receber</b>.</div>
+        </div>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
           <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar forma</button>
           <button type="button" class="btn btn-link btn-sm p-0" id="pagar-tudo">preencher com o saldo</button>
@@ -146,11 +163,7 @@
             <span id="troco-info"></span>
           </span>
         </div>
-        <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
-          <div>
-            <label class="form-label small mb-0">Vencimento do saldo <span class="text-muted">(se ficar a prazo)</span></label>
-            <input type="date" name="vencimento" class="form-control form-control-sm" style="width:170px" value="{{ venda.vencimento.isoformat() if venda.vencimento else '' }}">
-          </div>
+        <div class="text-end mb-2">
           <button class="btn btn-success">Registrar pagamento</button>
         </div>
       </form>
@@ -166,7 +179,7 @@
       const SALDO = {{ venda.saldo_receber }};
       const PIX = {{ pix_cfg | tojson }};
       const PEDIDO_ID = "{{ venda.id }}";
-      const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto'];
+      const FORMAS = ['Dinheiro','Pix','Cartão de crédito','Cartão de débito','Transferência','Boleto','Crediário'];
       const corpo = document.getElementById('linhas-pagamentos');
       const brl = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
       const num = t => { if (!t) return 0; let s = String(t).trim(); if (s.indexOf(',') >= 0) s = s.replace(/\./g,'').replace(',','.'); return parseFloat(s) || 0; };
@@ -227,32 +240,48 @@
           <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
         corpo.appendChild(tr);
       }
+      const boxCred = document.getElementById('box-crediario');
+      function preverParcelas() {
+        const n = Math.max(1, parseInt(document.getElementById('cred-parcelas').value || '1', 10));
+        const val = Math.round((SALDO / n) * 100) / 100;
+        const ini = document.getElementById('cred-inicio').value;
+        const dt = ini ? ini.split('-').reverse().join('/') : '—';
+        document.getElementById('cred-preview').innerHTML = `${n}× de <b>${brl(val)}</b> · 1ª em ${dt}`;
+      }
       function recalc() {
-        let informado = 0, dinheiro = 0, naoDinheiro = 0, temPix = false;
+        let informado = 0, dinheiro = 0, naoDinheiro = 0, temPix = false, temCred = false;
         corpo.querySelectorAll('.pag-row').forEach(tr => {
           const forma = tr.querySelector('.pg-forma').value;
+          const cred = forma === 'Crediário';
           const cash = forma === 'Dinheiro';
-          const v = num(tr.querySelector('.pg-valor').value);
-          informado += v;
-          if (cash) dinheiro += v; else naoDinheiro += v;
           const inp = tr.querySelector('.pg-valor');
-          inp.classList.toggle('is-invalid', !cash && v > SALDO + 0.01);
+          if (cred) { inp.value = numBR(SALDO); inp.readOnly = true; temCred = true; }
+          else inp.readOnly = false;
+          const v = num(inp.value);
+          if (!cred) { informado += v; if (cash) dinheiro += v; else naoDinheiro += v; }
+          inp.classList.toggle('is-invalid', !cash && !cred && v > SALDO + 0.01);
           // Botão de QR Pix aparece quando a forma é Pix e o Pix está configurado.
           const btnPix = tr.querySelector('.pg-pix');
           const mostrar = PIX && forma === 'Pix';
           btnPix.style.display = mostrar ? '' : 'none';
           if (mostrar) temPix = true;
         });
-        document.getElementById('p-pago').textContent = brl(informado);
-        const restante = Math.max(0, SALDO - informado);
+        boxCred.style.display = temCred ? '' : 'none';
+        if (temCred) preverParcelas();
+        document.getElementById('p-pago').textContent = temCred ? brl(SALDO) : brl(informado);
+        const restante = temCred ? 0 : Math.max(0, SALDO - informado);
         const s = document.getElementById('p-saldo');
         s.textContent = brl(restante); s.className = restante > 0.01 ? 'text-danger' : 'text-success';
         const aplicadoDinheiro = Math.max(0, Math.min(dinheiro, SALDO - naoDinheiro));
-        const troco = dinheiro - aplicadoDinheiro;
+        const troco = temCred ? 0 : dinheiro - aplicadoDinheiro;
         document.getElementById('troco-info').innerHTML = troco > 0.01 ? ` · Troco: <b>${brl(troco)}</b>` : '';
         const hint = document.getElementById('pix-hint');
         if (hint) hint.style.display = temPix ? '' : 'none';
       }
+      document.getElementById('cred-parcelas').addEventListener('input', preverParcelas);
+      document.getElementById('cred-inicio').addEventListener('input', preverParcelas);
+      // 1ª parcela: default hoje.
+      document.getElementById('cred-inicio').value = new Date().toISOString().slice(0, 10);
       document.getElementById('add-pagamento').addEventListener('click', () => linha('Dinheiro',''));
       document.getElementById('pagar-tudo').addEventListener('click', () => {
         const linhas = corpo.querySelectorAll('.pag-row');

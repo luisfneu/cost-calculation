@@ -555,6 +555,10 @@ class Venda(db.Model):
     pagamentos = db.relationship(
         "Pagamento", back_populates="venda", cascade="all, delete-orphan"
     )
+    parcelas = db.relationship(
+        "Parcela", back_populates="venda", cascade="all, delete-orphan",
+        order_by="Parcela.numero",
+    )
 
     @property
     def cliente_nome(self) -> str:
@@ -569,10 +573,22 @@ class Venda(db.Model):
         "enviado": "Enviado", "entregue": "Entregue",
     }
 
+    # Posição de cada status no fluxo. 'crediario' ocupa a etapa de pagamento
+    # (o pedido é liberado, mas o valor é recebido em parcelas).
+    _POS = {"realizado": 0, "pago": 1, "crediario": 1, "enviado": 2, "entregue": 3}
+
+    @property
+    def _pos(self) -> int:
+        return Venda._POS.get(self.status, 0)
+
+    @property
+    def eh_crediario(self) -> bool:
+        return self.status == "crediario" or bool(self.parcelas)
+
     @property
     def status_label(self) -> str:
         return {
-            "realizado": "Pedido feito", "pago": "Pago",
+            "realizado": "Pedido feito", "pago": "Pago", "crediario": "Crediário",
             "enviado": "Enviado", "entregue": "Entregue",
         }.get(self.status, "Pedido feito")
 
@@ -583,6 +599,9 @@ class Venda(db.Model):
             return "Entregue"
         if self.status == "enviado":
             return "Enviado"
+        if self.status == "crediario" or self.parcelas:
+            pagas = sum(1 for p in self.parcelas if p.pago)
+            return f"Crediário · {pagas}/{len(self.parcelas)} parcelas pagas"
         if self.status == "pago":
             return "Pago · aguardando envio"
         return "Aguardando pagamento" if self.saldo_receber > 0.01 else "Pago"
@@ -590,14 +609,14 @@ class Venda(db.Model):
     @property
     def fluxo_etapas(self) -> list:
         """Etapas para o stepper visual do pedido."""
-        try:
-            atual = Venda.FLUXO.index(self.status)
-        except ValueError:
-            atual = 0
-        return [
-            {"key": k, "label": Venda.FLUXO_LABELS[k], "concluido": i < atual, "atual": i == atual}
-            for i, k in enumerate(Venda.FLUXO)
-        ]
+        atual = self._pos
+        etapas = []
+        for i, k in enumerate(Venda.FLUXO):
+            label = Venda.FLUXO_LABELS[k]
+            if k == "pago" and self.eh_crediario:
+                label = "Crediário"
+            etapas.append({"key": k, "label": label, "concluido": i < atual, "atual": i == atual})
+        return etapas
 
     @property
     def tipo_label(self) -> str:
@@ -606,11 +625,25 @@ class Venda(db.Model):
     @property
     def proximo_status(self) -> str:
         """Próxima etapa do fluxo (ou None se já entregue)."""
-        try:
-            i = Venda.FLUXO.index(self.status)
-            return Venda.FLUXO[i + 1] if i + 1 < len(Venda.FLUXO) else None
-        except ValueError:
-            return "pago"
+        i = self._pos
+        return Venda.FLUXO[i + 1] if i + 1 < len(Venda.FLUXO) else None
+
+    # ----- Crediário (parcelas) -----
+    @property
+    def crediario_total(self) -> float:
+        return sum(p.valor for p in self.parcelas)
+
+    @property
+    def crediario_pago(self) -> float:
+        return sum(p.valor for p in self.parcelas if p.pago)
+
+    @property
+    def crediario_pendente(self) -> float:
+        return sum(p.valor for p in self.parcelas if not p.pago)
+
+    @property
+    def crediario_quitado(self) -> bool:
+        return bool(self.parcelas) and all(p.pago for p in self.parcelas)
 
     @property
     def vencida(self) -> bool:
@@ -714,6 +747,32 @@ class Pagamento(db.Model):
     @property
     def valor_taxa(self) -> float:
         return self.valor * (self.taxa_pct / 100.0)
+
+
+class Parcela(db.Model):
+    """Parcela de um crediário (venda parcelada, a receber)."""
+
+    __tablename__ = "parcelas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    venda_id = db.Column(db.Integer, db.ForeignKey("vendas.id"), nullable=False)
+    numero = db.Column(db.Integer, nullable=False, default=1)   # 1..total
+    total = db.Column(db.Integer, nullable=False, default=1)    # nº total de parcelas
+    valor = db.Column(db.Float, nullable=False, default=0.0)
+    vencimento = db.Column(db.Date)
+    pago = db.Column(db.Boolean, nullable=False, default=False)
+    pago_em = db.Column(db.DateTime)
+
+    venda = db.relationship("Venda", back_populates="parcelas")
+
+    @property
+    def vencida(self) -> bool:
+        from datetime import date
+        return (not self.pago) and self.vencimento is not None and self.vencimento < date.today()
+
+    @property
+    def rotulo(self) -> str:
+        return f"{self.numero}/{self.total}"
 
 
 class VendaItem(db.Model):
