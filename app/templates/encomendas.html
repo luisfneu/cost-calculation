@@ -40,7 +40,7 @@
             {% endif %}
             <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
             <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta encomenda?')">
+            <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline" data-confirm="Excluir esta encomenda?">
               <button class="btn btn-sm btn-outline-danger">Excluir</button>
             </form>
           </td>

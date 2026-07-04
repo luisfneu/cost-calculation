@@ -16,8 +16,8 @@
            value="{{ colecao.slogan if colecao else '' }}" placeholder="Ex.: Leveza e cor para os dias quentes">
   </div>
   {{ ui.foto_unica(colecao.foto if colecao else '', 'Foto principal da coleção') }}
-  <div class="form-check mb-3">
-    <input class="form-check-input" type="checkbox" name="ativa" id="ativa"
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch" name="ativa" id="ativa"
            {{ 'checked' if not colecao or colecao.ativa }}>
     <label class="form-check-label" for="ativa">
       Ativa <span class="text-muted small">(coleções inativas não aparecem no select de peças)</span>

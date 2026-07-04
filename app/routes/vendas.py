@@ -49,6 +49,7 @@ from ..models import (
     Venda,
     VendaItem,
     db,
+    dinheiro,
 )
 
 from . import bp
@@ -202,10 +203,10 @@ def editar_venda(venda_id):
             desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
         ))
     cid = request.form.get("cliente_id", type=int)
-    venda.frete = _to_float(request.form.get("frete"))
+    venda.frete = dinheiro(_to_float(request.form.get("frete")))
     venda.frete_cortesia = request.form.get("frete_cortesia") == "on"
     venda.marketplace_pct = _to_float(request.form.get("marketplace_pct"))
-    venda.desconto_total = _to_float(request.form.get("desconto_total"))
+    venda.desconto_total = dinheiro(_to_float(request.form.get("desconto_total")))
     venda.cliente_id = cid if cid else None
     db.session.flush()
 
@@ -426,6 +427,12 @@ def validar_cupom():
         return {"ok": False, "erro": "Cupom não encontrado."}
     if not cupom.valido:
         return {"ok": False, "erro": "Cupom inválido ou expirado."}
+    # Cupom pessoal (ex.: aniversário) só vale para o cliente dono.
+    if cupom.cliente_id:
+        cid = request.form.get("cliente_id", type=int)
+        if cid != cupom.cliente_id:
+            dono = cupom.cliente.nome if cupom.cliente else "outro cliente"
+            return {"ok": False, "erro": f"Cupom exclusivo de {dono}. Selecione esse cliente na venda."}
     return {
         "ok": True, "codigo": cupom.codigo, "tipo": cupom.tipo, "valor": cupom.valor,
         "rotulo": (f"{cupom.valor:g}%" if cupom.tipo == "percentual" else _brl(cupom.valor)),

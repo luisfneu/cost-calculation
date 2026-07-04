@@ -13,7 +13,7 @@
   <div class="col-6 col-md-4 col-lg-3">
     <div class="card h-100 {{ 'opacity-75' if not c.ativa }}">
       {% if c.foto %}
-        <img src="{{ url_for('static', filename='uploads/' ~ c.foto) }}" class="vitrine-foto card-img-top" alt="{{ c.nome }}">
+        <img src="{{ url_for('static', filename='uploads/' ~ c.foto) }}" class="vitrine-foto card-img-top" alt="{{ c.nome }}" loading="lazy">
       {% else %}
         <div class="vitrine-foto sem-foto">sem foto</div>
       {% endif %}
@@ -32,7 +32,7 @@
             </button>
           </form>
           <form method="post" action="{{ url_for('main.excluir_colecao', colecao_id=c.id) }}"
-                onsubmit="return confirm('Excluir a coleção {{ c.nome }}? As peças mantêm o nome.');">
+                data-confirm="Excluir a coleção {{ c.nome }}? As peças mantêm o nome.">
             <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
           </form>
         </div>

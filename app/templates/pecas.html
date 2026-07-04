@@ -8,9 +8,21 @@
 <div class="card bg-white"><div class="card-body">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
-      <input type="text" name="q" class="form-control form-control-sm" placeholder="nome, coleção ou tag" value="{{ q }}" style="width:240px">
+      <input type="text" name="q" class="form-control form-control-sm" placeholder="nome, coleção ou tag" value="{{ q }}" style="width:220px">
+      <select name="tipo" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+        <option value="">Todos os tipos</option>
+        {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if tipo == t }}>{{ t }}</option>{% endfor %}
+      </select>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Filtrar por vitrine">
+        <input type="radio" class="btn-check" name="vitrine" id="vit-todas" value="" {{ 'checked' if not vitrine }} onchange="this.form.submit()">
+        <label class="btn btn-outline-primary" for="vit-todas">Todas</label>
+        <input type="radio" class="btn-check" name="vitrine" id="vit-sim" value="sim" {{ 'checked' if vitrine == 'sim' }} onchange="this.form.submit()">
+        <label class="btn btn-outline-primary" for="vit-sim"><i class="bi bi-eye"></i> Vitrine</label>
+        <input type="radio" class="btn-check" name="vitrine" id="vit-nao" value="nao" {{ 'checked' if vitrine == 'nao' }} onchange="this.form.submit()">
+        <label class="btn btn-outline-primary" for="vit-nao"><i class="bi bi-eye-slash"></i> Ocultas</label>
+      </div>
       <button class="btn btn-sm btn-outline-secondary">Buscar</button>
-      {% if q %}<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+      {% if q or tipo or vitrine %}<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
     </form>
     {% if pecas %}{{ ui.por_pagina() }}{% endif %}
   </div>
@@ -25,13 +37,22 @@
     <tr>
       <td>
         {% if peca.foto %}
-          <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb-vert" alt="">
+          <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb-vert" alt="" loading="lazy">
         {% else %}
           <div class="foto-thumb-vert sem-foto">—</div>
         {% endif %}
       </td>
       <td>
-        <strong>{{ peca.nome }}</strong>
+        <a href="#" class="link-atelier fw-bold btn-peca" data-bs-toggle="modal" data-bs-target="#modal-peca" title="Ver detalhes"
+           data-nome="{{ peca.nome }}" data-tipo="{{ peca.tipo or '—' }}" data-colecao="{{ peca.colecao or '—' }}"
+           data-sku="{{ peca.sku }}" data-custo="{{ peca.custo_total | moeda }}" data-preco="{{ peca.preco_etiqueta_efetivo | moeda }}"
+           data-margem="{{ peca.margem_percentual | num }}%" data-lucro="{{ peca.lucro | moeda }}"
+           data-estoque="{{ peca.estoque_total | num }}" data-disponivel="{{ peca.disponivel_total | num }}"
+           data-tags="{{ peca.tags_lista | join(', ') }}"
+           data-vitrine="{{ 'Sim' if peca.vitrine_publica else 'Não' }}"
+           data-foto="{{ url_for('static', filename='uploads/' ~ peca.foto) if peca.foto else '' }}"
+           data-abrir="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}"
+           data-editar="{{ url_for('main.form_peca', peca_id=peca.id) }}">{{ peca.nome }}</a>
         {% if peca.colecao %}<div class="small text-muted">{{ peca.colecao }}</div>{% endif %}
         {% if peca.tags_lista %}<div>{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>{% endif %}
       </td>
@@ -61,4 +82,60 @@
 {{ ui.vazio('bi-bag', 'Nenhuma peça cadastrada ainda', 'Cadastre sua primeira peça para começar.', '+ Nova peça', url_for('main.form_peca')) }}
 {% endif %}
 </div></div>
+
+<!-- Modal: detalhes da peça (somente leitura) -->
+<div class="modal fade" id="modal-peca" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="pc-nome"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-3" id="pc-foto-wrap">
+          <img id="pc-foto" class="img-fluid rounded" style="max-height:300px" alt="" loading="lazy">
+        </div>
+        <div id="pc-sem-foto" class="text-center text-muted mb-3" style="display:none">sem foto</div>
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            <tr><th class="text-muted" style="width:42%">Tipo</th><td id="pc-tipo"></td></tr>
+            <tr><th class="text-muted">Coleção</th><td id="pc-colecao"></td></tr>
+            <tr><th class="text-muted">SKU</th><td id="pc-sku"></td></tr>
+            <tr><th class="text-muted">Preço de venda</th><td id="pc-preco" class="fw-bold text-success"></td></tr>
+            <tr><th class="text-muted">Custo total</th><td id="pc-custo"></td></tr>
+            <tr><th class="text-muted">Margem / Lucro</th><td id="pc-margem"></td></tr>
+            <tr><th class="text-muted">Estoque</th><td id="pc-estoque"></td></tr>
+            <tr><th class="text-muted">Tags</th><td id="pc-tags"></td></tr>
+            <tr><th class="text-muted">Vitrine pública</th><td id="pc-vitrine"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="pc-abrir" class="btn btn-sm btn-outline-primary">Abrir</a>
+        <a href="#" id="pc-editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Editar</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const modal = document.getElementById('modal-peca');
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', function (ev) {
+      const d = ev.relatedTarget.dataset;
+      const set = (id, v) => { document.getElementById(id).textContent = v; };
+      set('pc-nome', d.nome); set('pc-tipo', d.tipo); set('pc-colecao', d.colecao);
+      set('pc-sku', d.sku); set('pc-preco', d.preco); set('pc-custo', d.custo);
+      set('pc-margem', d.margem + ' · ' + d.lucro);
+      set('pc-estoque', d.estoque + ' (disponível: ' + d.disponivel + ')');
+      set('pc-tags', d.tags || '—'); set('pc-vitrine', d.vitrine);
+      document.getElementById('pc-abrir').href = d.abrir;
+      document.getElementById('pc-editar').href = d.editar;
+      const wrap = document.getElementById('pc-foto-wrap');
+      const sem = document.getElementById('pc-sem-foto');
+      if (d.foto) { document.getElementById('pc-foto').src = d.foto; wrap.style.display = ''; sem.style.display = 'none'; }
+      else { wrap.style.display = 'none'; sem.style.display = ''; }
+    });
+  })();
+</script>
 {% endblock %}

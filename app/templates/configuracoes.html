@@ -42,7 +42,53 @@
     <input type="text" name="whatsapp" class="form-control" value="{{ cfg.whatsapp }}" placeholder="Ex.: 5547999998888">
     <small class="text-muted">Só números. Usado no botão “Pedir por WhatsApp” do link público da vitrine.</small>
   </div>
+  <div class="mb-3" style="max-width:520px">
+    <label class="form-label">URL pública da vitrine (opcional)</label>
+    <input type="text" name="vitrine_url" class="form-control" value="{{ cfg.vitrine_url }}" placeholder="Ex.: https://minhaloja.com.br/vitrine">
+    <small class="text-muted">Se você publicar a vitrine na internet, cole o link fixo aqui. Ele será usado nas mensagens de WhatsApp (aniversário) em vez do endereço local da rede.</small>
+  </div>
+
+  <h2 class="h5 mb-3 mt-2"><i class="bi bi-clock"></i> Fuso horário</h2>
+  <div class="mb-3" style="max-width:320px">
+    <label class="form-label">Fuso para exibir datas e horas</label>
+    <select name="fuso" class="form-select">
+      {% for f in fusos %}<option value="{{ f }}" {{ 'selected' if cfg.fuso == f }}>{{ f.split('/')[1].replace('_', ' ') }}</option>{% endfor %}
+    </select>
+    <small class="text-muted">Os registros são gravados em UTC e exibidos neste fuso (padrão: São Paulo).</small>
+  </div>
 
   <div><button class="btn btn-primary">Salvar configurações</button></div>
 </form>
+
+{% if session.admin %}
+<div class="card card-body bg-white mb-4" style="max-width:680px">
+  <h2 class="h5 mb-3"><i class="bi bi-database"></i> Backup e restauração</h2>
+  <p class="text-muted small mb-3">
+    Baixe uma cópia do banco para guardar em local seguro. Para restaurar, envie um
+    arquivo <code>.db</code> gerado por este sistema — ele substitui o banco atual.
+  </p>
+
+  <div class="mb-4">
+    <a href="{{ url_for('main.backup') }}" class="btn btn-outline-primary">
+      <i class="bi bi-download"></i> Baixar backup do banco
+    </a>
+  </div>
+
+  <hr>
+
+  <h3 class="h6 mt-2">Restaurar de um arquivo</h3>
+  <div class="alert alert-warning small">
+    <i class="bi bi-exclamation-triangle"></i>
+    Isto <strong>substitui todos os dados atuais</strong> pelos do arquivo enviado.
+    Uma cópia do banco atual é guardada automaticamente antes (em <code>instance/</code>).
+    Faça isto sem ninguém usando o sistema. As <strong>fotos</strong> não são afetadas.
+  </div>
+  <form method="post" action="{{ url_for('main.restaurar_backup') }}" enctype="multipart/form-data"
+        class="d-flex flex-wrap gap-2 align-items-center"
+        data-confirm="Restaurar backup? Os dados atuais serão substituídos.">
+    <input type="file" name="arquivo" accept=".db" required class="form-control form-control-sm" style="max-width:320px">
+    <button class="btn btn-sm btn-primary"><i class="bi bi-upload"></i> Restaurar</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

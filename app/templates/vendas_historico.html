@@ -51,18 +51,18 @@
               </div>
             {% endfor %}
           </td>
-          <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
+          <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}" class="link-atelier">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
           <td>
             <span class="badge {{ cores[v.status] }}">{{ v.estado_label }}</span>
             {% if v.tipo == 'encomenda' %}<span class="badge text-bg-warning">encomenda</span>{% endif %}
           </td>
           <td class="fw-bold">{{ v.receita | moeda }}</td>
           <td class="text-nowrap text-end">
-            <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver / fluxo</a>
-            <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary" title="Ver / fluxo"><i class="bi bi-eye"></i></a>
+            <a href="{{ url_for('main.editar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
             <form method="post" action="{{ url_for('main.excluir_venda', venda_id=v.id) }}" class="d-inline"
-                  onsubmit="return confirm('Excluir esta venda?')">
-              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+                  data-confirm="Excluir esta venda?">
+              <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
             </form>
           </td>
         </tr>

@@ -137,6 +137,36 @@
   </div>
 </div>
 
+<!-- Faturamento 30 dias + top clientes do mês -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-8">
+    <div class="card bg-white h-100"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="secao-titulo mb-0"><i class="bi bi-graph-up"></i> Faturamento (30 dias)</h2>
+        <span class="text-muted small">Ticket médio do mês: <b>{{ ticket_medio | moeda }}</b></span>
+      </div>
+      <div style="position:relative; height:200px"><canvas id="g-30d"></canvas></div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card bg-white h-100"><div class="card-body">
+      <h2 class="secao-titulo mb-3"><i class="bi bi-trophy"></i> Top clientes do mês</h2>
+      {% if top_clientes %}
+        <ol class="list-unstyled mb-0">
+          {% for nome, valor in top_clientes %}
+          <li class="d-flex justify-content-between align-items-center py-1 {{ '' if loop.last else 'border-bottom' }}">
+            <span class="text-truncate" style="max-width:60%">{{ loop.index }}. {{ nome }}</span>
+            <span class="fw-bold text-success">{{ valor | moeda }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="text-muted small mb-0">Sem vendas neste mês ainda.</p>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+
 <!-- Peças recentes -->
 <h2 class="secao-titulo mb-3"><i class="bi bi-stars"></i> Peças recentes</h2>
 {% if pecas %}
@@ -164,6 +194,31 @@
   (function () {
     const el = document.getElementById('painel-data');
     if (el) el.textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  })();
+</script>
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script>
+  (function () {
+    const cv = document.getElementById('g-30d');
+    if (!cv || typeof Chart === 'undefined') return;
+    const serie = {{ serie_30d | tojson }};
+    Chart.defaults.font.family = 'Jost, sans-serif';
+    Chart.defaults.color = '#6b5f52';
+    new Chart(cv, {
+      type: 'bar',
+      data: {
+        labels: serie.map(s => s.label),
+        datasets: [{ label: 'Faturamento', data: serie.map(s => s.receita), backgroundColor: '#b08a4f', borderRadius: 3 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+          y: { grid: { color: '#e5dcc9' }, beginAtZero: true },
+        },
+      },
+    });
   })();
 </script>
 {% endblock %}

@@ -49,6 +49,7 @@ from ..models import (
     Venda,
     VendaItem,
     db,
+    dinheiro,
 )
 
 __all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit']
@@ -282,8 +283,8 @@ def _itens_do_form():
         peca = Peca.query.get(int(pid))
         tam = (tamanhos[i] if i < len(tamanhos) else "").strip().upper()
         qtd = _to_float(qtds[i] if i < len(qtds) else 0)
-        preco = _to_float(precos[i] if i < len(precos) else 0)
-        desconto = _to_float(descontos[i] if i < len(descontos) else 0)
+        preco = dinheiro(_to_float(precos[i] if i < len(precos) else 0))
+        desconto = dinheiro(_to_float(descontos[i] if i < len(descontos) else 0))
         if not peca or tam not in TAMANHOS or qtd <= 0:
             continue
         linhas.append({"peca": peca, "tamanho": tam, "quantidade": qtd, "preco": preco, "desconto": desconto})
@@ -300,7 +301,7 @@ def _pagamentos_do_form():
     taxas = request.form.getlist("pag_taxa")
     pags = []
     for i, forma in enumerate(formas):
-        valor = _to_float(valores[i] if i < len(valores) else 0)
+        valor = dinheiro(_to_float(valores[i] if i < len(valores) else 0))
         if valor <= 0:
             continue
         pags.append({

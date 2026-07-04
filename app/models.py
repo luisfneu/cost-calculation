@@ -8,11 +8,25 @@ Domínio:
 """
 import re
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
+
+
+@event.listens_for(Engine, "connect")
+def _sqlite_pragmas(dbapi_conn, _rec):
+    """Robustez do SQLite sob o servidor web: espera locks em vez de falhar na
+    hora e usa WAL (melhor concorrência de leitura/escrita)."""
+    if dbapi_conn.__class__.__module__.startswith("sqlite3"):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA busy_timeout=5000")   # espera até 5s por um lock
+        cur.execute("PRAGMA journal_mode=WAL")     # concorrência melhor
+        cur.close()
 
 # Tamanhos padrão para o estoque das peças.
 TAMANHOS = ["PP", "P", "M", "G", "GG"]
@@ -20,6 +34,18 @@ TAMANHOS = ["PP", "P", "M", "G", "GG"]
 
 def _agora():
     return datetime.now(timezone.utc)
+
+
+def dinheiro(valor) -> float:
+    """Arredonda um valor monetário para 2 casas (meio-para-cima, exato via Decimal).
+
+    Usado em todos os cálculos de R$ para evitar acúmulo de erro de ponto flutuante
+    (ex.: somas de subtotais, comissões, parcelas fechando com 1 centavo de diferença).
+    """
+    try:
+        return float(Decimal(str(valor or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, ValueError, TypeError):
+        return 0.0
 
 
 class Insumo(db.Model):
@@ -71,6 +97,9 @@ class Peca(db.Model):
     tags = db.Column(db.String(255), default="")     # etiquetas livres, separadas por vírgula
     descricao = db.Column(db.Text, default="")
     foto = db.Column(db.String(255))  # nome do arquivo salvo em static/uploads
+    # Se True, a peça aparece na vitrine PÚBLICA (link do cliente). A vitrine
+    # interna mostra todas, independente deste campo.
+    vitrine_publica = db.Column(db.Boolean, nullable=False, default=True)
 
     # Custos além dos insumos.
     custo_mao_de_obra = db.Column(db.Float, nullable=False, default=0.0)
@@ -167,12 +196,12 @@ class Peca(db.Model):
     # ----- Cálculos -----
     @property
     def custo_insumos(self) -> float:
-        return sum(item.subtotal for item in self.insumos)
+        return dinheiro(sum(item.subtotal for item in self.insumos))
 
     @property
     def custo_total(self) -> float:
         """Custo de produção da peça."""
-        return self.custo_insumos + self.custo_mao_de_obra + self.custos_extras
+        return dinheiro(self.custo_insumos + self.custo_mao_de_obra + self.custos_extras)
 
     @property
     def preco_venda(self) -> float:
@@ -183,11 +212,11 @@ class Peca(db.Model):
         m = self.margem_percentual / 100.0
         if m >= 1:
             return 0.0
-        return self.custo_total / (1 - m)
+        return dinheiro(self.custo_total / (1 - m))
 
     @property
     def lucro(self) -> float:
-        return self.preco_venda - self.custo_total
+        return dinheiro(self.preco_venda - self.custo_total)
 
     @property
     def preco_base(self) -> float:
@@ -223,7 +252,7 @@ class PecaInsumo(db.Model):
 
     @property
     def subtotal(self) -> float:
-        return self.quantidade * self.insumo.custo_unitario
+        return dinheiro(self.quantidade * self.insumo.custo_unitario)
 
 
 class EstoquePeca(db.Model):
@@ -279,7 +308,7 @@ class Kit(db.Model):
     @property
     def preco_normal(self) -> float:
         """Soma dos preços efetivos das peças do kit (para mostrar a economia)."""
-        return sum(i.peca.preco_etiqueta_efetivo * i.quantidade for i in self.itens)
+        return dinheiro(sum(i.peca.preco_etiqueta_efetivo * i.quantidade for i in self.itens))
 
 
 class KitItem(db.Model):
@@ -437,15 +466,15 @@ class Cliente(db.Model):
     # ----- Histórico -----
     @property
     def total_compras(self) -> float:
-        return sum(v.receita for v in self.vendas)
+        return dinheiro(sum(v.receita for v in self.vendas))
 
     @property
     def total_pago(self) -> float:
-        return sum(v.receita for v in self.vendas if v.pago)
+        return dinheiro(sum(v.receita for v in self.vendas if v.pago))
 
     @property
     def total_pendente(self) -> float:
-        return sum(v.receita for v in self.vendas if not v.pago)
+        return dinheiro(sum(v.receita for v in self.vendas if not v.pago))
 
     # ----- CRM: aniversário -----
     @property
@@ -675,7 +704,7 @@ class Venda(db.Model):
     @property
     def receita_itens(self) -> float:
         """Total dos itens, já com o desconto de cada item (sem o desconto do pedido)."""
-        return sum(i.subtotal_receita for i in self.itens)
+        return dinheiro(sum(i.subtotal_receita for i in self.itens))
 
     @property
     def receita_produtos(self) -> float:
@@ -685,11 +714,11 @@ class Venda(db.Model):
 
     @property
     def subtotal_bruto(self) -> float:
-        return sum(i.subtotal_bruto for i in self.itens)
+        return dinheiro(sum(i.subtotal_bruto for i in self.itens))
 
     @property
     def desconto_itens(self) -> float:
-        return sum(i.desconto for i in self.itens)
+        return dinheiro(sum(i.desconto for i in self.itens))
 
     @property
     def desconto_geral(self) -> float:
@@ -703,28 +732,28 @@ class Venda(db.Model):
 
     @property
     def custo_producao(self) -> float:
-        return sum(i.subtotal_custo for i in self.itens)
+        return dinheiro(sum(i.subtotal_custo for i in self.itens))
 
     @property
     def comissao_marketplace(self) -> float:
-        return self.receita_itens * (self.marketplace_pct / 100.0)
+        return dinheiro(self.receita_itens * (self.marketplace_pct / 100.0))
 
     @property
     def receita(self) -> float:
         """Valor final: itens + frete (se o cliente paga) − desconto do pedido."""
-        return self.receita_itens + (0.0 if self.frete_cortesia else self.frete) - self.desconto_total
+        return dinheiro(self.receita_itens + (0.0 if self.frete_cortesia else self.frete) - self.desconto_total)
 
     # ----- Pagamentos -----
     @property
     def taxa_maquininha(self) -> float:
         """Soma das taxas de cartão/maquininha (custo da venda)."""
-        return sum(p.valor_taxa for p in self.pagamentos)
+        return dinheiro(sum(p.valor_taxa for p in self.pagamentos))
 
     @property
     def total_pago(self) -> float:
         """Soma dos pagamentos recebidos. Sem pagamentos, usa o flag legado 'pago'."""
         if self.pagamentos:
-            return sum(p.valor for p in self.pagamentos)
+            return dinheiro(sum(p.valor for p in self.pagamentos))
         return self.receita if self.pago else 0.0
 
     @property
@@ -739,11 +768,11 @@ class Venda(db.Model):
     def custo_total(self) -> float:
         """Produção + comissão + frete (só quando cortesia) + taxa de maquininha."""
         frete_custo = self.frete if self.frete_cortesia else 0.0
-        return self.custo_producao + self.comissao_marketplace + frete_custo + self.taxa_maquininha
+        return dinheiro(self.custo_producao + self.comissao_marketplace + frete_custo + self.taxa_maquininha)
 
     @property
     def lucro(self) -> float:
-        return self.receita - self.custo_total
+        return dinheiro(self.receita - self.custo_total)
 
 
 class Pagamento(db.Model):
@@ -763,7 +792,7 @@ class Pagamento(db.Model):
 
     @property
     def valor_taxa(self) -> float:
-        return self.valor * (self.taxa_pct / 100.0)
+        return dinheiro(self.valor * (self.taxa_pct / 100.0))
 
 
 class Parcela(db.Model):
@@ -811,16 +840,16 @@ class VendaItem(db.Model):
 
     @property
     def subtotal_bruto(self) -> float:
-        return self.preco_unitario * self.quantidade
+        return dinheiro(self.preco_unitario * self.quantidade)
 
     @property
     def subtotal_receita(self) -> float:
         """Subtotal do item já com o desconto do item."""
-        return self.subtotal_bruto - self.desconto
+        return dinheiro(self.subtotal_bruto - self.desconto)
 
     @property
     def subtotal_custo(self) -> float:
-        return self.custo_unitario * self.quantidade
+        return dinheiro(self.custo_unitario * self.quantidade)
 
 
 class Cupom(db.Model):
@@ -838,6 +867,7 @@ class Cupom(db.Model):
     max_usos = db.Column(db.Integer)  # None = ilimitado
     # Cupom pessoal (ex.: presente de aniversário). None = cupom geral.
     cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))
+    cliente = db.relationship("Cliente")
     criado_em = db.Column(db.DateTime, default=_agora)
 
     @property

@@ -53,7 +53,7 @@
             <form method="post" action="{{ url_for('main.toggle_usuario', usuario_id=u.id) }}" class="d-inline">
               <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if u.ativo else 'Ativar' }}</button>
             </form>
-            <form method="post" action="{{ url_for('main.excluir_usuario', usuario_id=u.id) }}" class="d-inline" onsubmit="return confirm('Excluir usuário?')">
+            <form method="post" action="{{ url_for('main.excluir_usuario', usuario_id=u.id) }}" class="d-inline" data-confirm="Excluir usuário?">
               <button class="btn btn-sm btn-outline-danger">Excluir</button>
             </form>
           </td>
