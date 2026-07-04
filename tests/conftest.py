@@ -15,8 +15,8 @@ def app():
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(db_fd)
 
-    from config import Config
     from app import create_app
+    from config import Config
 
     class TestConfig(Config):
         TESTING = True
@@ -52,7 +52,12 @@ def client(app):
 def seed(app):
     """Cria dados básicos e devolve os ids úteis."""
     from app.models import (
-        db, Insumo, Peca, PecaInsumo, EstoquePeca, Cliente,
+        Cliente,
+        EstoquePeca,
+        Insumo,
+        Peca,
+        PecaInsumo,
+        db,
     )
     ids = {}
     with app.app_context():

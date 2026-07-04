@@ -1,5 +1,4 @@
 """Rotas: sistema."""
-"""Rotas da aplicação."""
 import calendar
 import csv
 import io
@@ -8,6 +7,9 @@ import os
 import re
 import shutil
 import sqlite3
+
+# Throttling simples de login (em memória): trava após muitas falhas por IP.
+import time as _time  # noqa: E402
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
@@ -24,8 +26,11 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy import text
 from werkzeug.utils import secure_filename
 
+from .. import APP_VERSION
+from ..extensions import limiter
 from ..models import (
     TAMANHOS,
     Auditoria,
@@ -53,13 +58,8 @@ from ..models import (
     VendaItem,
     db,
 )
-
 from . import bp
 from .helpers import *  # noqa: F401,F403
-
-
-# Throttling simples de login (em memória): trava após muitas falhas por IP.
-import time as _time  # noqa: E402
 
 _LOGIN_FALHAS = {}    # ip -> [timestamps de falhas recentes]
 _LOGIN_MAX = 5        # falhas permitidas dentro da janela
@@ -81,7 +81,20 @@ def _login_ok(ip):
     _LOGIN_FALHAS.pop(ip, None)
 
 
+@bp.route("/health")
+@limiter.exempt
+def health():
+    """Liveness/readiness: 200 se o app e o banco respondem; 503 se o banco falha."""
+    try:
+        db.session.execute(text("SELECT 1"))
+    except Exception:
+        current_app.logger.exception("Health check falhou ao consultar o banco")
+        return {"status": "degraded", "banco": "erro", "version": APP_VERSION}, 503
+    return {"status": "ok", "banco": "ok", "version": APP_VERSION}, 200
+
+
 @bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("20 per minute", methods=["POST"])
 def login():
     if request.method == "POST":
         ip = request.remote_addr or "?"

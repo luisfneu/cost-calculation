@@ -54,7 +54,7 @@
           {% for peca in pecas %}
           <div class="col-6 col-md-4 col-lg-3">
             <div class="card h-100 text-center position-relative">
-              {% if peca.disponivel_total <= 0 %}<span class="vitrine-esgotado">esgotado</span>{% endif %}
+              {% if peca.disponivel_total <= 0 %}<span class="vitrine-esgotado">sob encomenda</span>{% endif %}
               {{ ui.carrossel(peca, colecao_fotos, lightbox=True) }}
               <div class="card-body">
                 <div class="vitrine-nome">{{ peca.nome }}</div>

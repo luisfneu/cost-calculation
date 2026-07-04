@@ -1,5 +1,4 @@
 """Funções auxiliares compartilhadas entre as rotas."""
-"""Rotas da aplicação."""
 import calendar
 import csv
 import io

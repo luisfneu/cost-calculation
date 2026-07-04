@@ -2,7 +2,7 @@
 
 
 def test_ordem_suficiente_conclui(client, app, seed):
-    from app.models import Peca, Insumo, OrdemProducao
+    from app.models import Insumo, OrdemProducao, Peca
     pid = seed["peca"]
     r = client.post("/producao/nova", data={
         "descricao": "Teste", "peca_id": [str(pid)], "tamanho": ["P"], "quantidade": ["3"],

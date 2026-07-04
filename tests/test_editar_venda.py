@@ -7,8 +7,9 @@ def _cria_venda(client, seed, qtd=2):
         "peca_id": [str(seed["peca"])], "tamanho": ["P"], "quantidade": [str(qtd)],
         "preco_unitario": ["200"], "desconto": ["0"],
     }, follow_redirects=True)
-    from app.models import Venda
     from flask import current_app
+
+    from app.models import Venda
     with current_app.app_context():
         return Venda.query.order_by(Venda.id.desc()).first().id
 
@@ -24,7 +25,7 @@ def test_get_edicao_usa_tela_de_venda(client, app, seed):
 
 
 def test_edicao_ajusta_estoque_e_preserva_pagamento(client, app, seed):
-    from app.models import Venda, Pagamento
+    from app.models import Pagamento, Venda
     with app.app_context():
         vid = _cria_venda(client, seed, qtd=2)   # P: 5 -> 3
         v = Venda.query.get(vid)

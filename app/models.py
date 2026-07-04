@@ -7,7 +7,7 @@ Domínio:
 - MovimentoEstoque: histórico de entradas/saídas de estoque dos insumos.
 """
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from flask_sqlalchemy import SQLAlchemy
@@ -33,7 +33,7 @@ TAMANHOS = ["PP", "P", "M", "G", "GG"]
 
 
 def _agora():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def dinheiro(valor) -> float:
@@ -526,13 +526,13 @@ class Cliente(db.Model):
 
     @property
     def dias_desde_ultima_compra(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
         u = self.ultima_compra
         if not u:
             return None
         if u.tzinfo is None:
-            u = u.replace(tzinfo=timezone.utc)
-        return (datetime.now(timezone.utc) - u).days
+            u = u.replace(tzinfo=UTC)
+        return (datetime.now(UTC) - u).days
 
     def inativo(self, dias=90) -> bool:
         """Comprou antes mas está há 'dias' ou mais sem comprar."""

@@ -9,8 +9,8 @@ import pytest
 def app_csrf():
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(db_fd)
-    from config import Config
     from app import create_app
+    from config import Config
 
     class Cfg(Config):
         TESTING = True

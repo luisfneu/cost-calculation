@@ -1,9 +1,9 @@
 """CRM: aniversário, reativação e tamanho habitual."""
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 
 def test_aniversario_hoje_e_idade(app):
-    from app.models import db, Cliente
+    from app.models import Cliente, db
     hoje = date.today()
     with app.app_context():
         c = Cliente(nome="Ana", nascimento=date(1990, hoje.month, hoje.day))
@@ -16,13 +16,13 @@ def test_aniversario_hoje_e_idade(app):
 
 
 def test_inativo_e_reativacao(app):
-    from app.models import db, Cliente, Peca, Venda, VendaItem
+    from app.models import Cliente, Peca, Venda, VendaItem, db
     with app.app_context():
         c = Cliente(nome="Caio")
         p = Peca(nome="Vestido", preco_etiqueta=100)
         db.session.add_all([c, p])
         db.session.commit()
-        v = Venda(cliente_id=c.id, criado_em=datetime.now(timezone.utc) - timedelta(days=120))
+        v = Venda(cliente_id=c.id, criado_em=datetime.now(UTC) - timedelta(days=120))
         db.session.add(v)
         db.session.flush()
         v.itens.append(VendaItem(peca_id=p.id, tamanho="M", quantidade=1, preco_unitario=100))
@@ -33,7 +33,7 @@ def test_inativo_e_reativacao(app):
 
 
 def test_tamanho_frequente_e_preferido(app):
-    from app.models import db, Cliente, Peca, Venda, VendaItem
+    from app.models import Cliente, Peca, Venda, VendaItem, db
     with app.app_context():
         c = Cliente(nome="Bia")
         p = Peca(nome="Vestido", preco_etiqueta=100)
@@ -51,7 +51,7 @@ def test_tamanho_frequente_e_preferido(app):
 
 
 def test_pagina_crm(client, app):
-    from app.models import db, Cliente
+    from app.models import Cliente, db
     hoje = date.today()
     with app.app_context():
         db.session.add(Cliente(nome="Aniversariante", telefone="11999998888",

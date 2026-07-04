@@ -57,7 +57,7 @@ def test_parcelas_em_contas_a_receber_e_pagar(client, app, seed):
     assert "Crediário — parcelas em aberto" in body
     assert f"#{vid}" in body
 
-    from app.models import Venda, Parcela
+    from app.models import Parcela, Venda
     with app.app_context():
         ids = [p.id for p in Venda.query.get(vid).parcelas]
     # paga as duas parcelas

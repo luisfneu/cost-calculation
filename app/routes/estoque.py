@@ -1,5 +1,4 @@
 """Rotas: estoque."""
-"""Rotas da aplicação."""
 import calendar
 import csv
 import io
@@ -50,7 +49,6 @@ from ..models import (
     VendaItem,
     db,
 )
-
 from . import bp
 from .helpers import *  # noqa: F401,F403
 

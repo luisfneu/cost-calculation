@@ -1,0 +1,19 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["migrations", ".venv"]
+
+[tool.ruff.lint]
+# E/F = pyflakes/pycodestyle, I = isort, UP = pyupgrade, B = bugbear.
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "E501",  # comprimento de linha (o projeto usa linhas longas em templates de texto)
+    "B008",  # chamadas em defaults de função (padrão comum em rotas Flask)
+    "E741",  # 'l' é usado consistentemente para "linha" em compreensões/laços
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Os módulos de rota reexportam helpers via `from .helpers import *` de propósito.
+"app/routes/*.py" = ["F403", "F405", "F401"]
+"app/routes/__init__.py" = ["F403", "F405", "F401", "E402"]
+"tests/*.py" = ["F401", "F811", "E702", "F841"]

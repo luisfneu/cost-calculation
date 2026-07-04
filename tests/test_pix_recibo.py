@@ -2,7 +2,7 @@
 
 
 def test_pix_payload_estrutura_e_crc():
-    from app.routes import _pix_payload, _pix_crc16
+    from app.routes import _pix_crc16, _pix_payload
     pl = _pix_payload("email@exemplo.com", "Sabrina Hansen Ção", "São Paulo",
                       valor=400.0, txid="PEDIDO1")
     assert pl.startswith("000201")
@@ -19,7 +19,7 @@ def test_pix_sem_chave_vazio():
 
 
 def _cria_venda(app, seed, paga=False):
-    from app.models import db, Venda, VendaItem, Pagamento
+    from app.models import Pagamento, Venda, VendaItem, db
     with app.app_context():
         v = Venda(cliente_id=seed["cliente"], tipo="venda")
         db.session.add(v)
@@ -63,8 +63,9 @@ def test_pix_config_no_detalhe(client, app, seed):
 
 
 def test_validar_cupom_endpoint(client, app):
-    from app.models import db, Cupom
     from datetime import date, timedelta
+
+    from app.models import Cupom, db
     with app.app_context():
         db.session.add(Cupom(codigo="VERAO10", tipo="percentual", valor=10,
                              validade=date.today() + timedelta(days=30)))
