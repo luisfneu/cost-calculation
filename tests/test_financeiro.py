@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 
 def _venda(app, seed, pago_valor=0.0, vencimento=None):
-    from app.models import db, Venda, VendaItem, Pagamento
+    from app.models import Pagamento, Venda, VendaItem, db
     with app.app_context():
         v = Venda(cliente_id=seed["cliente"], tipo="venda", vencimento=vencimento)
         db.session.add(v)
@@ -39,7 +39,7 @@ def test_vencido_destacado(client, app, seed):
 
 
 def test_fluxo_caixa_atraso_e_despesa(client, app, seed):
-    from app.models import db, Despesa
+    from app.models import Despesa, db
     ontem = date.today() - timedelta(days=1)
     _venda(app, seed, pago_valor=0.0, vencimento=ontem)  # a receber 200 em atraso
     with app.app_context():
@@ -54,7 +54,7 @@ def test_fluxo_caixa_atraso_e_despesa(client, app, seed):
 
 
 def test_fluxo_caixa_ignora_despesa_paga(client, app, seed):
-    from app.models import db, Despesa
+    from app.models import Despesa, db
     with app.app_context():
         db.session.add(Despesa(descricao="Paga", valor=999.0,
                                vencimento=date.today(), pago=True))
@@ -65,7 +65,8 @@ def test_fluxo_caixa_ignora_despesa_paga(client, app, seed):
 
 def _venda_em(app, seed, quando, preco):
     from datetime import datetime
-    from app.models import db, Venda, VendaItem, Pagamento
+
+    from app.models import Pagamento, Venda, VendaItem, db
     with app.app_context():
         v = Venda(cliente_id=seed["cliente"], tipo="venda",
                   criado_em=datetime(quando.year, quando.month, quando.day))

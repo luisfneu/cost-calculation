@@ -1,5 +1,4 @@
 """Pacote de rotas. Mantém o blueprint único 'main'."""
-"""Rotas da aplicação."""
 import calendar
 import csv
 import io
@@ -54,7 +53,7 @@ from ..models import (
 bp = Blueprint("main", __name__)
 
 # Endpoints acessíveis sem login (público / estáticos).
-_PUBLICOS = {"main.login", "main.vitrine_publica", "static"}
+_PUBLICOS = {"main.login", "main.vitrine_publica", "main.health", "static"}
 
 
 @bp.before_app_request
@@ -67,7 +66,6 @@ def _exigir_login():
 
 
 # Reexporta helpers para compatibilidade (ex.: testes usam app.routes._pix_payload).
-from .helpers import *  # noqa: E402,F401,F403
-
 # Importa os módulos de rota para registrá-los no blueprint.
-from . import sistema, catalogo, estoque, clientes, vendas, financeiro  # noqa: E402,F401
+from . import catalogo, clientes, estoque, financeiro, sistema, vendas  # noqa: E402,F401
+from .helpers import *  # noqa: E402,F401,F403

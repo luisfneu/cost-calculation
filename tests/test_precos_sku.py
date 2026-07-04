@@ -2,7 +2,7 @@
 
 
 def test_preco_efetivo_promocao(app):
-    from app.models import db, Peca
+    from app.models import Peca, db
     with app.app_context():
         p = Peca(nome="Blusa", preco_etiqueta=120.0, preco_promocional=89.9)
         db.session.add(p)
@@ -13,7 +13,7 @@ def test_preco_efetivo_promocao(app):
 
 
 def test_preco_sem_promocao(app):
-    from app.models import db, Peca
+    from app.models import Peca, db
     with app.app_context():
         p = Peca(nome="Saia", preco_etiqueta=70.0)
         db.session.add(p)
@@ -23,7 +23,7 @@ def test_preco_sem_promocao(app):
 
 
 def test_vitrine_mostra_de_por(client, app):
-    from app.models import db, Peca
+    from app.models import Peca, db
     with app.app_context():
         db.session.add(Peca(nome="Vestido", preco_etiqueta=120.0, preco_promocional=89.9))
         db.session.commit()

@@ -1,5 +1,4 @@
 """Rotas: catalogo."""
-"""Rotas da aplicação."""
 import calendar
 import csv
 import io
@@ -24,6 +23,7 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+from ..extensions import cache, limiter
 from ..models import (
     TAMANHOS,
     Auditoria,
@@ -52,7 +52,6 @@ from ..models import (
     db,
     dinheiro,
 )
-
 from . import bp
 from .helpers import *  # noqa: F401,F403
 
@@ -243,7 +242,7 @@ def form_peca(peca_id=None):
             ids = request.form.getlist("insumo_id")
             qtds = request.form.getlist("quantidade_insumo")
             vistos = set()
-            for iid, q in zip(ids, qtds):
+            for iid, q in zip(ids, qtds, strict=False):
                 if not iid:
                     continue
                 qtd = _to_float(q)
@@ -547,6 +546,8 @@ def etiqueta_peca(peca_id):
 
 
 @bp.route("/publico/vitrine")
+@limiter.limit("60 per minute")
+@cache.cached(timeout=60, query_string=True)
 def vitrine_publica():
     q = request.args.get("q", "").strip().lower()
     tipo = request.args.get("tipo", "").strip()

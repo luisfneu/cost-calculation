@@ -2,7 +2,7 @@
 aniversário, filtro por tipo, URL da vitrine, página de erro, throttling de
 login e uploader de fotos da peça."""
 import io
-from datetime import date
+from datetime import UTC, date
 
 import pytest
 
@@ -19,7 +19,8 @@ def test_dinheiro_arredonda_meio_para_cima():
 
 
 def test_venda_receita_arredondada(app, db, seed):
-    from app.models import db as _db, Venda, VendaItem
+    from app.models import Venda, VendaItem
+    from app.models import db as _db
     with app.app_context():
         v = Venda(tipo="venda")
         _db.session.add(v)
@@ -52,7 +53,7 @@ def test_telefone_formatado(bruto, esperado):
 # Cupom de aniversário
 # ----------------------------------------------------------------------------
 def test_cupom_aniversario(client, app):
-    from app.models import db, Cliente, Cupom
+    from app.models import Cliente, Cupom, db
     hoje = date.today()
     with app.app_context():
         c = Cliente(nome="Aniversariante", telefone="51999998888",
@@ -76,7 +77,7 @@ def test_cupom_aniversario(client, app):
 
 
 def test_crm_mensagem_tem_vitrine_e_quebras(client, app):
-    from app.models import db, Cliente
+    from app.models import Cliente, db
     hoje = date.today()
     with app.app_context():
         db.session.add(Cliente(nome="Bday", telefone="5551999990000",
@@ -92,7 +93,7 @@ def test_crm_mensagem_tem_vitrine_e_quebras(client, app):
 # Filtro por tipo de peça
 # ----------------------------------------------------------------------------
 def test_filtro_por_tipo(client, app):
-    from app.models import db, Peca
+    from app.models import Peca, db
     with app.app_context():
         db.session.add(Peca(nome="Vestido A", tipo="Vestido", preco_etiqueta=100, sku="SH-A"))
         db.session.add(Peca(nome="Blusa B", tipo="Blusa", preco_etiqueta=80, sku="SH-B"))
@@ -105,7 +106,7 @@ def test_filtro_por_tipo(client, app):
 # URL pública da vitrine (config) usada no CRM
 # ----------------------------------------------------------------------------
 def test_url_vitrine_configuravel(client, app):
-    from app.models import db, Cliente, Parametro
+    from app.models import Cliente, Parametro, db
     hoje = date.today()
     with app.app_context():
         Parametro.definir("vitrine_url", "https://minhaloja.com.br/vitrine")
@@ -154,7 +155,7 @@ def _png(cor):
 
 
 def test_uploader_fotos_principal(client, app, tmp_path):
-    from app.models import db, Peca
+    from app.models import Peca, db
     with app.app_context():
         app.config["UPLOAD_FOLDER"] = str(tmp_path)
         data = {
@@ -173,7 +174,7 @@ def test_uploader_fotos_principal(client, app, tmp_path):
 
 def test_toggle_vitrine_publica(client, app):
     """Peça com vitrine_publica=False some da vitrine pública, mas fica na interna."""
-    from app.models import db, Peca
+    from app.models import Peca, db
     with app.app_context():
         db.session.add(Peca(nome="Publica On", vitrine_publica=True, preco_etiqueta=100, sku="SH-ON"))
         db.session.add(Peca(nome="Publica Off", vitrine_publica=False, preco_etiqueta=100, sku="SH-OFF"))
@@ -189,14 +190,15 @@ def test_toggle_vitrine_publica(client, app):
 # ----------------------------------------------------------------------------
 def test_fuso_horario_dt(app):
     from datetime import datetime, timezone
-    from app.models import db, Parametro
+
+    from app.models import Parametro, db
     with app.app_context():
         Parametro.definir("fuso", "America/Sao_Paulo")
         db.session.commit()
     with app.test_request_context():
         dt = app.jinja_env.filters["dt"]
         # 12:00 UTC -> 09:00 em São Paulo (UTC-3)
-        assert dt(datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)) == "01/01/2026 09:00"
+        assert dt(datetime(2026, 1, 1, 12, 0, tzinfo=UTC)) == "01/01/2026 09:00"
 
 
 # ----------------------------------------------------------------------------
@@ -225,7 +227,7 @@ def test_despesa_valor_arredondado(client, app):
 # Cupom pessoal restrito ao cliente dono
 # ----------------------------------------------------------------------------
 def test_cupom_pessoal_restrito(client, app):
-    from app.models import db, Cliente, Cupom
+    from app.models import Cliente, Cupom, db
     with app.app_context():
         a = Cliente(nome="Dona A"); b = Cliente(nome="Outro B")
         db.session.add_all([a, b]); db.session.commit()

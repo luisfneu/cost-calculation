@@ -1,0 +1,3 @@
+# Dependências de desenvolvimento/CI (instale com: pip install -r requirements-dev.txt)
+-r requirements.txt
+ruff>=0.6

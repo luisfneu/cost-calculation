@@ -1,6 +1,8 @@
 """Application factory."""
+import logging
 import os
-from datetime import timezone as _timezone
+from datetime import UTC
+from logging.handlers import RotatingFileHandler
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, g, render_template
@@ -10,7 +12,12 @@ from flask_wtf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
+
+from .extensions import cache, limiter
 from .models import Parametro, db
+
+# Versão exibida em /health (útil para saber o que está no ar). Suba a cada release.
+APP_VERSION = "1.1.0"
 
 FUSO_PADRAO = "America/Sao_Paulo"
 
@@ -45,6 +52,21 @@ def create_app(config_class=Config):
 
     # Segredos fracos: avisa sempre; e em produção (PRODUCAO=1) recusa subir.
     _checar_segredos(app)
+
+    # Cache da vitrine pública: em memória do processo (NullCache em testes,
+    # para não vazar dados entre requisições/casos).
+    app.config.setdefault("CACHE_TYPE", "NullCache" if app.testing else "SimpleCache")
+    app.config.setdefault("CACHE_DEFAULT_TIMEOUT", 60)
+    cache.init_app(app)
+
+    # Rate-limit nos endpoints públicos (desligado em testes).
+    app.config.setdefault("RATELIMIT_ENABLED", not app.testing)
+    app.config.setdefault("RATELIMIT_HEADERS_ENABLED", True)
+    limiter.init_app(app)
+
+    # Log em arquivo rotativo (além do stdout do Gunicorn). Desligado em testes.
+    if not app.testing:
+        _configurar_logging(app)
 
     # Cache-busting: adiciona ?v=<mtime> nas URLs de estáticos (css/js/logo).
     # Quando o arquivo muda, a URL muda e o navegador baixa a versão nova sozinho
@@ -92,7 +114,7 @@ def create_app(config_class=Config):
         """
         try:
             if valor.tzinfo is None:            # naïve = UTC (como é gravado)
-                valor = valor.replace(tzinfo=_timezone.utc)
+                valor = valor.replace(tzinfo=UTC)
             return valor.astimezone(_fuso_atual()).strftime("%d/%m/%Y %H:%M")
         except (TypeError, ValueError, AttributeError):
             return ""
@@ -160,19 +182,41 @@ def _checar_segredos(app):
     app.logger.warning("⚠️  %s com valor padrão/fraco — troque no .env antes de expor.", lista)
 
 
-def _inicializar_banco(app):
-    """Prepara o schema no boot.
+def _configurar_logging(app):
+    """Adiciona um handler de arquivo rotativo (além do stdout do servidor).
 
-    O Alembic é a fonte de verdade do schema (aplica `upgrade`). Se o diretório
-    de migrações não existir (ou o Alembic falhar), o fallback é apenas
-    `db.create_all()` — cria as tabelas que faltarem a partir dos modelos.
+    Pasta configurável por LOG_DIR (padrão instance/logs). Mantém 5 arquivos de
+    até ~1 MB, evitando que o log cresça sem limite.
     """
-    tem_migracoes = os.path.isdir(os.path.join(_MIGRATIONS_DIR, "versions"))
-    if tem_migracoes and app.config.get("USE_ALEMBIC", True):
-        try:
-            _alembic_upgrade(directory=_MIGRATIONS_DIR)
-            return
-        except Exception as exc:  # pragma: no cover - salvaguarda de boot
-            app.logger.warning("Alembic upgrade falhou (%s); usando create_all().", exc)
+    log_dir = os.environ.get("LOG_DIR", os.path.join(app.instance_path, "logs"))
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except OSError as exc:  # pragma: no cover - ambiente sem permissão de escrita
+        app.logger.warning("Não foi possível criar a pasta de logs (%s).", exc)
+        return
+    handler = RotatingFileHandler(
+        os.path.join(log_dir, "app.log"),
+        maxBytes=1_000_000, backupCount=5, encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s [%(name)s] %(message)s"))
+    nivel = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    handler.setLevel(nivel)
+    app.logger.addHandler(handler)
+    app.logger.setLevel(nivel)
 
-    db.create_all()
+
+def _inicializar_banco(app):
+    """Aplica as migrações do Alembic no boot.
+
+    O Alembic é a única fonte de verdade do schema — não há fallback para
+    `db.create_all()` (mascararia divergências de migração). Se as migrações
+    não existirem, é erro de configuração e a aplicação não deve subir.
+    """
+    versions = os.path.join(_MIGRATIONS_DIR, "versions")
+    if not os.path.isdir(versions):
+        raise RuntimeError(
+            "Migrações do Alembic ausentes (migrations/versions). "
+            "O schema é definido pelo Alembic; rode as migrações antes de subir."
+        )
+    _alembic_upgrade(directory=_MIGRATIONS_DIR)
