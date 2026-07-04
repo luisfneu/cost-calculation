@@ -6,9 +6,11 @@ import io
 import math
 import os
 import re
+import shutil
+import sqlite3
 import unicodedata
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -56,9 +58,38 @@ from . import bp
 from .helpers import *  # noqa: F401,F403
 
 
+# Throttling simples de login (em memória): trava após muitas falhas por IP.
+import time as _time  # noqa: E402
+
+_LOGIN_FALHAS = {}    # ip -> [timestamps de falhas recentes]
+_LOGIN_MAX = 5        # falhas permitidas dentro da janela
+_LOGIN_JANELA = 300   # segundos (5 min)
+
+
+def _login_bloqueado(ip):
+    agora = _time.time()
+    falhas = [t for t in _LOGIN_FALHAS.get(ip, []) if agora - t < _LOGIN_JANELA]
+    _LOGIN_FALHAS[ip] = falhas
+    return len(falhas) >= _LOGIN_MAX
+
+
+def _login_falhou(ip):
+    _LOGIN_FALHAS.setdefault(ip, []).append(_time.time())
+
+
+def _login_ok(ip):
+    _LOGIN_FALHAS.pop(ip, None)
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        ip = request.remote_addr or "?"
+        if _login_bloqueado(ip):
+            _log("login_bloqueado", ip)
+            flash("Muitas tentativas de login. Aguarde alguns minutos e tente de novo.", "erro")
+            return render_template("login.html"), 429
+
         login_txt = request.form.get("login", "").strip()
         senha = request.form.get("senha", "")
         destino = request.args.get("next") or url_for("main.index")
@@ -67,22 +98,26 @@ def login():
         if login_txt:
             u = Usuario.query.filter(db.func.lower(Usuario.login) == login_txt.lower()).first()
             if u and u.ativo and u.conferir_senha(senha):
+                _login_ok(ip)
                 session["logado"] = True
                 session["usuario"] = u.nome
                 session["admin"] = u.admin
                 _log("login", f"usuário {u.login}")
                 return redirect(destino)
+            _login_falhou(ip)
             flash("Login ou senha inválidos.", "erro")
             return render_template("login.html")
 
         # 2) Senha-mestre (acesso admin de emergência).
         if senha == current_app.config["APP_SENHA"]:
+            _login_ok(ip)
             session["logado"] = True
             session["usuario"] = "Admin"
             session["admin"] = True
             _log("login", "senha-mestre")
             return redirect(destino)
 
+        _login_falhou(ip)
         flash("Login ou senha inválidos.", "erro")
     return render_template("login.html")
 
@@ -111,9 +146,29 @@ def index():
     }
     # Meta do mês.
     mes_atual = date.today().strftime("%Y-%m")
-    receita_mes = sum(v.receita for v in vendas if _mes_de(v.criado_em) == mes_atual)
+    vendas_mes = [v for v in vendas if _mes_de(v.criado_em) == mes_atual]
+    receita_mes = sum(v.receita for v in vendas_mes)
     meta = _to_float(Parametro.obter("meta_mensal", "0"))
     meta_pct = (receita_mes / meta * 100) if meta else 0
+
+    # Série de faturamento dos últimos 30 dias (para o mini-gráfico).
+    hoje = date.today()
+    dias = [hoje - timedelta(days=i) for i in range(29, -1, -1)]
+    receita_por_dia = {d: 0.0 for d in dias}
+    for v in vendas:
+        d = v.criado_em.date() if v.criado_em else None
+        if d in receita_por_dia:
+            receita_por_dia[d] += v.receita
+    serie_30d = [{"label": d.strftime("%d/%m"), "receita": round(receita_por_dia[d], 2)} for d in dias]
+
+    # Top clientes do mês (por receita).
+    por_cliente = {}
+    for v in vendas_mes:
+        nome = v.cliente.nome if v.cliente else (v.cliente_nome or "Sem cliente")
+        por_cliente[nome] = por_cliente.get(nome, 0.0) + v.receita
+    top_clientes = sorted(por_cliente.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    ticket_medio = (receita_mes / len(vendas_mes)) if vendas_mes else 0.0
 
     # Lembretes extras: aniversariantes do mês e parcelas de crediário a receber.
     clientes = Cliente.query.all()
@@ -136,6 +191,7 @@ def index():
         totais_venda=totais_venda, n_clientes=len(clientes),
         meta=meta, receita_mes=receita_mes, meta_pct=meta_pct,
         colecao_fotos=colecao_fotos,
+        serie_30d=serie_30d, top_clientes=top_clientes, ticket_medio=ticket_medio,
     )
 
 
@@ -149,6 +205,10 @@ def configuracoes():
         # WhatsApp para pedidos na vitrine pública (só dígitos, com DDI/DDD).
         whats = re.sub(r"\D", "", request.form.get("whatsapp", ""))
         Parametro.definir("whatsapp", whats)
+        # URL pública fixa da vitrine (para os links enviados por WhatsApp).
+        Parametro.definir("vitrine_url", request.form.get("vitrine_url", "").strip())
+        # Fuso horário para exibição das datas/horas.
+        Parametro.definir("fuso", request.form.get("fuso", "America/Sao_Paulo").strip())
         db.session.commit()
         flash("Configurações salvas.", "sucesso")
         return redirect(url_for("main.configuracoes"))
@@ -164,8 +224,15 @@ def configuracoes():
         "pix_cidade": Parametro.obter("pix_cidade", ""),
         "meta_mensal": Parametro.obter("meta_mensal", "0"),
         "whatsapp": Parametro.obter("whatsapp", ""),
+        "vitrine_url": Parametro.obter("vitrine_url", ""),
+        "fuso": Parametro.obter("fuso", "America/Sao_Paulo"),
     }
-    return render_template("configuracoes.html", cfg=cfg, pix_previa=previa)
+    fusos = [
+        "America/Sao_Paulo", "America/Bahia", "America/Fortaleza", "America/Recife",
+        "America/Belem", "America/Manaus", "America/Cuiaba", "America/Campo_Grande",
+        "America/Porto_Velho", "America/Rio_Branco", "America/Noronha",
+    ]
+    return render_template("configuracoes.html", cfg=cfg, pix_previa=previa, fusos=fusos)
 
 
 @bp.route("/usuarios")
@@ -271,11 +338,127 @@ def auditoria():
     )
 
 
+def _caminho_banco():
+    """Caminho do arquivo SQLite em uso (derivado do engine, não fixo)."""
+    caminho = db.engine.url.database
+    if caminho and not os.path.isabs(caminho):
+        caminho = os.path.join(current_app.root_path, "..", caminho)
+    return os.path.abspath(caminho) if caminho else ""
+
+
 @bp.route("/backup")
 def backup():
-    caminho = os.path.join(current_app.instance_path, "costcalc.db")
-    if not os.path.exists(caminho):
+    caminho = _caminho_banco()
+    if not caminho or not os.path.exists(caminho):
         flash("Banco de dados não encontrado.", "erro")
         return redirect(url_for("main.index"))
+    # Snapshot íntegro: a API .backup do SQLite inclui dados ainda no WAL
+    # (o arquivo .db cru pode estar desatualizado com journal_mode=WAL).
+    tmp = os.path.join(os.path.dirname(caminho), f"_backup_tmp_{os.getpid()}.db")
+    origem = sqlite3.connect(caminho)
+    dest = sqlite3.connect(tmp)
+    try:
+        with dest:
+            origem.backup(dest)
+    finally:
+        origem.close()
+        dest.close()
     nome = f"costcalc-backup-{date.today().isoformat()}.db"
-    return send_file(caminho, as_attachment=True, download_name=nome)
+    resp = send_file(tmp, as_attachment=True, download_name=nome)
+    resp.call_on_close(lambda: os.path.exists(tmp) and os.remove(tmp))
+    return resp
+
+
+# Tabelas que um backup íntegro do sistema precisa ter (sanidade do arquivo).
+_TABELAS_OBRIGATORIAS = {"pecas", "vendas", "clientes", "usuarios", "parametros"}
+
+
+def _validar_backup_sqlite(caminho):
+    """Confere se o arquivo é um banco SQLite íntegro e do sistema.
+    Retorna (ok, mensagem_de_erro)."""
+    try:
+        with open(caminho, "rb") as f:
+            if f.read(16) != b"SQLite format 3\x00":
+                return False, "o arquivo não é um banco SQLite."
+    except OSError:
+        return False, "não foi possível ler o arquivo."
+    con = None
+    try:
+        con = sqlite3.connect(caminho)
+        r = con.execute("PRAGMA integrity_check").fetchone()
+        if not r or r[0] != "ok":
+            return False, "o banco está corrompido (integrity_check)."
+        tabelas = {row[0] for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if _TABELAS_OBRIGATORIAS - tabelas:
+            return False, "a estrutura não parece ser deste sistema."
+    except sqlite3.DatabaseError as exc:
+        return False, f"erro ao abrir o banco ({exc})."
+    finally:
+        if con is not None:
+            con.close()
+    return True, ""
+
+
+@bp.route("/backup/restaurar", methods=["POST"])
+def restaurar_backup():
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+
+    # Bancos podem passar dos 8 MB (limite global de upload de imagens);
+    # eleva o teto só nesta requisição, antes de tocar em request.files.
+    request.max_content_length = 500 * 1024 * 1024
+
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        flash("Selecione um arquivo de backup (.db) para restaurar.", "erro")
+        return redirect(url_for("main.configuracoes"))
+
+    destino = _caminho_banco()
+    if not destino:
+        flash("Não foi possível localizar o banco atual.", "erro")
+        return redirect(url_for("main.configuracoes"))
+    pasta = os.path.dirname(destino)
+    os.makedirs(pasta, exist_ok=True)
+    tmp = os.path.join(pasta, "_restore_tmp.db")
+    arquivo.save(tmp)
+
+    ok, msg = _validar_backup_sqlite(tmp)
+    if not ok:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        flash(f"Backup não restaurado: {msg}", "erro")
+        return redirect(url_for("main.configuracoes"))
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    # Salvaguarda: guarda o banco atual antes de substituir (permite desfazer).
+    if os.path.exists(destino):
+        try:
+            shutil.copy2(destino, f"{destino}.pre-restore-{stamp}")
+        except OSError as exc:
+            os.remove(tmp)
+            flash(f"Não foi possível salvar o banco atual antes de restaurar ({exc}).", "erro")
+            return redirect(url_for("main.configuracoes"))
+
+    # Registra a auditoria ANTES de fechar as conexões (ainda no banco atual).
+    _log("restaurar-backup", f"arquivo={secure_filename(arquivo.filename)}")
+
+    # Fecha todas as conexões do pool e remove sidecar do WAL para trocar o arquivo.
+    db.session.remove()
+    db.engine.dispose()
+    for ext in ("-wal", "-shm"):
+        lado = destino + ext
+        if os.path.exists(lado):
+            try:
+                os.remove(lado)
+            except OSError:
+                pass
+
+    os.replace(tmp, destino)  # substituição atômica no mesmo diretório
+    flash("Backup restaurado com sucesso. Confira se os dados estão corretos. "
+          "Observação: as fotos (uploads) não são alteradas por esta restauração.", "sucesso")
+    return redirect(url_for("main.index"))

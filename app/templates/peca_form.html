@@ -46,6 +46,13 @@
       });
     })();
   </script>
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch" name="vitrine_publica" id="vitrine_publica"
+           {{ 'checked' if not peca or peca.vitrine_publica }}>
+    <label class="form-check-label" for="vitrine_publica">
+      <i class="bi bi-shop"></i> Mostrar na <b>vitrine pública</b>
+    </label>
+  </div>
   <div class="mb-3">
     <label class="form-label">Tags</label>
     <div class="tags-input form-control" id="tags-box">

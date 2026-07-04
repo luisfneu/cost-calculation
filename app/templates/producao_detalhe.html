@@ -92,14 +92,14 @@
     <div class="card bg-white mt-3">
       <div class="card-body d-flex flex-wrap gap-2 align-items-center">
         <form method="post" action="{{ url_for('main.concluir_ordem', ordem_id=ordem.id) }}"
-              onsubmit="return confirm('Concluir a ordem? Isso baixa os insumos e dá entrada no estoque das peças.')">
+              data-confirm="Concluir a ordem? Isso baixa os insumos e dá entrada no estoque das peças.">
           <button class="btn btn-success" {{ 'disabled' if not ordem.insumos_suficientes }}>
             <i class="bi bi-check2-circle"></i> Concluir (produzir tudo)
           </button>
         </form>
         {% if not ordem.insumos_suficientes %}<span class="small text-muted">Compre os insumos faltantes antes de concluir.</span>{% endif %}
         <form method="post" action="{{ url_for('main.excluir_ordem', ordem_id=ordem.id) }}" class="ms-auto"
-              onsubmit="return confirm('Excluir esta ordem?')">
+              data-confirm="Excluir esta ordem?">
           <button class="btn btn-outline-danger">Excluir</button>
         </form>
       </div>

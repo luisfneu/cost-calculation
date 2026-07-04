@@ -52,7 +52,7 @@
             <form method="post" action="{{ url_for('main.toggle_kit', kit_id=k.id) }}" class="d-inline">
               <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if k.ativo else 'Ativar' }}</button>
             </form>
-            <form method="post" action="{{ url_for('main.excluir_kit', kit_id=k.id) }}" class="d-inline" onsubmit="return confirm('Excluir kit?')">
+            <form method="post" action="{{ url_for('main.excluir_kit', kit_id=k.id) }}" class="d-inline" data-confirm="Excluir kit?">
               <button class="btn btn-sm btn-outline-danger">Excluir</button>
             </form>
           </td>

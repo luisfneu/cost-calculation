@@ -26,7 +26,7 @@
   {% for p in pecas %}
     <tr>
       <td>
-        {% if p.foto %}<img src="{{ url_for('static', filename='uploads/' ~ p.foto) }}" class="foto-thumb" alt="">
+        {% if p.foto %}<img src="{{ url_for('static', filename='uploads/' ~ p.foto) }}" class="foto-thumb" alt="" loading="lazy">
         {% else %}<div class="foto-thumb sem-foto">—</div>{% endif %}
       </td>
       <td><strong>{{ p.nome }}</strong></td>

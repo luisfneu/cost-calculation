@@ -21,10 +21,31 @@
 </head>
 <body>
   <div class="topo">
-    <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:300px; max-width:80%;">
+    <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:300px; max-width:80%;" loading="lazy">
     <div style="color:#fff; letter-spacing:4px; font-size:.7rem; text-transform:uppercase; margin-top:4px">Vitrine</div>
   </div>
   <div class="container pb-5">
+    <form method="get" class="row g-2 mb-4 justify-content-center">
+      <div class="col-6 col-md-3">
+        <input type="text" name="q" class="form-control form-control-sm" placeholder="buscar peça…" value="{{ q }}">
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="tipo" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Todos os tipos</option>
+          {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if tipo == t }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="ordem" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Ordenar por…</option>
+          <option value="nome" {{ 'selected' if ordem == 'nome' }}>Nome</option>
+          <option value="preco_asc" {{ 'selected' if ordem == 'preco_asc' }}>Menor preço</option>
+          <option value="preco_desc" {{ 'selected' if ordem == 'preco_desc' }}>Maior preço</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-1 d-grid"><button class="btn btn-sm btn-light">Buscar</button></div>
+      {% if q or tipo or ordem %}<div class="col-auto"><a href="{{ url_for('main.vitrine_publica') }}" class="btn btn-sm btn-link text-white">limpar</a></div>{% endif %}
+    </form>
     {% set total = grupos.values() | map('length') | sum %}
     {% if total %}
       {% for colecao, pecas in grupos.items() %}
@@ -32,7 +53,8 @@
         <div class="row g-4 mb-4">
           {% for peca in pecas %}
           <div class="col-6 col-md-4 col-lg-3">
-            <div class="card h-100 text-center">
+            <div class="card h-100 text-center position-relative">
+              {% if peca.disponivel_total <= 0 %}<span class="vitrine-esgotado">esgotado</span>{% endif %}
               {{ ui.carrossel(peca, colecao_fotos, lightbox=True) }}
               <div class="card-body">
                 <div class="vitrine-nome">{{ peca.nome }}</div>

@@ -2,7 +2,7 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
-    <h1 class="h3 mb-1">{{ peca.nome }}{% if peca.colecao %} <span class="badge text-bg-light align-middle">{{ peca.colecao }}</span>{% endif %}</h1>
+    <h1 class="h3 mb-1">{{ peca.nome }}{% if peca.colecao %} <span class="badge text-bg-light align-middle">{{ peca.colecao }}</span>{% endif %}{% if not peca.vitrine_publica %} <span class="badge text-bg-secondary align-middle" title="Não aparece na vitrine pública"><i class="bi bi-eye-slash"></i> oculta na vitrine</span>{% endif %}</h1>
     {% if peca.tags_lista %}
       <div class="mb-1">{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>
     {% endif %}
@@ -15,7 +15,7 @@
     </form>
     <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
     <form method="post" action="{{ url_for('main.excluir_peca', peca_id=peca.id) }}" class="d-inline"
-          onsubmit="return confirm('Excluir esta peça?')">
+          data-confirm="Excluir esta peça?">
       <button class="btn btn-sm btn-outline-danger">Excluir</button>
     </form>
   </div>
@@ -35,8 +35,8 @@
       {% for f in peca.fotos %}
       <div class="position-relative">
         <img src="{{ url_for('static', filename='uploads/' ~ f.arquivo) }}" class="foto-thumb-vert" alt="">
-        <form method="post" action="{{ url_for('main.excluir_foto_peca', foto_id=f.id) }}" class="position-absolute top-0 end-0">
-          <button class="btn btn-sm btn-danger py-0 px-1" title="Remover foto" onsubmit="return confirm('Remover foto?')">×</button>
+        <form method="post" action="{{ url_for('main.excluir_foto_peca', foto_id=f.id) }}" class="position-absolute top-0 end-0" data-confirm="Remover foto?">
+          <button class="btn btn-sm btn-danger py-0 px-1" title="Remover foto">×</button>
         </form>
       </div>
       {% endfor %}

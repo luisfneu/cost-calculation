@@ -276,7 +276,7 @@
   btn.addEventListener('click', async function () {
     const box = document.getElementById('frete-resultado');
     const sel = document.getElementById('sel-cliente');
-    box.innerHTML = 'calculando…';
+    box.innerHTML = '<span class="spinner-border spinner-border-sm text-secondary"></span> <span class="text-muted small">calculando frete…</span>';
     const fd = new FormData();
     fd.append('cep', (window.__CEP_CLIENTE && window.__CEP_CLIENTE[sel.value]) || '');
 
@@ -573,6 +573,8 @@
     cupomMsg.innerHTML = '<span class="text-muted">validando…</span>';
     try {
       const fd = new FormData(); fd.append('codigo', cod);
+      const selCli = document.getElementById('sel-cliente');
+      if (selCli) fd.append('cliente_id', selCli.value || '');
       const resp = await fetch("{{ url_for('main.validar_cupom') }}", { method: 'POST', body: fd });
       const d = await resp.json();
       if (d.ok) {
@@ -592,6 +594,9 @@
     btnCupom.addEventListener('click', aplicarCupom);
     inCupom.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); aplicarCupom(); } });
     inCupom.addEventListener('input', () => { window.__CUPOM = null; cupomMsg.innerHTML = ''; });
+    // Trocar o cliente revalida o cupom (cupom pessoal só vale para o dono).
+    const selCli2 = document.getElementById('sel-cliente');
+    if (selCli2) selCli2.addEventListener('change', () => { if (inCupom.value.trim()) aplicarCupom(); });
     if (inCupom.value.trim()) aplicarCupom();  // prefill
   }
   document.addEventListener('click', function (e) {

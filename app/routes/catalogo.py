@@ -50,6 +50,7 @@ from ..models import (
     Venda,
     VendaItem,
     db,
+    dinheiro,
 )
 
 from . import bp
@@ -109,7 +110,7 @@ def form_insumo(insumo_id=None):
         tipo = request.form.get("tipo", "materia_prima")
         insumo.tipo = tipo if tipo in ("materia_prima", "embalagem") else "materia_prima"
         insumo.unidade = request.form.get("unidade", "un").strip() or "un"
-        insumo.custo_unitario = _to_float(request.form.get("custo_unitario"))
+        insumo.custo_unitario = dinheiro(_to_float(request.form.get("custo_unitario")))
         insumo.estoque_minimo = _to_float(request.form.get("estoque_minimo"))
         insumo.ativo = request.form.get("ativo") == "on"
         insumo.fornecedor = request.form.get("fornecedor", "").strip()
@@ -193,13 +194,26 @@ def movimentos_insumo(insumo_id):
 @bp.route("/pecas")
 def listar_pecas():
     q = request.args.get("q", "").strip()
+    tipo = request.args.get("tipo", "").strip()
+    vitrine = request.args.get("vitrine", "").strip()  # "", "sim" (públicas), "nao" (ocultas)
     query = Peca.query
     if q:
         like = f"%{q}%"
         query = query.filter(db.or_(Peca.nome.ilike(like), Peca.colecao.ilike(like), Peca.tags.ilike(like)))
+    if tipo:
+        query = query.filter(Peca.tipo == tipo)
+    if vitrine == "sim":
+        query = query.filter(Peca.vitrine_publica.is_(True))
+    elif vitrine == "nao":
+        query = query.filter(Peca.vitrine_publica.is_(False))
     pecas = query.order_by(Peca.criado_em.desc()).all()
     pecas, pagina, total_paginas = _paginar(pecas)
-    return render_template("pecas.html", pecas=pecas, q=q, pagina=pagina, total_paginas=total_paginas)
+    # Tipos já cadastrados (para o filtro).
+    tipos = [r[0] for r in db.session.query(Peca.tipo)
+             .filter(Peca.tipo.isnot(None), Peca.tipo != "")
+             .distinct().order_by(Peca.tipo).all()]
+    return render_template("pecas.html", pecas=pecas, q=q, tipo=tipo, tipos=tipos,
+                           vitrine=vitrine, pagina=pagina, total_paginas=total_paginas)
 
 
 @bp.route("/pecas/nova", methods=["GET", "POST"])
@@ -252,15 +266,16 @@ def form_peca(peca_id=None):
             return _to_float(request.form.get(campo)) if campo in request.form else atual
 
         peca.nome = nome
+        peca.vitrine_publica = request.form.get("vitrine_publica") == "on"
         peca.tipo = _txt("tipo", peca.tipo)
         peca.colecao = _txt("colecao", peca.colecao)
         peca.tags = _txt("tags", peca.tags)
         peca.descricao = _txt("descricao", peca.descricao)
-        peca.custo_mao_de_obra = _num("custo_mao_de_obra", peca.custo_mao_de_obra)
-        peca.custos_extras = _num("custos_extras", peca.custos_extras)
+        peca.custo_mao_de_obra = dinheiro(_num("custo_mao_de_obra", peca.custo_mao_de_obra))
+        peca.custos_extras = dinheiro(_num("custos_extras", peca.custos_extras))
         peca.margem_percentual = _num("margem_percentual", peca.margem_percentual)
-        peca.preco_etiqueta = _num("preco_etiqueta", peca.preco_etiqueta)
-        peca.preco_promocional = _num("preco_promocional", peca.preco_promocional)
+        peca.preco_etiqueta = dinheiro(_num("preco_etiqueta", peca.preco_etiqueta))
+        peca.preco_promocional = dinheiro(_num("preco_promocional", peca.preco_promocional))
         peca.peso_g = _num("peso_g", peca.peso_g)
         peca.altura_cm = _num("altura_cm", peca.altura_cm)
         peca.largura_cm = _num("largura_cm", peca.largura_cm)
@@ -533,14 +548,38 @@ def etiqueta_peca(peca_id):
 
 @bp.route("/publico/vitrine")
 def vitrine_publica():
-    pecas = Peca.query.order_by(Peca.colecao, Peca.nome).all()
+    q = request.args.get("q", "").strip().lower()
+    tipo = request.args.get("tipo", "").strip()
+    ordem = request.args.get("ordem", "").strip()  # preco_asc | preco_desc | nome
+
+    # Só as peças marcadas para a vitrine pública.
+    pecas = Peca.query.filter_by(vitrine_publica=True).all()
+    if q:
+        pecas = [p for p in pecas
+                 if q in p.nome.lower() or q in (p.colecao or "").lower() or q in (p.tags or "").lower()]
+    if tipo:
+        pecas = [p for p in pecas if p.tipo == tipo]
+
+    # Ordenação (aplicada dentro de cada coleção).
+    chaves = {
+        "preco_asc": lambda p: p.preco_etiqueta_efetivo,
+        "preco_desc": lambda p: -p.preco_etiqueta_efetivo,
+        "nome": lambda p: p.nome.lower(),
+    }
+    chave = chaves.get(ordem, lambda p: p.nome.lower())
+    pecas.sort(key=lambda p: ((p.colecao or "").lower(), chave(p)))
+
     grupos = {}
     for p in pecas:
         grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
+
+    # Tipos disponíveis (só das peças públicas) para o filtro.
+    tipos = sorted({p.tipo for p in Peca.query.filter_by(vitrine_publica=True).all() if p.tipo})
     colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
     whatsapp = Parametro.obter("whatsapp", "")
     return render_template(
-        "vitrine_publica.html", grupos=grupos,
+        "vitrine_publica.html", grupos=grupos, tipos=tipos,
+        q=request.args.get("q", ""), tipo=tipo, ordem=ordem,
         colecao_fotos=colecao_fotos, whatsapp=whatsapp,
     )
 

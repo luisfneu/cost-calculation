@@ -49,6 +49,7 @@ from ..models import (
     Venda,
     VendaItem,
     db,
+    dinheiro,
 )
 
 from . import bp
@@ -178,6 +179,79 @@ def contas_a_receber():
     )
 
 
+@bp.route("/fluxo-caixa")
+def fluxo_caixa():
+    """Projeção de caixa: a receber (crediário + saldos) e a pagar (despesas),
+    agrupados por mês de vencimento, com saldo do mês e saldo acumulado."""
+    hoje = date.today()
+    MESES = int(request.args.get("meses", 6) or 6)
+    MESES = max(3, min(MESES, 12))
+
+    # A receber: parcelas de crediário em aberto + saldos pendentes de pedidos.
+    receber = [(p.vencimento, p.valor) for p in Parcela.query.filter_by(pago=False).all()]
+    for v in Venda.query.all():
+        if v.saldo_receber > 0.01 and not v.parcelas:
+            receber.append((v.vencimento, v.saldo_receber))
+    # A pagar: despesas em aberto.
+    pagar = [(d.vencimento, d.valor) for d in Despesa.query.filter_by(pago=False).all()]
+
+    # Janela de meses a partir do mês atual.
+    meses = [(_add_meses(hoje.replace(day=1), i)).strftime("%Y-%m") for i in range(MESES)]
+    limite = meses[-1]
+
+    def distribuir(itens):
+        atraso = sem_data = alem = 0.0
+        por_mes = {k: 0.0 for k in meses}
+        for venc, val in itens:
+            if venc is None:
+                sem_data += val
+            elif venc < hoje:
+                atraso += val
+            else:
+                chave = venc.strftime("%Y-%m")
+                if chave in por_mes:
+                    por_mes[chave] += val
+                elif chave > limite:
+                    alem += val
+                else:  # mês passado mas ainda >= hoje não ocorre; salvaguarda
+                    atraso += val
+        return atraso, sem_data, por_mes, alem
+
+    r_atraso, r_semdata, r_mes, r_alem = distribuir(receber)
+    p_atraso, p_semdata, p_mes, p_alem = distribuir(pagar)
+
+    linhas = []
+    acumulado = 0.0
+
+    def add_linha(label, rec, pag, conta_acumulado=True, destaque=None):
+        nonlocal acumulado
+        saldo = dinheiro(rec - pag)
+        if conta_acumulado:
+            acumulado = dinheiro(acumulado + saldo)
+        linhas.append({
+            "label": label, "receber": dinheiro(rec), "pagar": dinheiro(pag),
+            "saldo": saldo, "acumulado": acumulado if conta_acumulado else None,
+            "destaque": destaque,
+        })
+
+    if r_atraso or p_atraso:
+        add_linha("Em atraso", r_atraso, p_atraso, destaque="atraso")
+    for k in meses:
+        add_linha(_mes_label(k), r_mes[k], p_mes[k])
+    if r_alem or p_alem:
+        add_linha(f"Após {_mes_label(limite)}", r_alem, p_alem)
+    if r_semdata or p_semdata:
+        add_linha("Sem vencimento", r_semdata, p_semdata, conta_acumulado=False)
+
+    tot_receber = dinheiro(sum(v for _, v in receber))
+    tot_pagar = dinheiro(sum(v for _, v in pagar))
+    return render_template(
+        "fluxo_caixa.html", linhas=linhas, meses=MESES,
+        tot_receber=tot_receber, tot_pagar=tot_pagar,
+        saldo_final=dinheiro(tot_receber - tot_pagar), hoje=hoje,
+    )
+
+
 @bp.route("/parcelas/<int:parcela_id>/pagar", methods=["POST"])
 def pagar_parcela(parcela_id):
     p = Parcela.query.get_or_404(parcela_id)
@@ -209,7 +283,7 @@ def salvar_despesa(despesa_id=None):
         db.session.add(d)
     d.descricao = descricao
     d.categoria = request.form.get("categoria", "").strip()
-    d.valor = _to_float(request.form.get("valor"))
+    d.valor = dinheiro(_to_float(request.form.get("valor")))
     d.vencimento = _to_date(request.form.get("vencimento"))
     d.pago = request.form.get("pago") == "on"
     db.session.commit()
@@ -269,6 +343,25 @@ def relatorio():
         m["qtd"] += v.quantidade_total
     serie = [{"mes": k, "label": _mes_label(k), **por_mes[k]} for k in sorted(por_mes)]
 
+    # Comparativo mês-a-mês: variação (%) de cada mês vs o mês anterior.
+    def _variacao(atual, base):
+        return ((atual - base) / base * 100) if base else None
+    for i, s in enumerate(serie):
+        ant = serie[i - 1] if i > 0 else None
+        for campo in ("receita", "lucro", "qtd"):
+            s[f"{campo}_var"] = _variacao(s[campo], ant[campo]) if ant else None
+
+    # Resumo destacado dos dois meses mais recentes.
+    comparativo = None
+    if len(serie) >= 2:
+        atual, anterior = serie[-1], serie[-2]
+        comparativo = {
+            "atual": atual, "anterior": anterior,
+            "receita_var": _variacao(atual["receita"], anterior["receita"]),
+            "lucro_var": _variacao(atual["lucro"], anterior["lucro"]),
+            "qtd_var": _variacao(atual["qtd"], anterior["qtd"]),
+        }
+
     # Ranking de peças (por receita) + curva ABC.
     ranking = {}
     for v in vendas:
@@ -309,6 +402,7 @@ def relatorio():
     return render_template(
         "relatorio.html", serie=serie, mais_vendidas=mais_vendidas, colecoes=colecoes,
         kpis=kpis, anos=anos, ano_sel=ano_sel, curva=curva, abc=abc, formas=formas,
+        comparativo=comparativo, hoje=date.today(),
     )
 
 

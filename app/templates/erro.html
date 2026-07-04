@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}Erro {{ codigo }}{% endblock %}
+{% block conteudo %}
+<div class="estado-vazio" style="padding:60px 20px;">
+  <i class="bi {{ icone or 'bi-exclamation-triangle' }} ic"></i>
+  <div class="frase">{{ titulo }} <span class="text-muted">({{ codigo }})</span></div>
+  <div class="dica">{{ msg }}</div>
+  <div class="acao mt-3">
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary btn-sm"><i class="bi bi-house-door"></i> Voltar ao painel</a>
+    <a href="javascript:history.back()" class="btn btn-link btn-sm">voltar</a>
+  </div>
+</div>
+{% endblock %}

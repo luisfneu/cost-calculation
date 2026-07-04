@@ -42,13 +42,26 @@
         <tr class="{{ 'linha-zerada' if zerado else ('table-warning' if insumo.estoque_baixo) }}">
           <td>
             {% if insumo.foto %}
-              <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb" alt="">
+              <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb" alt="" loading="lazy">
             {% else %}
               <div class="foto-thumb sem-foto">—</div>
             {% endif %}
           </td>
       <td>
-        <strong>{{ insumo.nome }}</strong>
+        <a href="#" class="link-atelier fw-bold btn-insumo" data-bs-toggle="modal" data-bs-target="#modal-insumo"
+           title="Ver detalhes"
+           data-nome="{{ insumo.nome }}"
+           data-tipo="{{ insumo.tipo_label }}"
+           data-unidade="{{ insumo.unidade }}"
+           data-custo="{{ insumo.custo_unitario | moeda }}"
+           data-estoque="{{ insumo.estoque | num }}"
+           data-minimo="{{ insumo.estoque_minimo | num }}"
+           data-ativo="{{ 'Sim' if insumo.ativo else 'Não' }}"
+           data-fornecedor="{{ insumo.fornecedor or '—' }}"
+           data-baixo="{{ '1' if insumo.estoque_baixo else '' }}"
+           data-zerado="{{ '1' if insumo.estoque <= 0 else '' }}"
+           data-foto="{{ url_for('static', filename='uploads/' ~ insumo.foto) if insumo.foto else '' }}"
+           data-editar="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}">{{ insumo.nome }}</a>
         <span class="badge {{ 'badge-embalagem' if insumo.tipo == 'embalagem' else 'badge-materia' }}">{{ insumo.tipo_label }}</span>
         {% if not insumo.ativo %}<span class="badge text-bg-secondary">inativo</span>{% endif %}
         <div class="small text-muted">por {{ insumo.unidade }}{% if insumo.fornecedor %} · {{ insumo.fornecedor }}{% endif %}</div>
@@ -74,7 +87,7 @@
         </button>
         <a href="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
         <form method="post" action="{{ url_for('main.excluir_insumo', insumo_id=insumo.id) }}" class="d-inline"
-              onsubmit="return confirm('Excluir este insumo?')">
+              data-confirm="Excluir este insumo?">
           <button class="btn btn-sm btn-outline-danger">Excluir</button>
         </form>
       </td>
@@ -88,6 +101,68 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Modal: detalhes do insumo (somente leitura) -->
+<div class="modal fade" id="modal-insumo" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="in-nome"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-3" id="in-foto-wrap">
+          <img id="in-foto" class="img-fluid rounded" style="max-height:300px" alt="" loading="lazy">
+        </div>
+        <div id="in-sem-foto" class="text-center text-muted mb-3" style="display:none">sem foto</div>
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            <tr><th class="text-muted" style="width:42%">Tipo</th><td id="in-tipo"></td></tr>
+            <tr><th class="text-muted">Unidade</th><td id="in-unidade"></td></tr>
+            <tr><th class="text-muted">Custo médio</th><td id="in-custo"></td></tr>
+            <tr><th class="text-muted">Em estoque</th><td id="in-estoque"></td></tr>
+            <tr><th class="text-muted">Estoque mínimo</th><td id="in-minimo"></td></tr>
+            <tr><th class="text-muted">Fornecedor</th><td id="in-fornecedor"></td></tr>
+            <tr><th class="text-muted">Ativo</th><td id="in-ativo"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="in-editar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Editar</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const modal = document.getElementById('modal-insumo');
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', function (ev) {
+      const d = ev.relatedTarget.dataset;
+      const set = (id, v) => { document.getElementById(id).textContent = v; };
+      set('in-nome', d.nome);
+      set('in-tipo', d.tipo);
+      set('in-unidade', d.unidade);
+      set('in-custo', d.custo);
+      let est = d.estoque + ' ' + d.unidade;
+      if (d.zerado) est += '  · zerado';
+      else if (d.baixo) est += '  · estoque baixo';
+      set('in-estoque', est);
+      set('in-minimo', d.minimo + ' ' + d.unidade);
+      set('in-fornecedor', d.fornecedor);
+      set('in-ativo', d.ativo);
+      document.getElementById('in-editar').href = d.editar;
+      const wrap = document.getElementById('in-foto-wrap');
+      const sem = document.getElementById('in-sem-foto');
+      if (d.foto) {
+        document.getElementById('in-foto').src = d.foto;
+        wrap.style.display = ''; sem.style.display = 'none';
+      } else {
+        wrap.style.display = 'none'; sem.style.display = '';
+      }
+    });
+  })();
+</script>
 
 <!-- Modal: movimentar estoque -->
 <div class="modal fade" id="modal-mov" tabindex="-1">
@@ -168,7 +243,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="hist-body">
-        <div class="text-center text-muted py-4">Carregando…</div>
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>
       </div>
     </div>
   </div>
@@ -182,7 +257,7 @@
     const nome = document.getElementById('hist-nome');
 
     function carregar(url) {
-      body.innerHTML = '<div class="text-center text-muted py-4">Carregando…</div>';
+      body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>';
       fetch(url).then(r => r.text()).then(html => { body.innerHTML = html; });
     }
     modal.addEventListener('show.bs.modal', function (ev) {

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block titulo %}Fluxo de caixa{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <h1 class="h3 mb-0">Fluxo de caixa projetado</h1>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="small text-muted mb-0">Horizonte</label>
+    <select name="meses" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+      {% for n in [3, 6, 9, 12] %}<option value="{{ n }}" {{ 'selected' if meses == n }}>{{ n }} meses</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="stat ok">
+    <div class="ic"><i class="bi bi-arrow-down-circle"></i></div>
+    <div><div class="num">{{ tot_receber | moeda }}</div><div class="lbl">Total a receber</div></div>
+  </div></div>
+  <div class="col-md-4"><div class="stat aviso">
+    <div class="ic"><i class="bi bi-arrow-up-circle"></i></div>
+    <div><div class="num">{{ tot_pagar | moeda }}</div><div class="lbl">Total a pagar</div></div>
+  </div></div>
+  <div class="col-md-4"><div class="stat {{ 'ok' if saldo_final >= 0 else 'aviso' }}">
+    <div class="ic"><i class="bi bi-wallet2"></i></div>
+    <div><div class="num {{ 'text-success' if saldo_final >= 0 else 'text-danger' }}">{{ saldo_final | moeda }}</div><div class="lbl">Saldo projetado</div></div>
+  </div></div>
+</div>
+
+<div class="card bg-white">
+  <div class="card-body">
+    <h2 class="h5 mb-1">Por mês de vencimento</h2>
+    <p class="text-muted small mb-3">
+      Considera crediário e saldos a receber e as despesas em aberto. O saldo acumulado
+      soma mês a mês, começando pelo que está em atraso.
+    </p>
+    <div class="table-responsive">
+    <table class="table align-middle tabela-cartao mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Período</th>
+          <th class="text-end">A receber</th>
+          <th class="text-end">A pagar</th>
+          <th class="text-end">Saldo do mês</th>
+          <th class="text-end">Acumulado</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for l in linhas %}
+        <tr class="{{ 'table-danger' if l.destaque == 'atraso' }}">
+          <td data-label="Período">
+            {{ l.label }}
+            {% if l.destaque == 'atraso' %}<span class="badge text-bg-danger">em atraso</span>{% endif %}
+          </td>
+          <td data-label="A receber" class="text-end {{ 'text-success' if l.receber }}">{{ l.receber | moeda }}</td>
+          <td data-label="A pagar" class="text-end {{ 'text-danger' if l.pagar }}">{{ l.pagar | moeda }}</td>
+          <td data-label="Saldo do mês" class="text-end fw-bold {{ 'text-success' if l.saldo >= 0 else 'text-danger' }}">{{ l.saldo | moeda }}</td>
+          <td data-label="Acumulado" class="text-end fw-bold {{ ('text-success' if l.acumulado >= 0 else 'text-danger') if l.acumulado is not none }}">
+            {% if l.acumulado is not none %}{{ l.acumulado | moeda }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="text-muted small mt-3 mb-0">
+      <i class="bi bi-info-circle"></i>
+      Itens “sem vencimento” entram nos totais, mas ficam fora do saldo acumulado (não têm data prevista).
+    </p>
+  </div>
+</div>
+{% endblock %}

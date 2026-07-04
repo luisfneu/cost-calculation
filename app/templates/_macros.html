@@ -49,7 +49,7 @@
     {% for f in imgs %}{% set _ = urls.append(url_for('static', filename='uploads/' ~ f)) %}{% endfor %}
     {% if imgs %}
       <div class="vitrine-thumb" data-nome="{{ peca.nome }}" data-fotos='{{ urls | tojson }}' title="Clique para ampliar">
-        <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}">
+        <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}" loading="lazy">
         {% if imgs | length > 1 %}<span class="thumb-multi"><i class="bi bi-images"></i> {{ imgs | length }}</span>{% endif %}
         <span class="thumb-zoom"><i class="bi bi-arrows-fullscreen"></i></span>
       </div>
@@ -61,7 +61,7 @@
       <div class="carousel-inner">
         {% for img in imgs %}
         <div class="carousel-item {{ 'active' if loop.first }}">
-          <img src="{{ url_for('static', filename='uploads/' ~ img) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}">
+          <img src="{{ url_for('static', filename='uploads/' ~ img) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}" loading="lazy">
           {% if col_foto and img == col_foto %}<span class="carrossel-tag">coleção</span>{% endif %}
         </div>
         {% endfor %}
@@ -73,7 +73,7 @@
       </div>
     </div>
   {% elif imgs | length == 1 %}
-    <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}">
+    <img src="{{ url_for('static', filename='uploads/' ~ imgs[0]) }}" class="{{ img_class }} card-img-top" alt="{{ peca.nome }}" loading="lazy">
   {% else %}
     <div class="{{ img_class }} sem-foto d-flex align-items-center justify-content-center text-muted">sem foto</div>
   {% endif %}

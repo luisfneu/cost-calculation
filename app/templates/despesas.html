@@ -51,7 +51,7 @@
             <form method="post" action="{{ url_for('main.pagar_despesa', despesa_id=d.id) }}" class="d-inline">
               <button class="btn btn-sm btn-outline-success">{{ 'desmarcar' if d.pago else '✓ pago' }}</button>
             </form>
-            <form method="post" action="{{ url_for('main.excluir_despesa', despesa_id=d.id) }}" class="d-inline" onsubmit="return confirm('Excluir despesa?')">
+            <form method="post" action="{{ url_for('main.excluir_despesa', despesa_id=d.id) }}" class="d-inline" data-confirm="Excluir despesa?">
               <button class="btn btn-sm btn-outline-danger">Excluir</button>
             </form>
           </td>

@@ -42,7 +42,7 @@
     <a href="{{ url_for('main.form_cliente', cliente_id=cliente.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
     {% if not cliente.vendas %}
     <form method="post" action="{{ url_for('main.excluir_cliente', cliente_id=cliente.id) }}" class="d-inline"
-          onsubmit="return confirm('Excluir este cliente?')">
+          data-confirm="Excluir este cliente?">
       <button class="btn btn-sm btn-outline-danger">Excluir</button>
     </form>
     {% endif %}

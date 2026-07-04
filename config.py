@@ -22,6 +22,14 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Segurança do cookie de sessão.
+    # HttpOnly e SameSite=Lax protegem contra roubo via JS e CSRF de terceiros.
+    # Secure (só envia por HTTPS) deve ficar LIGADO em produção — defina
+    # SESSION_COOKIE_SECURE=1 no .env. Em dev local (http) fica desligado.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
+
     # Upload de fotos
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "app", "static", "uploads")
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}

@@ -10,6 +10,11 @@ instance/
 app/static/uploads/*
 !app/static/uploads/.gitkeep
 
+# Backups locais e túnel
+backups/
+certs/
+*.log
+
 # Segredos / configuração local
 .env
 
