@@ -7,7 +7,7 @@
 </div>
 
 {% set rotulos = {'realizado':'Pago','pago':'Enviado','enviado':'Entregue'} %}
-{% set cores = {'realizado':'text-bg-secondary','pago':'text-bg-info','enviado':'text-bg-primary','entregue':'text-bg-success'} %}
+{% set cores = {'pre-pedido':'text-bg-warning','realizado':'text-bg-secondary','pago':'text-bg-info','crediario':'text-bg-info','enviado':'text-bg-primary','entregue':'text-bg-success'} %}
 
 <div class="card bg-white">
   <div class="card-body">
@@ -66,7 +66,7 @@
             </form>
           </td>
         </tr>
-        {% if v.tipo == 'venda' %}
+        {% if v.tipo == 'venda' and not v.eh_pre_pedido %}
         <tr class="stepper-row">
           <td colspan="6" class="pt-0">
             <div class="stepper mini">

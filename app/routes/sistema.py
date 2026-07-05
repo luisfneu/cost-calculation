@@ -150,7 +150,7 @@ def index():
     insumos = Insumo.query.order_by(Insumo.nome).all()
     alertas = [i for i in insumos if i.ativo and i.estoque_baixo]
     pecas_repor = [p for p in pecas if p.precisa_repor]
-    vendas = Venda.query.all()
+    vendas = Venda.query.filter(Venda.status != "pre-pedido").all()
     totais_venda = {
         "receita": sum(v.receita for v in vendas),
         "lucro": sum(v.lucro for v in vendas),

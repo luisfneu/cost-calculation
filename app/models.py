@@ -6,6 +6,7 @@ Domínio:
 - PecaInsumo: quantidade de cada insumo usada em uma peça (ficha técnica / BOM).
 - MovimentoEstoque: histórico de entradas/saídas de estoque dos insumos.
 """
+import math
 import re
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -46,6 +47,20 @@ def dinheiro(valor) -> float:
         return float(Decimal(str(valor or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
     except (InvalidOperation, ValueError, TypeError):
         return 0.0
+
+
+def arredondar_cima(valor, base=5) -> int:
+    """Arredonda para cima até o próximo múltiplo de `base` (ex.: 32→35, 36→40).
+
+    Usa Decimal na divisão para não errar por ponto flutuante (35.0 continua 35).
+    """
+    try:
+        v = Decimal(str(valor or 0))
+    except (InvalidOperation, ValueError, TypeError):
+        return 0
+    if v <= 0:
+        return 0
+    return int(math.ceil(v / Decimal(base))) * base
 
 
 class Insumo(db.Model):
@@ -231,6 +246,23 @@ class Peca(db.Model):
     def preco_etiqueta_efetivo(self) -> float:
         """Preço efetivo de venda: promocional se houver, senão o preço base."""
         return self.preco_promocional if self.em_promocao else self.preco_base
+
+    @property
+    def sob_encomenda(self) -> bool:
+        """Sem estoque disponível: a peça só sai sob encomenda (feita ao pedir)."""
+        return self.disponivel_total <= 0
+
+    @property
+    def preco_vitrine(self) -> float:
+        """Preço exibido/cobrado na vitrine pública.
+
+        - Sob encomenda: custo de produção arredondado para cima ao próximo
+          múltiplo de R$5 (ex.: custo 32 → R$35; custo 36 → R$40).
+        - Em estoque: preço efetivo normal (promoção ou preço base).
+        """
+        if self.sob_encomenda:
+            return float(arredondar_cima(self.custo_total, 5))
+        return self.preco_etiqueta_efetivo
 
     @property
     def tags_lista(self) -> list:
@@ -558,6 +590,67 @@ class Cliente(db.Model):
         return self.tamanho_habitual or self.tamanho_frequente
 
 
+class Lead(db.Model):
+    """Pré-cadastro de cliente vindo da vitrine pública.
+
+    Aguarda a confirmação de um administrador antes de virar Cliente de fato
+    (evita cadastrar contatos falsos/spam automaticamente).
+    """
+
+    __tablename__ = "leads"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(160), nullable=False)
+    instagram = db.Column(db.String(80), default="")
+    telefone = db.Column(db.String(40), default="")   # WhatsApp
+
+    cep = db.Column(db.String(12), default="")
+    logradouro = db.Column(db.String(160), default="")
+    numero = db.Column(db.String(20), default="")
+    complemento = db.Column(db.String(80), default="")
+    bairro = db.Column(db.String(80), default="")
+    cidade = db.Column(db.String(80), default="")
+    uf = db.Column(db.String(2), default="")
+
+    observacao = db.Column(db.Text, default="")       # resumo do pedido (texto legível)
+    pedido_json = db.Column(db.Text, default="")      # itens/frete/cupom do carrinho (JSON)
+    # pendente | confirmado | descartado
+    status = db.Column(db.String(20), nullable=False, default="pendente")
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))
+    criado_em = db.Column(db.DateTime, default=_agora)
+    confirmado_em = db.Column(db.DateTime)
+
+    cliente = db.relationship("Cliente")
+
+    @property
+    def tem_endereco(self) -> bool:
+        return bool(self.logradouro or self.cep or self.cidade)
+
+    @property
+    def endereco_completo(self) -> str:
+        linha1 = self.logradouro or ""
+        if self.numero:
+            linha1 += f", {self.numero}"
+        if self.complemento:
+            linha1 += f" - {self.complemento}"
+        partes = [p for p in [linha1, self.bairro,
+                              " ".join(x for x in [self.cidade, self.uf] if x),
+                              f"CEP {self.cep}" if self.cep else ""] if p]
+        return " · ".join(partes)
+
+    @property
+    def instagram_handle(self) -> str:
+        h = (self.instagram or "").strip().rstrip("/").split("/")[-1]
+        return h.lstrip("@")
+
+    @property
+    def whatsapp_numero(self) -> str:
+        d = re.sub(r"\D", "", self.telefone or "")
+        if d and not d.startswith("55") and len(d) <= 11:
+            d = "55" + d
+        return d
+
+
 class Venda(db.Model):
     """Pedido de venda com um ou mais itens (peças/tamanhos).
 
@@ -591,9 +684,12 @@ class Venda(db.Model):
     status = db.Column(db.String(12), nullable=False, default="realizado")
     # Se o estoque das peças já foi baixado.
     estoque_baixado = db.Column(db.Boolean, nullable=False, default=True)
+    # Origem do pedido pela vitrine pública (link ao lead que o gerou).
+    lead_id = db.Column(db.Integer, db.ForeignKey("leads.id"))
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
+    lead = db.relationship("Lead", backref="vendas")
     cliente = db.relationship("Cliente", back_populates="vendas")
     itens = db.relationship(
         "VendaItem", back_populates="venda", cascade="all, delete-orphan"
@@ -621,7 +717,7 @@ class Venda(db.Model):
 
     # Posição de cada status no fluxo. 'crediario' ocupa a etapa de pagamento
     # (o pedido é liberado, mas o valor é recebido em parcelas).
-    _POS = {"realizado": 0, "pago": 1, "crediario": 1, "enviado": 2, "entregue": 3}
+    _POS = {"pre-pedido": -1, "realizado": 0, "pago": 1, "crediario": 1, "enviado": 2, "entregue": 3}
 
     @property
     def _pos(self) -> int:
@@ -632,15 +728,32 @@ class Venda(db.Model):
         return self.status == "crediario" or bool(self.parcelas)
 
     @property
+    def eh_pre_pedido(self) -> bool:
+        """Pedido feito pela vitrine, aguardando o admin confirmar (não efetivado:
+        não baixa estoque nem entra nos relatórios)."""
+        return self.status == "pre-pedido"
+
+    @property
+    def producao_pendente(self) -> bool:
+        """Tem item de encomenda ainda não produzido (bloqueia envio/entrega)."""
+        return any(it.produzir and not it.produzido for it in self.itens)
+
+    @property
+    def itens_a_produzir(self) -> list:
+        return [it for it in self.itens if it.produzir]
+
+    @property
     def status_label(self) -> str:
         return {
-            "realizado": "Pedido feito", "pago": "Pago", "crediario": "Crediário",
-            "enviado": "Enviado", "entregue": "Entregue",
+            "pre-pedido": "Pré-pedido", "realizado": "Pedido feito", "pago": "Pago",
+            "crediario": "Crediário", "enviado": "Enviado", "entregue": "Entregue",
         }.get(self.status, "Pedido feito")
 
     @property
     def estado_label(self) -> str:
         """Rótulo do estado atual do pedido (considera o pagamento)."""
+        if self.status == "pre-pedido":
+            return "Pré-pedido · aguardando confirmação"
         if self.status == "entregue":
             return "Entregue"
         if self.status == "enviado":
@@ -670,7 +783,9 @@ class Venda(db.Model):
 
     @property
     def proximo_status(self) -> str:
-        """Próxima etapa do fluxo (ou None se já entregue)."""
+        """Próxima etapa do fluxo (ou None se pré-pedido/entregue)."""
+        if self.status == "pre-pedido":
+            return None   # precisa confirmar o pedido antes de entrar no fluxo
         i = self._pos
         return Venda.FLUXO[i + 1] if i + 1 < len(Venda.FLUXO) else None
 
@@ -834,6 +949,9 @@ class VendaItem(db.Model):
     preco_unitario = db.Column(db.Float, nullable=False, default=0.0)
     desconto = db.Column(db.Float, nullable=False, default=0.0)  # desconto do item (R$)
     custo_unitario = db.Column(db.Float, nullable=False, default=0.0)  # snapshot
+    # Item sem estoque no fechamento: precisa ser produzido (aparece em Encomendas).
+    produzir = db.Column(db.Boolean, nullable=False, default=False)
+    produzido = db.Column(db.Boolean, nullable=False, default=False)  # produção concluída
 
     venda = db.relationship("Venda", back_populates="itens")
     peca = db.relationship("Peca")

@@ -2,6 +2,7 @@
 import calendar
 import csv
 import io
+import json
 import math
 import os
 import re
@@ -23,6 +24,7 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+from .. import csrf
 from ..extensions import cache, limiter
 from ..models import (
     TAMANHOS,
@@ -36,6 +38,7 @@ from ..models import (
     Insumo,
     Kit,
     KitItem,
+    Lead,
     MovimentoEstoque,
     MovimentoPeca,
     OrdemProducao,
@@ -551,38 +554,231 @@ def etiqueta_peca(peca_id):
 def vitrine_publica():
     q = request.args.get("q", "").strip().lower()
     tipo = request.args.get("tipo", "").strip()
+    colecao = request.args.get("colecao", "").strip()
     ordem = request.args.get("ordem", "").strip()  # preco_asc | preco_desc | nome
 
     # Só as peças marcadas para a vitrine pública.
-    pecas = Peca.query.filter_by(vitrine_publica=True).all()
+    publicas = Peca.query.filter_by(vitrine_publica=True).all()
+    pecas = publicas
     if q:
         pecas = [p for p in pecas
                  if q in p.nome.lower() or q in (p.colecao or "").lower() or q in (p.tags or "").lower()]
     if tipo:
         pecas = [p for p in pecas if p.tipo == tipo]
+    if colecao:
+        pecas = [p for p in pecas if (p.colecao or "") == colecao]
 
-    # Ordenação (aplicada dentro de cada coleção).
+    # Ordenação (lista única, sem agrupar por coleção).
     chaves = {
-        "preco_asc": lambda p: p.preco_etiqueta_efetivo,
-        "preco_desc": lambda p: -p.preco_etiqueta_efetivo,
+        "preco_asc": lambda p: p.preco_vitrine,
+        "preco_desc": lambda p: -p.preco_vitrine,
         "nome": lambda p: p.nome.lower(),
     }
     chave = chaves.get(ordem, lambda p: p.nome.lower())
-    pecas.sort(key=lambda p: ((p.colecao or "").lower(), chave(p)))
+    pecas = sorted(pecas, key=chave)
 
-    grupos = {}
-    for p in pecas:
-        grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
-
-    # Tipos disponíveis (só das peças públicas) para o filtro.
-    tipos = sorted({p.tipo for p in Peca.query.filter_by(vitrine_publica=True).all() if p.tipo})
+    # Opções dos filtros (a partir de todas as peças públicas).
+    tipos = sorted({p.tipo for p in publicas if p.tipo})
+    colecoes = sorted({p.colecao for p in publicas if p.colecao})
     colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
     whatsapp = Parametro.obter("whatsapp", "")
     return render_template(
-        "vitrine_publica.html", grupos=grupos, tipos=tipos,
-        q=request.args.get("q", ""), tipo=tipo, ordem=ordem,
+        "vitrine_publica.html", pecas=pecas, tipos=tipos, colecoes=colecoes, tamanhos=TAMANHOS,
+        q=request.args.get("q", ""), tipo=tipo, colecao=colecao, ordem=ordem,
         colecao_fotos=colecao_fotos, whatsapp=whatsapp,
     )
+
+
+@bp.route("/publico/frete", methods=["POST"])
+@csrf.exempt
+@limiter.limit("30 per minute")
+def frete_publico():
+    """Calcula o frete do carrinho da vitrine. Recebe JSON {cep, itens:[{id,qtd}]};
+    as dimensões vêm do banco (o cliente não as informa)."""
+    dados = request.get_json(silent=True) or {}
+    itens = dados.get("itens") or []
+    ids = []
+    quantidades = {}
+    for it in itens:
+        try:
+            pid = int(it.get("id"))
+            qtd = max(1, int(float(it.get("qtd", 1))))
+        except (TypeError, ValueError):
+            continue
+        ids.append(pid)
+        quantidades[pid] = quantidades.get(pid, 0) + qtd
+    if not ids:
+        return {"ok": False, "erro": "Carrinho vazio."}, 400
+
+    # Soma o peso e empilha as alturas; usa a maior largura/comprimento (caixa que cabe tudo).
+    peso = altura = 0.0
+    largura = comprimento = 0.0
+    for peca in Peca.query.filter(Peca.id.in_(ids)).all():
+        q = quantidades.get(peca.id, 0)
+        peso += (peca.peso_g or 0) * q
+        altura += (peca.altura_cm or 0) * q
+        largura = max(largura, peca.largura_cm or 0)
+        comprimento = max(comprimento, peca.comprimento_cm or 0)
+
+    opcoes, erro = _frete_opcoes(
+        dados.get("cep", ""), peso_g=peso, altura_cm=altura,
+        largura_cm=largura, comprimento_cm=comprimento,
+    )
+    if erro:
+        codigo = 400 if ("config" in erro or "CEP" in erro) else 502
+        return {"ok": False, "erro": erro}, codigo
+    return {"ok": True, "opcoes": opcoes}
+
+
+@bp.route("/publico/cupom", methods=["POST"])
+@csrf.exempt
+@limiter.limit("20 per minute")
+def cupom_publico():
+    """Valida um cupom na vitrine e devolve o desconto para o subtotal informado.
+    Cupons pessoais (de aniversário) não são aplicados aqui — o cliente informa
+    no WhatsApp e o ateliê confirma (evita vazar desconto exclusivo)."""
+    dados = request.get_json(silent=True) or {}
+    cod = str(dados.get("codigo", "")).strip().upper()
+    try:
+        subtotal = float(dados.get("subtotal", 0) or 0)
+    except (TypeError, ValueError):
+        subtotal = 0.0
+    if not cod:
+        return {"ok": False, "erro": "Informe um código."}, 400
+    cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
+    if not cupom or not cupom.valido:
+        return {"ok": False, "erro": "Cupom inválido ou expirado."}, 200
+    if cupom.cliente_id:
+        return {"ok": False, "pessoal": True,
+                "erro": "Cupom pessoal: informe no WhatsApp que confirmamos para você."}, 200
+    return {
+        "ok": True, "codigo": cupom.codigo, "tipo": cupom.tipo, "valor": cupom.valor,
+        "desconto": cupom.desconto_para(subtotal),
+        "rotulo": (f"{cupom.valor:g}%" if cupom.tipo == "percentual" else _brl(cupom.valor)),
+    }
+
+
+def _pix_publico(valor, txid):
+    """Copia-e-cola do Pix para o total do pedido (se o Pix estiver configurado)."""
+    chave = Parametro.obter("pix_chave", "")
+    if not chave:
+        return ""
+    return _pix_payload(chave, Parametro.obter("pix_nome", ""),
+                        Parametro.obter("pix_cidade", ""), valor, txid[:25])
+
+
+@bp.route("/publico/pedido", methods=["POST"])
+@csrf.exempt
+@limiter.limit("10 per minute")
+def pedido_publico():
+    """Recebe o pedido da vitrine + pré-cadastro do cliente e cria um Lead pendente.
+
+    Nada toca estoque/relatórios aqui: só ao admin confirmar o lead a Venda é
+    montada. Os preços são recalculados no servidor (não confiamos no cliente).
+    """
+    dados = request.get_json(silent=True) or {}
+    cli = dados.get("cliente") or {}
+    nome = str(cli.get("nome", "")).strip()
+    if not nome:
+        return {"ok": False, "erro": "Informe seu nome."}, 400
+    telefone = str(cli.get("telefone", "")).strip()
+    if len(re.sub(r"\D", "", telefone)) < 10:
+        return {"ok": False, "erro": "Informe um WhatsApp válido com DDD."}, 400
+
+    # Recalcula itens e preços a partir do banco.
+    linhas, subtotal = [], 0.0
+    for it in (dados.get("itens") or []):
+        try:
+            peca = Peca.query.get(int(it.get("id")))
+        except (TypeError, ValueError):
+            peca = None
+        if not peca:
+            continue
+        try:
+            qtd = max(1, int(float(it.get("qtd", 1))))
+        except (TypeError, ValueError):
+            qtd = 1
+        preco = float(peca.preco_vitrine)
+        subtotal += preco * qtd
+        linhas.append({
+            "id": peca.id, "nome": peca.nome, "tam": str(it.get("tam", "")).strip().upper(),
+            "qtd": qtd, "preco": preco, "encomenda": bool(peca.sob_encomenda),
+        })
+    if not linhas:
+        return {"ok": False, "erro": "Seu pedido está vazio."}, 400
+    subtotal = dinheiro(subtotal)
+
+    # Cupom (só geral) e frete (informado; o admin confere na confirmação).
+    desconto, cupom_cod = 0.0, ""
+    cod = str((dados.get("cupom") or {}).get("codigo", "")).strip().upper()
+    if cod:
+        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
+        if cupom and cupom.valido and not cupom.cliente_id:
+            desconto = cupom.desconto_para(subtotal)
+            cupom_cod = cupom.codigo
+    frete = dados.get("frete") or {}
+    frete_nome = str(frete.get("nome", "")).strip()
+    try:
+        frete_valor = max(0.0, float(frete.get("preco", 0) or 0))
+    except (TypeError, ValueError):
+        frete_valor = 0.0
+    total = dinheiro(max(0.0, subtotal - desconto) + frete_valor)
+
+    pedido = {
+        "itens": linhas, "subtotal": subtotal, "desconto": desconto, "cupom": cupom_cod,
+        "frete_nome": frete_nome, "frete_valor": frete_valor, "total": total,
+    }
+    # Resumo legível para a tela de Leads.
+    linhas_txt = [f"• {x['qtd']}x {x['nome']}" + (f" ({x['tam']})" if x['tam'] else "")
+                  + (" [sob encomenda]" if x['encomenda'] else "") + f" — {_brl(x['preco'] * x['qtd'])}"
+                  for x in linhas]
+    resumo = "\n".join(linhas_txt)
+    resumo += f"\nSubtotal: {_brl(subtotal)}"
+    if cupom_cod:
+        resumo += f"\nCupom {cupom_cod}: −{_brl(desconto)}"
+    if frete_nome:
+        resumo += f"\nFrete ({frete_nome}): {_brl(frete_valor) if frete_valor else 'grátis'}"
+    resumo += f"\nTotal: {_brl(total)}"
+
+    lead = Lead(
+        nome=nome, telefone=telefone, instagram=str(cli.get("instagram", "")).strip(),
+        cep=str(cli.get("cep", "")).strip(), logradouro=str(cli.get("logradouro", "")).strip(),
+        numero=str(cli.get("numero", "")).strip(), complemento=str(cli.get("complemento", "")).strip(),
+        bairro=str(cli.get("bairro", "")).strip(), cidade=str(cli.get("cidade", "")).strip(),
+        uf=str(cli.get("uf", "")).strip().upper()[:2],
+        observacao=resumo, pedido_json=json.dumps(pedido, ensure_ascii=False),
+    )
+    db.session.add(lead)
+    db.session.flush()
+
+    # Cria o pedido como PRÉ-PEDIDO na tela de vendas (não efetiva: sem baixa de
+    # estoque). Marca itens sem estoque no tamanho como 'a produzir'.
+    venda = Venda(
+        status="pre-pedido", tipo="venda", pago=False, estoque_baixado=False,
+        comprador=nome, lead_id=lead.id, frete=frete_valor,
+        desconto_total=desconto, cupom_codigo=cupom_cod,
+    )
+    db.session.add(venda)
+    db.session.flush()
+    for x in linhas:
+        peca = Peca.query.get(x["id"])
+        if not peca:
+            continue
+        tam = x["tam"] or "M"
+        produzir = peca.disponivel_por_tamanho.get(tam, 0.0) < x["qtd"]
+        db.session.add(VendaItem(
+            venda=venda, peca_id=peca.id, tamanho=tam, quantidade=x["qtd"],
+            preco_unitario=x["preco"], custo_unitario=peca.custo_total, produzir=produzir,
+        ))
+    db.session.commit()
+    _log("pedido_vitrine", f"{nome}: pré-pedido #{venda.id}, {len(linhas)} itens, total {_brl(total)}")
+
+    return {
+        "ok": True, "lead_id": lead.id, "pedido_id": venda.id, "total": total,
+        # Mesmo txid do detalhe da venda (PEDIDO<id>) para reconciliar o pagamento.
+        "pix": _pix_publico(total, f"PEDIDO{venda.id}"),
+        "whatsapp": Parametro.obter("whatsapp", ""), "resumo": resumo,
+    }
 
 
 @bp.route("/kits")

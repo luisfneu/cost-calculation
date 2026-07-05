@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Leads{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <h1 class="h3 mb-0"><i class="bi bi-person-plus"></i> Leads da vitrine</h1>
+</div>
+
+<ul class="nav nav-pills mb-3">
+  {% for chave, rotulo in [('pendente','Pendentes'), ('confirmado','Confirmados'), ('descartado','Descartados')] %}
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if status == chave }}" href="{{ url_for('main.listar_leads', status=chave) }}">
+      {{ rotulo }} <span class="badge {{ 'text-bg-light' if status != chave else 'text-bg-secondary' }}">{{ contagem[chave] }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+
+<div class="card bg-white"><div class="card-body">
+{% if leads %}
+<div class="table-responsive">
+<table class="table align-middle tabela-cartao">
+  <thead class="table-light">
+    <tr><th>Cliente</th><th>Contato</th><th>Endereço</th><th>Pedido / obs.</th><th>Quando</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for lead in leads %}
+    <tr>
+      <td data-label="Cliente">
+        <span class="fw-bold">{{ lead.nome }}</span>
+        {% if lead.status == 'confirmado' and lead.cliente_id %}
+          <div class="small"><a href="{{ url_for('main.detalhe_cliente', cliente_id=lead.cliente_id) }}" class="link-atelier">ver cliente</a></div>
+        {% endif %}
+      </td>
+      <td data-label="Contato">
+        {% if lead.whatsapp_numero %}
+          <a href="https://wa.me/{{ lead.whatsapp_numero }}" target="_blank" class="link-atelier"><i class="bi bi-whatsapp text-success"></i> {{ lead.telefone }}</a><br>
+        {% endif %}
+        {% if lead.instagram_handle %}
+          <a href="https://instagram.com/{{ lead.instagram_handle }}" target="_blank" class="link-insta"><i class="bi bi-instagram"></i> @{{ lead.instagram_handle }}</a>
+        {% endif %}
+      </td>
+      <td data-label="Endereço" class="small">{{ lead.endereco_completo or '—' }}</td>
+      <td data-label="Pedido / obs." class="small" style="max-width:280px">
+        {% for v in lead.vendas %}
+          <a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="link-atelier fw-bold">
+            <i class="bi bi-bag-check"></i> Pré-pedido #{{ v.id }}
+          </a>
+          {% if v.status != 'pre-pedido' %}<span class="badge text-bg-success">confirmado</span>{% endif %}
+        {% endfor %}
+        <div style="white-space:pre-line" class="text-muted">{{ lead.observacao or '—' }}</div>
+      </td>
+      <td data-label="Quando" class="small text-muted">{{ lead.criado_em | dt }}</td>
+      <td class="text-end text-nowrap">
+        {% if lead.status == 'pendente' %}
+          <form method="post" action="{{ url_for('main.confirmar_lead', lead_id=lead.id) }}" class="d-inline"
+                data-confirm="Confirmar este lead e criar/vincular o cliente?">
+            <button class="btn btn-sm btn-success" title="Confirmar (vira cliente)"><i class="bi bi-check-lg"></i> Confirmar</button>
+          </form>
+          <form method="post" action="{{ url_for('main.descartar_lead', lead_id=lead.id) }}" class="d-inline"
+                data-confirm="Descartar este lead?">
+            <button class="btn btn-sm btn-outline-secondary" title="Descartar"><i class="bi bi-x-lg"></i></button>
+          </form>
+        {% else %}
+          <span class="badge {{ 'text-bg-success' if lead.status == 'confirmado' else 'text-bg-secondary' }}">{{ lead.status }}</span>
+          <form method="post" action="{{ url_for('main.excluir_lead', lead_id=lead.id) }}" class="d-inline"
+                data-confirm="Excluir este lead definitivamente?">
+            <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+{{ ui.vazio('bi-person-plus', 'Nenhum lead ' ~ status, 'Os pré-cadastros feitos na vitrine aparecem aqui para você confirmar.', '', '') }}
+{% endif %}
+</div></div>
+{% endblock %}

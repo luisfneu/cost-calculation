@@ -666,3 +666,101 @@ a.stat:hover, .stat.clicavel:hover { box-shadow: 0 6px 20px rgba(44,38,32,.10); 
   }
   .tabela-cartao td:empty { display: none; }
 }
+
+/* ===== Vitrine pública: mini-pedido (carrinho) ===== */
+.btn-add {
+  background: #fff; border: 1px solid var(--gold); color: var(--gold);
+}
+.btn-add:hover, .btn-add.adicionado {
+  background: var(--gold); border-color: var(--gold); color: var(--cream);
+}
+.vitrine-cart-fab {
+  position: fixed; right: 18px; bottom: 18px; z-index: 1045;
+  width: 58px; height: 58px; border-radius: 50%; border: none;
+  background: linear-gradient(135deg, var(--gold), var(--gold-soft)); color: var(--cream);
+  font-size: 1.5rem; box-shadow: 0 4px 16px rgba(0,0,0,.28); cursor: pointer;
+}
+.vitrine-cart-fab:hover { filter: brightness(1.05); }
+.vitrine-cart-fab.cart-pulou { animation: cart-pop .6s ease; }
+@keyframes cart-pop {
+  0%   { transform: scale(1) rotate(0); }
+  30%  { transform: scale(1.35) rotate(-8deg); }
+  45%  { transform: scale(1.22) rotate(7deg); }
+  60%  { transform: scale(1.3) rotate(-5deg); }
+  75%  { transform: scale(1.18) rotate(4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+/* Barra com o nome da coleção no topo do card da vitrine */
+.vitrine-colecao-bar {
+  background: linear-gradient(135deg, var(--gold), var(--gold-soft)); color: var(--cream);
+  font-size: .62rem; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600;
+  padding: 4px 6px; border-top-left-radius: inherit; border-top-right-radius: inherit;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Miniatura da peça no carrinho */
+.cart-item-thumb {
+  width: 46px; height: 46px; border-radius: 6px; object-fit: cover; flex: 0 0 auto;
+  background: var(--cream-soft);
+}
+.cart-item-thumb.sem-foto { background: var(--cream-soft); }
+.cart-item-info { flex: 1 1 auto; min-width: 0; }
+.cart-item-nome { overflow: hidden; text-overflow: ellipsis; }
+/* Opções de frete no carrinho */
+.frete-opcao {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  width: 100%; text-align: left; padding: 6px 10px; margin-bottom: 5px;
+  border: 1px solid var(--gold-soft); border-radius: 8px; background: #fff; cursor: pointer;
+}
+.frete-opcao:hover { border-color: var(--gold); }
+.frete-opcao.sel { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(176, 138, 79, .2); }
+.frete-opcao > span { display: flex; flex-direction: column; line-height: 1.15; }
+.frete-opcao small { color: var(--ink-soft); font-size: .72rem; }
+.frete-opcao strong { color: var(--gold); white-space: nowrap; }
+.frete-rapido { font-size: .6rem; text-transform: uppercase; letter-spacing: .5px; color: #6d7a5c; font-weight: 600; }
+.vitrine-cart-badge {
+  position: absolute; top: -4px; right: -4px; min-width: 22px; height: 22px;
+  padding: 0 6px; border-radius: 11px; background: #a5624f; color: #fff;
+  font-size: .72rem; line-height: 22px; text-align: center; font-weight: 600;
+}
+.cart-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.cart-item-nome  { font-weight: 500; }
+.cart-item-preco { font-size: .85rem; color: var(--ink-soft); }
+.cart-qtd { display: flex; align-items: center; gap: 8px; }
+.cart-qtd button {
+  width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--gold-soft);
+  background: #fff; color: var(--gold); font-size: 1rem; line-height: 1; cursor: pointer;
+}
+.cart-qtd button:hover { background: var(--gold); color: #fff; }
+.cart-qtd span { min-width: 20px; text-align: center; }
+
+/* Chips de tamanho na vitrine */
+.vitrine-tamanhos {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 8px;
+}
+/* Abas em pílula (ex.: filtros de Leads) na identidade do ateliê */
+.nav-pills .nav-link { color: var(--ink-soft); }
+.nav-pills .nav-link:hover { color: var(--gold); }
+.nav-pills .nav-link.active { background-color: var(--gold); color: var(--cream); }
+
+.tam-chip {
+  min-width: 30px; padding: 3px 7px; border-radius: 6px;
+  border: 1px solid var(--gold-soft); background: #fff; color: var(--ink);
+  font-size: .74rem; font-weight: 500; line-height: 1.2; cursor: pointer;
+}
+.tam-chip:hover { border-color: var(--gold); }
+.tam-chip.sel { background: var(--gold); border-color: var(--gold); color: var(--cream); }
+/* Sem estoque nesse tamanho (mas peça com estoque): amarelo = sob encomenda, ainda selecionável */
+.tam-chip.sem-estoque { color: #8a6d1a; border-color: #e0b84a; background: #fdf4d8; }
+.tam-chip.sem-estoque:hover { border-color: #c99a1e; }
+.tam-chip.sem-estoque.sel { background: #e0b84a; border-color: #c99a1e; color: #4a3c12; }
+.vitrine-tamanhos.pede-tamanho {
+  outline: 2px solid #a5624f; outline-offset: 3px; border-radius: 8px; animation: pede-tam .3s ease;
+}
+@keyframes pede-tam {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}

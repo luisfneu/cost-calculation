@@ -58,7 +58,7 @@ from .helpers import *  # noqa: F401,F403
 def contabilidade():
     mes = request.args.get("mes", "").strip()
 
-    vendas = Venda.query.order_by(Venda.criado_em).all()
+    vendas = Venda.query.filter(Venda.status != "pre-pedido").order_by(Venda.criado_em).all()
     compras = (
         MovimentoEstoque.query.filter_by(tipo="entrada")
         .order_by(MovimentoEstoque.criado_em).all()
@@ -165,7 +165,7 @@ def contas_a_receber():
     parcelas = [p for p in Parcela.query.all() if not p.pago]
     parcelas.sort(key=lambda p: (p.vencimento or _date.max, p.venda_id, p.numero))
     # Pedidos com saldo pendente que NÃO são crediário (pagamento parcial etc.).
-    outros = [v for v in Venda.query.all() if v.saldo_receber > 0.01 and not v.parcelas]
+    outros = [v for v in Venda.query.all() if v.saldo_receber > 0.01 and not v.parcelas and not v.eh_pre_pedido]
     outros.sort(key=lambda v: (v.vencimento or _date.max, v.id))
 
     total = sum(p.valor for p in parcelas) + sum(v.saldo_receber for v in outros)
@@ -188,6 +188,8 @@ def fluxo_caixa():
     # A receber: parcelas de crediário em aberto + saldos pendentes de pedidos.
     receber = [(p.vencimento, p.valor) for p in Parcela.query.filter_by(pago=False).all()]
     for v in Venda.query.all():
+        if v.eh_pre_pedido:
+            continue
         if v.saldo_receber > 0.01 and not v.parcelas:
             receber.append((v.vencimento, v.saldo_receber))
     # A pagar: despesas em aberto.
@@ -308,7 +310,7 @@ def excluir_despesa(despesa_id):
 
 @bp.route("/relatorio")
 def relatorio():
-    todas = Venda.query.all()
+    todas = Venda.query.filter(Venda.status != "pre-pedido").all()
     anos = sorted({v.criado_em.year for v in todas if v.criado_em}, reverse=True)
     ano_sel = request.args.get("ano", "").strip()
     if ano_sel.isdigit():
@@ -407,7 +409,7 @@ def relatorio():
 @bp.route("/vendas/exportar.csv")
 def exportar_vendas_csv():
     linhas = []
-    for v in Venda.query.order_by(Venda.criado_em).all():
+    for v in Venda.query.filter(Venda.status != "pre-pedido").order_by(Venda.criado_em).all():
         itens = "; ".join(f"{i.quantidade:g}x {i.peca.nome} ({i.tamanho})" for i in v.itens)
         linhas.append([
             v.id, v.criado_em.strftime("%d/%m/%Y %H:%M"), v.cliente_nome, itens,
@@ -428,7 +430,7 @@ def exportar_receber_csv():
         [v.id, v.cliente_nome, v.criado_em.strftime("%d/%m/%Y"),
          v.vencimento.strftime("%d/%m/%Y") if v.vencimento else "", f"{v.receita:.2f}",
          "vencida" if v.vencida else "a vencer"]
-        for v in Venda.query.filter_by(pago=False).all()
+        for v in Venda.query.filter_by(pago=False).filter(Venda.status != "pre-pedido").all()
     ]
     return _csv_response(
         ["Pedido", "Cliente", "Data", "Vencimento", "Valor", "Situação"],

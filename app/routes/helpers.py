@@ -51,7 +51,7 @@ from ..models import (
     dinheiro,
 )
 
-__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit']
+__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes']
 
 
 def _usuario_atual():
@@ -380,11 +380,13 @@ def _render_historico():
         vendas = [v for v in vendas if v.criado_em and v.criado_em.date() >= de]
     if ate:
         vendas = [v for v in vendas if v.criado_em and v.criado_em.date() <= ate]
+    # Pré-pedidos aparecem na lista, mas não entram nos totais (ainda não confirmados).
+    confirmadas = [v for v in vendas if not v.eh_pre_pedido]
     totais = {
-        "receita": sum(v.receita for v in vendas),
-        "custo": sum(v.custo_total for v in vendas),
-        "lucro": sum(v.lucro for v in vendas),
-        "qtd": sum(v.quantidade_total for v in vendas),
+        "receita": sum(v.receita for v in confirmadas),
+        "custo": sum(v.custo_total for v in confirmadas),
+        "lucro": sum(v.lucro for v in confirmadas),
+        "qtd": sum(v.quantidade_total for v in confirmadas),
     }
     vendas_pag, pagina, total_paginas = _paginar(vendas)
     return render_template(
@@ -651,3 +653,79 @@ def _salvar_itens_kit(kit):
         if qtd <= 0:
             qtd = 1.0
         kit.itens.append(KitItem(peca_id=pid, quantidade=qtd))
+
+
+def _frete_opcoes(cep_destino, peso_g=0.0, altura_cm=0.0, largura_cm=0.0, comprimento_cm=0.0):
+    """Consulta o Melhor Envio e devolve (opcoes, erro).
+
+    opcoes: lista de {nome, preco, prazo, rapido?} (a mais rápida + as mais baratas).
+    erro:   mensagem (str) ou None. Dimensões em 0 caem para um padrão razoável.
+    """
+    import json
+    import urllib.request
+
+    token = os.environ.get("MELHOR_ENVIO_TOKEN", "").strip()
+    cep_origem = os.environ.get("CEP_ORIGEM", "").strip()
+    if not token or not cep_origem:
+        return [], "Frete não configurado. Defina MELHOR_ENVIO_TOKEN e CEP_ORIGEM."
+
+    cep = re.sub(r"\D", "", cep_destino or "")
+    if len(cep) != 8:
+        return [], "CEP de destino inválido."
+
+    payload = {
+        "from": {"postal_code": re.sub(r"\D", "", cep_origem)},
+        "to": {"postal_code": cep},
+        "package": {
+            "weight": (float(peso_g) / 1000) or 0.3,   # kg
+            "height": float(altura_cm) or 5,
+            "width": float(largura_cm) or 20,
+            "length": float(comprimento_cm) or 30,
+        },
+    }
+    req = urllib.request.Request(
+        "https://melhorenvio.com.br/api/v2/me/shipment/calculate",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json", "Accept": "application/json",
+            "Authorization": f"Bearer {token}", "User-Agent": "cost-calculation",
+        },
+    )
+    try:
+        # ProxyHandler({}) explícito: NÃO consulta o proxy do sistema (evita o
+        # crash de fork-safety do Obj-C no macOS dentro do worker do Gunicorn).
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=15) as resp:
+            dados = json.loads(resp.read())
+    except Exception as e:  # noqa: BLE001
+        return [], f"Falha ao consultar frete: {e}"
+
+    def _preco(o):
+        try:
+            return float(o["preco"])
+        except (TypeError, ValueError):
+            return float("inf")
+
+    opcoes = [
+        {"nome": o.get("name"), "preco": o.get("price"), "prazo": o.get("delivery_time")}
+        for o in dados if not o.get("error") and o.get("price")
+    ]
+    # Mantém a mais barata de cada serviço (sem repetir nome).
+    unicas = {}
+    for o in opcoes:
+        if o["nome"] not in unicas or _preco(o) < _preco(unicas[o["nome"]]):
+            unicas[o["nome"]] = o
+    lista = list(unicas.values())
+
+    # Seleciona: a mais rápida + as mais baratas (sem repetir), no máx. 4.
+    selecionadas = []
+    if lista:
+        rapida = min(lista, key=lambda o: ((o.get("prazo") or 999), _preco(o)))
+        rapida["rapido"] = True
+        selecionadas.append(rapida)
+        for o in sorted(lista, key=_preco):
+            if len(selecionadas) >= 4:
+                break
+            if o is not rapida:
+                selecionadas.append(o)
+    return selecionadas, None

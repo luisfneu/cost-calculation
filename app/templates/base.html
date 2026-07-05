@@ -28,7 +28,7 @@
       {% set g_cat = ['main.listar_pecas','main.form_peca','main.detalhe_peca','main.listar_insumos','main.form_insumo','main.detalhe_insumo','main.listar_kits','main.vitrine','main.listar_colecoes','main.form_colecao'] %}
       {% set g_est = ['main.inventario','main.inventario_insumos','main.listar_ordens','main.detalhe_ordem','main.nova_ordem','main.nova_ordem_from_minimos','main.historico'] %}
       {% set g_ven = ['main.listar_vendas','main.registrar_venda','main.visualizar_venda','main.editar_venda','main.listar_encomendas','main.registrar_encomenda','main.listar_cupons','main.listar_vales','main.devolucao_venda'] %}
-      {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm'] %}
+      {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm','main.listar_leads'] %}
       {% set g_fin = ['main.contabilidade','main.contas_a_receber','main.fluxo_caixa','main.listar_despesas','main.relatorio'] %}
       {% set g_sys = ['main.listar_usuarios','main.auditoria','main.configuracoes'] %}
       <div class="collapse navbar-collapse justify-content-end" id="navmenu">
@@ -70,6 +70,9 @@
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_clientes','main.detalhe_cliente'] }}" href="{{ url_for('main.listar_clientes') }}">Todos os clientes</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.crm' }}" href="{{ url_for('main.crm') }}"><i class="bi bi-heart"></i> CRM (aniversários / reativação)</a></li>
+              {% if session.admin %}
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_leads' }}" href="{{ url_for('main.listar_leads') }}"><i class="bi bi-person-plus"></i> Leads da vitrine{% if leads_pendentes %} <span class="badge text-bg-danger">{{ leads_pendentes }}</span>{% endif %}</a></li>
+              {% endif %}
             </ul>
           </div>
           <div class="nav-item dropdown {{ 'ativo' if ep in g_fin }}">
