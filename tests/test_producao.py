@@ -4,7 +4,7 @@
 def test_ordem_suficiente_conclui(client, app, seed):
     from app.models import Insumo, OrdemProducao, Peca
     pid = seed["peca"]
-    r = client.post("/producao/nova", data={
+    r = client.post("/console/erp/producao/nova", data={
         "descricao": "Teste", "peca_id": [str(pid)], "tamanho": ["P"], "quantidade": ["3"],
     }, follow_redirects=True)
     assert r.status_code == 200
@@ -14,7 +14,7 @@ def test_ordem_suficiente_conclui(client, app, seed):
         assert ordem.insumos_suficientes is True
         estoque_p_antes = Peca.query.get(pid).estoque_por_tamanho["P"]
 
-    client.post(f"/producao/{oid}/concluir", follow_redirects=True)
+    client.post(f"/console/erp/producao/{oid}/concluir", follow_redirects=True)
     with app.app_context():
         ordem = OrdemProducao.query.get(oid)
         p = Peca.query.get(pid)
@@ -27,7 +27,7 @@ def test_ordem_suficiente_conclui(client, app, seed):
 def test_lista_compras_quando_falta_insumo(client, app, seed):
     from app.models import OrdemProducao
     pid = seed["peca"]  # tecido 100m; 60 peças => 120m > estoque
-    client.post("/producao/nova", data={
+    client.post("/console/erp/producao/nova", data={
         "peca_id": [str(pid)], "tamanho": ["M"], "quantidade": ["60"],
     }, follow_redirects=True)
     with app.app_context():
@@ -40,8 +40,8 @@ def test_lista_compras_quando_falta_insumo(client, app, seed):
 def test_ordem_de_minimos(client, app, seed):
     from app.models import OrdemProducao
     pid = seed["peca"]
-    client.post("/estoque/inventario", data={f"cont_{pid}_P": "1", f"min_{pid}_P": "5"})
-    r = client.get("/producao/de-minimos", follow_redirects=True)
+    client.post("/console/erp/estoque/inventario", data={f"cont_{pid}_P": "1", f"min_{pid}_P": "5"})
+    r = client.get("/console/erp/producao/de-minimos", follow_redirects=True)
     assert r.status_code == 200
     with app.app_context():
         ordem = OrdemProducao.query.order_by(OrdemProducao.id.desc()).first()

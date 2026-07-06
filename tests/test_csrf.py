@@ -24,12 +24,12 @@ def app_csrf():
 
 
 def test_login_tem_token(app_csrf):
-    body = app_csrf.test_client().get("/login").get_data(as_text=True)
+    body = app_csrf.test_client().get("/console/erp/login").get_data(as_text=True)
     assert 'name="csrf_token"' in body
 
 
 def test_post_sem_token_bloqueado(app_csrf):
-    r = app_csrf.test_client().post("/login", data={"senha": "test"})
+    r = app_csrf.test_client().post("/console/erp/login", data={"senha": "test"})
     assert r.status_code == 400  # CSRF ausente → rejeitado
 
 
@@ -40,5 +40,5 @@ def test_meta_token_nas_paginas(app_csrf):
         s["logado"] = True
         s["usuario"] = "Admin"
         s["admin"] = True
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/console/erp/").get_data(as_text=True)
     assert 'name="csrf-token"' in body   # meta usada pelo JS que injeta o token

@@ -33,7 +33,7 @@ def test_confirmar_lead_so_cria_cliente_e_vincula(client, app):
         pid = p.id
     r = _fazer_pedido(client, {"peca": pid}, [{"id": pid, "tam": "M", "qtd": 1}])
     d = r.get_json()
-    client.post(f"/leads/{d['lead_id']}/confirmar", follow_redirects=True)
+    client.post(f"/console/erp/leads/{d['lead_id']}/confirmar", follow_redirects=True)
     with app.app_context():
         lead = Lead.query.get(d["lead_id"])
         assert lead.status == "confirmado" and lead.cliente_id
@@ -50,7 +50,7 @@ def test_confirmar_pedido_efetiva_estoque_e_producao(client, app, seed):
         {"id": seed["peca"], "tam": "GG", "qtd": 1},   # sem estoque → produzir
     ])
     vid = r.get_json()["pedido_id"]
-    client.post(f"/vendas/{vid}/confirmar-pedido", follow_redirects=True)
+    client.post(f"/console/erp/vendas/{vid}/confirmar-pedido", follow_redirects=True)
     with app.app_context():
         venda = Venda.query.get(vid)
         assert venda.status == "realizado"
@@ -66,18 +66,18 @@ def test_encomendas_so_apos_confirmar(client, app, seed):
     r = _fazer_pedido(client, seed, [{"id": seed["peca"], "tam": "GG", "qtd": 1}])
     vid = r.get_json()["pedido_id"]
     # antes de confirmar: não aparece em Encomendas
-    assert "Vestido Flor" not in client.get("/encomendas").get_data(as_text=True)
-    client.post(f"/vendas/{vid}/confirmar-pedido", follow_redirects=True)
-    assert "Vestido Flor" in client.get("/encomendas").get_data(as_text=True)
+    assert "Vestido Flor" not in client.get("/console/erp/encomendas").get_data(as_text=True)
+    client.post(f"/console/erp/vendas/{vid}/confirmar-pedido", follow_redirects=True)
+    assert "Vestido Flor" in client.get("/console/erp/encomendas").get_data(as_text=True)
 
 
 def test_bloqueia_envio_com_producao_pendente(client, app, seed):
     from app.models import Venda
     r = _fazer_pedido(client, seed, [{"id": seed["peca"], "tam": "GG", "qtd": 1}])
     vid = r.get_json()["pedido_id"]
-    client.post(f"/vendas/{vid}/confirmar-pedido", follow_redirects=True)
+    client.post(f"/console/erp/vendas/{vid}/confirmar-pedido", follow_redirects=True)
     # pré-pedido confirmado, mas GG a produzir → não pode enviar
-    body = client.post(f"/vendas/{vid}/status/enviado", follow_redirects=True).get_data(as_text=True)
+    body = client.post(f"/console/erp/vendas/{vid}/status/enviado", follow_redirects=True).get_data(as_text=True)
     assert "não produzidos" in body or "produção" in body.lower()
     with app.app_context():
         assert Venda.query.get(vid).status != "enviado"
@@ -86,5 +86,5 @@ def test_bloqueia_envio_com_producao_pendente(client, app, seed):
 def test_pre_pedido_fora_dos_relatorios(client, app, seed):
     # pré-pedido não deve contar na receita do relatório
     _fazer_pedido(client, seed, [{"id": seed["peca"], "tam": "M", "qtd": 1}])
-    body = client.get("/relatorio").get_data(as_text=True)
+    body = client.get("/console/erp/relatorio").get_data(as_text=True)
     assert "Sem vendas no período" in body or "R$ 0,00" in body

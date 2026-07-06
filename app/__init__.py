@@ -17,7 +17,7 @@ from .extensions import cache, limiter
 from .models import Parametro, db
 
 # Versão exibida em /health (útil para saber o que está no ar). Suba a cada release.
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 FUSO_PADRAO = "America/Sao_Paulo"
 
@@ -92,8 +92,9 @@ def create_app(config_class=Config):
     migrate.init_app(app, db, directory=_MIGRATIONS_DIR, render_as_batch=True)
     csrf.init_app(app)  # proteção CSRF em todos os POST (token injetado nos forms)
 
-    from .routes import bp
-    app.register_blueprint(bp)
+    from .routes import bp, publico_bp
+    app.register_blueprint(publico_bp)                     # vitrine + APIs públicas na raiz
+    app.register_blueprint(bp, url_prefix="/console/erp")  # ERP (sistema) sob prefixo
 
     @app.template_filter("moeda")
     def moeda(valor):

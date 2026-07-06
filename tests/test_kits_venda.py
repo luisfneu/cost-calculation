@@ -4,7 +4,7 @@
 def test_kit_crud_e_preco_normal(client, app, seed):
     from app.models import Kit
     pid = seed["peca"]
-    client.post("/kits/novo", data={
+    client.post("/console/erp/kits/novo", data={
         "nome": "Combo", "preco": "300",
         "peca_id": [str(pid)], "quantidade": ["2"],
     }, follow_redirects=True)
@@ -19,7 +19,7 @@ def test_kit_crud_e_preco_normal(client, app, seed):
 def test_venda_baixa_estoque(client, app, seed):
     from app.models import Peca, Venda
     pid = seed["peca"]  # P = 5
-    r = client.post("/vendas/nova", data={
+    r = client.post("/console/erp/vendas/nova", data={
         "cliente_id": str(seed["cliente"]),
         "peca_id": [str(pid)], "tamanho": ["P"], "quantidade": ["2"],
         "preco_unitario": ["200"], "desconto": ["0"],

@@ -58,7 +58,7 @@ from ..models import (
     VendaItem,
     db,
 )
-from . import bp
+from . import bp, publico_bp
 from .helpers import *  # noqa: F401,F403
 
 _LOGIN_FALHAS = {}    # ip -> [timestamps de falhas recentes]
@@ -81,7 +81,7 @@ def _login_ok(ip):
     _LOGIN_FALHAS.pop(ip, None)
 
 
-@bp.route("/health")
+@publico_bp.route("/health")
 @limiter.exempt
 def health():
     """Liveness/readiness: 200 se o app e o banco respondem; 503 se o banco falha."""

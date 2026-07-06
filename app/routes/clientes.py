@@ -134,7 +134,7 @@ def crm():
 
     # Mensagem de parabéns (com quebras de linha) por aniversariante.
     # Usa a URL pública configurada; senão, o endereço local da rede.
-    vitrine_url = Parametro.obter("vitrine_url", "") or url_for("main.vitrine_publica", _external=True)
+    vitrine_url = Parametro.obter("vitrine_url", "") or url_for("publico.vitrine_publica", _external=True)
     msgs_parabens = {}
     for c in aniversariantes:
         cup = cupons_aniv.get(c.id)

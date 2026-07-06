@@ -2,7 +2,7 @@
 
 
 def _cria_venda(client, seed, qtd=2):
-    client.post("/vendas/nova", data={
+    client.post("/console/erp/vendas/nova", data={
         "cliente_id": str(seed["cliente"]),
         "peca_id": [str(seed["peca"])], "tamanho": ["P"], "quantidade": [str(qtd)],
         "preco_unitario": ["200"], "desconto": ["0"],
@@ -17,7 +17,7 @@ def _cria_venda(client, seed, qtd=2):
 def test_get_edicao_usa_tela_de_venda(client, app, seed):
     with app.app_context():
         vid = _cria_venda(client, seed)
-    body = client.get(f"/vendas/{vid}/editar").get_data(as_text=True)
+    body = client.get(f"/console/erp/vendas/{vid}/editar").get_data(as_text=True)
     assert f"Editar pedido #{vid}" in body
     assert "Salvar alterações" in body
     assert "peca-picker" in body          # mesmo seletor de peça com foto da venda
@@ -35,7 +35,7 @@ def test_edicao_ajusta_estoque_e_preserva_pagamento(client, app, seed):
         db.session.commit()
 
     # edita para 1 unidade
-    client.post(f"/vendas/{vid}/editar", data={
+    client.post(f"/console/erp/vendas/{vid}/editar", data={
         "peca_id": [str(seed["peca"])], "tamanho": ["P"], "quantidade": ["1"],
         "preco_unitario": ["200"], "desconto": ["0"],
         "frete": "", "marketplace_pct": "", "desconto_total": "",
@@ -56,7 +56,7 @@ def test_edicao_ajusta_estoque_e_preserva_pagamento(client, app, seed):
 def test_edicao_bloqueia_sem_itens(client, app, seed):
     with app.app_context():
         vid = _cria_venda(client, seed)
-    r = client.post(f"/vendas/{vid}/editar", data={
+    r = client.post(f"/console/erp/vendas/{vid}/editar", data={
         "peca_id": [""], "tamanho": [""], "quantidade": [""],
         "preco_unitario": [""], "desconto": [""],
     }, follow_redirects=True)

@@ -57,7 +57,7 @@ def test_pagina_crm(client, app):
         db.session.add(Cliente(nome="Aniversariante", telefone="11999998888",
                                nascimento=date(1990, hoje.month, hoje.day)))
         db.session.commit()
-    body = client.get("/crm").get_data(as_text=True)
+    body = client.get("/console/erp/crm").get_data(as_text=True)
     assert "Aniversariantes do mês" in body
     assert "Aniversariante" in body
     assert "wa.me/5511999998888" in body

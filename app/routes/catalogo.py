@@ -55,7 +55,7 @@ from ..models import (
     db,
     dinheiro,
 )
-from . import bp
+from . import bp, publico_bp
 from .helpers import *  # noqa: F401,F403
 
 
@@ -548,7 +548,8 @@ def etiqueta_peca(peca_id):
     return render_template("etiqueta.html", peca=peca, tamanhos=TAMANHOS, tam_sel=tam_sel)
 
 
-@bp.route("/publico/vitrine")
+@publico_bp.route("/")                 # raiz: www.sabrinahansen.com.br
+@publico_bp.route("/publico/vitrine")  # alias (mantém links antigos)
 @limiter.limit("60 per minute")
 @cache.cached(timeout=60, query_string=True)
 def vitrine_publica():
@@ -589,7 +590,7 @@ def vitrine_publica():
     )
 
 
-@bp.route("/publico/frete", methods=["POST"])
+@publico_bp.route("/publico/frete", methods=["POST"])
 @csrf.exempt
 @limiter.limit("30 per minute")
 def frete_publico():
@@ -630,7 +631,7 @@ def frete_publico():
     return {"ok": True, "opcoes": opcoes}
 
 
-@bp.route("/publico/cupom", methods=["POST"])
+@publico_bp.route("/publico/cupom", methods=["POST"])
 @csrf.exempt
 @limiter.limit("20 per minute")
 def cupom_publico():
@@ -667,7 +668,7 @@ def _pix_publico(valor, txid):
                         Parametro.obter("pix_cidade", ""), valor, txid[:25])
 
 
-@bp.route("/publico/pedido", methods=["POST"])
+@publico_bp.route("/publico/pedido", methods=["POST"])
 @csrf.exempt
 @limiter.limit("10 per minute")
 def pedido_publico():
