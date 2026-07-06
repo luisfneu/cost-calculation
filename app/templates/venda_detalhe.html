@@ -16,7 +16,61 @@
   </div>
 </div>
 
-{% if venda.tipo == 'venda' %}
+{% if venda.eh_pre_pedido %}
+<!-- Pré-pedido da vitrine: revisar e confirmar -->
+<div class="card bg-white mb-4" style="max-width:820px; margin:0 auto;">
+  <div class="card-body text-center">
+    <span class="badge text-bg-warning mb-2">Pré-pedido · aguardando confirmação</span>
+    <p class="text-muted small mb-3">
+      Pedido feito pela vitrine{% if venda.lead_id %} · lead #{{ venda.lead_id }}{% endif %}.
+      Confira os itens e confirme para efetivar (baixa o estoque disponível; os itens sem estoque vão para Encomendas).
+    </p>
+    {% if venda.itens_a_produzir %}
+    <div class="alert alert-warning small text-start">
+      <strong>{{ venda.itens_a_produzir|length }} item(ns) sem estoque</strong> (irão para produção/Encomendas):
+      {% for it in venda.itens_a_produzir %}<div>• {{ it.quantidade|num }}× {{ it.peca.nome }} ({{ it.tamanho }})</div>{% endfor %}
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('main.confirmar_pedido', venda_id=venda.id) }}">
+      <button class="btn btn-primary btn-lg"><i class="bi bi-check-lg"></i> Confirmar pedido</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if not venda.eh_pre_pedido and venda.itens_a_produzir %}
+<!-- Itens de encomenda (produção) — vínculo com a venda -->
+<div class="card bg-white mb-4" style="max-width:820px; margin:0 auto;">
+  <div class="card-body">
+    <h2 class="h6 mb-2"><i class="bi bi-journal-text"></i> Itens de encomenda (produção)</h2>
+    {% if venda.producao_pendente %}
+      <div class="small text-warning mb-2"><i class="bi bi-exclamation-triangle"></i> Produção pendente — envio/entrega bloqueados até concluir.</div>
+    {% else %}
+      <div class="small text-success mb-2"><i class="bi bi-check-circle"></i> Produção concluída.</div>
+    {% endif %}
+    <table class="table table-sm align-middle mb-2">
+      <tbody>
+      {% for it in venda.itens_a_produzir %}
+        <tr>
+          <td>{{ it.quantidade|num }}× {{ it.peca.nome }} <span class="badge text-bg-light">{{ it.tamanho }}</span></td>
+          <td class="text-end">
+            {% if it.produzido %}<span class="badge text-bg-success">produzido</span>
+            {% else %}
+              <form method="post" action="{{ url_for('main.marcar_item_produzido', item_id=it.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-success" title="Marcar como produzido"><i class="bi bi-check-lg"></i> Produzido</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <a href="{{ url_for('main.listar_encomendas') }}" class="btn btn-sm btn-outline-primary">Ir para Encomendas</a>
+  </div>
+</div>
+{% endif %}
+
+{% if venda.tipo == 'venda' and not venda.eh_pre_pedido %}
 <!-- Fluxo do pedido (stepper) -->
 <div class="card bg-white mb-4 no-print" style="max-width:820px; margin:0 auto;">
   <div class="card-body">
@@ -97,23 +151,25 @@
     </div>
 
     <!-- Itens -->
-    <table class="table align-middle">
+    <div class="table-responsive">
+    <table class="table align-middle tabela-cartao">
       <thead class="table-light">
         <tr><th>Peça</th><th>Tam.</th><th class="text-end">Qtd</th><th class="text-end">Preço un.</th><th class="text-end">Desc.</th><th class="text-end">Subtotal</th></tr>
       </thead>
       <tbody>
       {% for it in venda.itens %}
         <tr>
-          <td>{{ it.peca.nome }}</td>
-          <td><span class="badge text-bg-light">{{ it.tamanho }}</span></td>
-          <td class="text-end">{{ it.quantidade | num }}</td>
-          <td class="text-end">{{ it.preco_unitario | moeda }}</td>
-          <td class="text-end">{{ it.desconto | moeda if it.desconto else '—' }}</td>
-          <td class="text-end">{{ it.subtotal_receita | moeda }}</td>
+          <td data-label="Peça">{{ it.peca.nome }}{% if it.produzir %} <span class="badge text-bg-warning">encomenda</span>{% endif %}</td>
+          <td data-label="Tam."><span class="badge text-bg-light">{{ it.tamanho }}</span></td>
+          <td data-label="Qtd" class="text-end">{{ it.quantidade | num }}</td>
+          <td data-label="Preço un." class="text-end">{{ it.preco_unitario | moeda }}</td>
+          <td data-label="Desc." class="text-end">{{ it.desconto | moeda if it.desconto else '—' }}</td>
+          <td data-label="Subtotal" class="text-end">{{ it.subtotal_receita | moeda }}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
+    </div>
 
     <!-- Totais -->
     <div class="row justify-content-end">

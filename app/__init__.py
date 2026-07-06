@@ -188,7 +188,8 @@ def _configurar_logging(app):
     Pasta configurável por LOG_DIR (padrão instance/logs). Mantém 5 arquivos de
     até ~1 MB, evitando que o log cresça sem limite.
     """
-    log_dir = os.environ.get("LOG_DIR", os.path.join(app.instance_path, "logs"))
+    # `or` (não `get` com default) para tratar LOG_DIR="" (vazio no .env) como não definido.
+    log_dir = os.environ.get("LOG_DIR") or os.path.join(app.instance_path, "logs")
     try:
         os.makedirs(log_dir, exist_ok=True)
     except OSError as exc:  # pragma: no cover - ambiente sem permissão de escrita

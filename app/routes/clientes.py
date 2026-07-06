@@ -34,6 +34,7 @@ from ..models import (
     Insumo,
     Kit,
     KitItem,
+    Lead,
     MovimentoEstoque,
     MovimentoPeca,
     OrdemProducao,
@@ -229,3 +230,94 @@ def cliente_rapido():
     db.session.add(c)
     db.session.commit()
     return {"ok": True, "id": c.id, "nome": c.nome, "cep": c.cep}
+
+
+# ----- Leads (pré-cadastros da vitrine pública) -----
+@bp.route("/leads")
+def listar_leads():
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    status = request.args.get("status", "pendente").strip()
+    query = Lead.query
+    if status in ("pendente", "confirmado", "descartado"):
+        query = query.filter_by(status=status)
+    leads = query.order_by(Lead.criado_em.desc()).all()
+    contagem = {
+        "pendente": Lead.query.filter_by(status="pendente").count(),
+        "confirmado": Lead.query.filter_by(status="confirmado").count(),
+        "descartado": Lead.query.filter_by(status="descartado").count(),
+    }
+    return render_template("leads.html", leads=leads, status=status, contagem=contagem)
+
+
+@bp.route("/leads/<int:lead_id>/confirmar", methods=["POST"])
+def confirmar_lead(lead_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    lead = Lead.query.get_or_404(lead_id)
+    if lead.status == "confirmado" and lead.cliente_id:
+        flash("Este lead já foi confirmado.", "erro")
+        return redirect(url_for("main.listar_leads"))
+
+    # Evita duplicar: se já existe cliente com o mesmo WhatsApp, vincula a ele.
+    cliente = None
+    if lead.whatsapp_numero:
+        cliente = next(
+            (c for c in Cliente.query.all() if c.whatsapp_numero == lead.whatsapp_numero),
+            None,
+        )
+    if cliente is None:
+        cliente = Cliente(
+            nome=lead.nome, instagram=lead.instagram, telefone=lead.telefone,
+            cep=lead.cep, logradouro=lead.logradouro, numero=lead.numero,
+            complemento=lead.complemento, bairro=lead.bairro,
+            cidade=lead.cidade, uf=lead.uf,
+        )
+        db.session.add(cliente)
+        db.session.flush()
+
+    # Vincula o cliente ao(s) pré-pedido(s) que este lead gerou (não efetiva a venda;
+    # o pedido é confirmado depois na própria tela do pedido).
+    vendas_lead = Venda.query.filter_by(lead_id=lead.id).all()
+    for v in vendas_lead:
+        if not v.cliente_id:
+            v.cliente_id = cliente.id
+            v.comprador = cliente.nome
+
+    lead.status = "confirmado"
+    lead.cliente_id = cliente.id
+    lead.confirmado_em = datetime.now()
+    db.session.commit()
+    _log("lead_confirmado", f"lead #{lead.id} → cliente #{cliente.id} ({cliente.nome})")
+    flash(f"Cliente {cliente.nome} confirmado.", "sucesso")
+    if vendas_lead:
+        flash(f"Abra o pré-pedido #{vendas_lead[0].id} para confirmá-lo.", "sucesso")
+        return redirect(url_for("main.visualizar_venda", venda_id=vendas_lead[0].id))
+    return redirect(url_for("main.detalhe_cliente", cliente_id=cliente.id))
+
+
+@bp.route("/leads/<int:lead_id>/descartar", methods=["POST"])
+def descartar_lead(lead_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    lead = Lead.query.get_or_404(lead_id)
+    lead.status = "descartado"
+    db.session.commit()
+    _log("lead_descartado", f"lead #{lead.id} ({lead.nome})")
+    flash("Lead descartado.", "sucesso")
+    return redirect(url_for("main.listar_leads"))
+
+
+@bp.route("/leads/<int:lead_id>/excluir", methods=["POST"])
+def excluir_lead(lead_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    lead = Lead.query.get_or_404(lead_id)
+    db.session.delete(lead)
+    db.session.commit()
+    flash("Lead excluído.", "sucesso")
+    return redirect(url_for("main.listar_leads"))

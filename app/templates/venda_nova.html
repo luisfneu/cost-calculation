@@ -36,7 +36,8 @@
       <div id="cliente-dados" class="mb-3 small" style="display:none"></div>
 
       <div class="section-titulo">Itens</div>
-      <table class="table align-middle" id="tabela-itens">
+      <div class="table-responsive">
+      <table class="table align-middle" id="tabela-itens" style="min-width:640px">
         <thead class="table-light">
           <tr><th style="width:32%">Peça</th><th>Tamanho</th><th>Qtd</th><th>Preço un. (R$)</th><th>Desc. (R$)</th><th>Subtotal</th><th></th></tr>
         </thead>
@@ -45,6 +46,7 @@
           <tr class="fw-bold"><td colspan="5" class="text-end">Total dos itens</td><td id="total-produtos">R$ 0,00</td><td></td></tr>
         </tfoot>
       </table>
+      </div>
       <div class="d-flex flex-wrap gap-2 mb-4">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-scan" title="Escanear código / QR"><i class="bi bi-upc-scan"></i></button>
         <button type="button" class="btn btn-outline-primary btn-sm" id="add-item">+ Adicionar item</button>
@@ -94,12 +96,14 @@
       {% if encomenda %}
       <!-- Pagamento (só na encomenda; na venda o pagamento é feito depois de registrar) -->
       <div class="section-titulo">Pagamento</div>
-      <table class="table table-sm align-middle" id="tabela-pagamentos">
+      <div class="table-responsive">
+      <table class="table table-sm align-middle" id="tabela-pagamentos" style="min-width:520px">
         <thead class="table-light">
           <tr><th>Forma</th><th>Valor (R$)</th><th>Parcelas</th><th>Taxa %</th><th></th></tr>
         </thead>
         <tbody id="linhas-pagamentos"></tbody>
       </table>
+      </div>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
         <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar pagamento</button>
         <button type="button" class="btn btn-link btn-sm p-0" id="pagar-tudo">preencher com o valor total</button>

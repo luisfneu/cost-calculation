@@ -68,13 +68,39 @@ def registrar_venda():
 
 @bp.route("/encomendas")
 def listar_encomendas():
-    encomendas = (
-        Venda.query.filter_by(tipo="encomenda").order_by(Venda.criado_em.desc()).all()
+    """Itens que precisam ser produzidos, atrelados às suas vendas.
+
+    Inclui itens marcados 'produzir' (faltantes de um pedido) e os itens de
+    pedidos do tipo 'encomenda' (feitos sob medida), enquanto não produzidos.
+    """
+    itens = (
+        VendaItem.query.join(Venda)
+        .filter(
+            VendaItem.produzido.is_(False),
+            Venda.status != "pre-pedido",          # só depois de confirmar o pedido
+            db.or_(VendaItem.produzir.is_(True), Venda.tipo == "encomenda"),
+        )
+        .order_by(Venda.criado_em.desc(), VendaItem.id).all()
     )
-    encomendas, pagina, total_paginas = _paginar(encomendas)
-    return render_template(
-        "encomendas.html", encomendas=encomendas, pagina=pagina, total_paginas=total_paginas
-    )
+    # Agrupa por venda, preservando a ordem (venda mais recente primeiro).
+    grupos = []
+    indice = {}
+    for it in itens:
+        if it.venda_id not in indice:
+            indice[it.venda_id] = len(grupos)
+            grupos.append((it.venda, []))
+        grupos[indice[it.venda_id]][1].append(it)
+    return render_template("encomendas.html", grupos=grupos, total_itens=len(itens))
+
+
+@bp.route("/encomendas/item/<int:item_id>/produzido", methods=["POST"])
+def marcar_item_produzido(item_id):
+    item = VendaItem.query.get_or_404(item_id)
+    item.produzido = not item.produzido
+    db.session.commit()
+    estado = "produzido" if item.produzido else "reaberto"
+    _log("producao_encomenda", f"item #{item.id} ({item.peca.nome}) {estado}")
+    return redirect(request.referrer or url_for("main.listar_encomendas"))
 
 
 @bp.route("/encomendas/nova", methods=["GET", "POST"])
@@ -103,12 +129,48 @@ def baixar_estoque_venda(venda_id):
     return redirect(request.referrer or url_for("main.listar_vendas"))
 
 
+@bp.route("/vendas/<int:venda_id>/confirmar-pedido", methods=["POST"])
+def confirmar_pedido(venda_id):
+    """Confirma um pré-pedido da vitrine: efetiva a venda (baixa o estoque dos
+    itens disponíveis; os de produção seguem para Encomendas)."""
+    venda = Venda.query.get_or_404(venda_id)
+    if venda.status != "pre-pedido":
+        flash("Este pedido já foi confirmado.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+    baixou = False
+    for it in venda.itens:
+        if it.produzir:
+            continue   # item de encomenda: baixa/produz depois (tela de Encomendas)
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade -= it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="saida", quantidade=it.quantidade,
+            observacao=f"Venda #{venda.id} (vitrine)",
+        ))
+        baixou = True
+    venda.estoque_baixado = baixou
+    venda.status = "realizado"
+    db.session.commit()
+    _log("pedido_confirmado", f"pré-pedido #{venda.id} confirmado")
+    n_prod = len(venda.itens_a_produzir)
+    extra = f" · {n_prod} item(ns) para produzir em Encomendas" if n_prod else ""
+    flash(f"Pedido #{venda.id} confirmado{extra}.", "sucesso")
+    return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+
+
 @bp.route("/vendas/<int:venda_id>/status/<novo>", methods=["POST"])
 def alterar_status_venda(venda_id, novo):
     venda = Venda.query.get_or_404(venda_id)
+    if venda.status == "pre-pedido":
+        flash("Confirme o pré-pedido antes de avançar o status.", "erro")
+        return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
     if novo not in Venda.FLUXO:
         flash("Status inválido.", "erro")
         return redirect(request.referrer or url_for("main.listar_vendas"))
+    # Não libera envio/entrega enquanto houver item de encomenda por produzir.
+    if novo in ("enviado", "entregue") and venda.producao_pendente:
+        flash("Há itens de encomenda ainda não produzidos. Conclua a produção antes de enviar/entregar.", "erro")
+        return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
     # Só libera envio/entrega depois do pagamento — crediário já é liberado.
     if novo in ("enviado", "entregue") and venda.saldo_receber > 0.01 and not venda.eh_crediario:
         flash("Registre o pagamento antes de enviar/entregar o pedido.", "erro")
@@ -341,71 +403,17 @@ def receber_pagamentos(venda_id):
 
 @bp.route("/frete/calcular", methods=["POST"])
 def calcular_frete():
-    import json
-    import urllib.request
-
-    token = os.environ.get("MELHOR_ENVIO_TOKEN", "").strip()
-    cep_origem = os.environ.get("CEP_ORIGEM", "").strip()
-    if not token or not cep_origem:
-        return {"ok": False, "erro": "Frete não configurado. Defina MELHOR_ENVIO_TOKEN e CEP_ORIGEM."}, 400
-
-    cep_destino = re.sub(r"\D", "", request.form.get("cep", ""))
-    if len(cep_destino) != 8:
-        return {"ok": False, "erro": "CEP de destino inválido."}, 400
-
-    payload = {
-        "from": {"postal_code": re.sub(r"\D", "", cep_origem)},
-        "to": {"postal_code": cep_destino},
-        "package": {
-            "weight": _to_float(request.form.get("peso")) / 1000 or 0.3,   # kg
-            "height": _to_float(request.form.get("altura")) or 5,
-            "width": _to_float(request.form.get("largura")) or 20,
-            "length": _to_float(request.form.get("comprimento")) or 30,
-        },
-    }
-    req = urllib.request.Request(
-        "https://melhorenvio.com.br/api/v2/me/shipment/calculate",
-        data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json", "Accept": "application/json",
-            "Authorization": f"Bearer {token}", "User-Agent": "cost-calculation",
-        },
+    opcoes, erro = _frete_opcoes(
+        request.form.get("cep", ""),
+        peso_g=_to_float(request.form.get("peso")),
+        altura_cm=_to_float(request.form.get("altura")),
+        largura_cm=_to_float(request.form.get("largura")),
+        comprimento_cm=_to_float(request.form.get("comprimento")),
     )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            dados = json.loads(resp.read())
-        opcoes = [
-            {"nome": o.get("name"), "preco": o.get("price"), "prazo": o.get("delivery_time")}
-            for o in dados if not o.get("error") and o.get("price")
-        ]
-
-        def _preco(o):
-            try:
-                return float(o["preco"])
-            except (TypeError, ValueError):
-                return float("inf")
-
-        # Remove repetições pelo nome do serviço (mantém a mais barata de cada).
-        unicas = {}
-        for o in opcoes:
-            if o["nome"] not in unicas or _preco(o) < _preco(unicas[o["nome"]]):
-                unicas[o["nome"]] = o
-        lista = list(unicas.values())
-
-        # Seleciona: a mais rápida + as 3 mais baratas (sem repetir), no máx. 4.
-        selecionadas = []
-        if lista:
-            rapida = min(lista, key=lambda o: ((o.get("prazo") or 999), _preco(o)))
-            rapida["rapido"] = True
-            selecionadas.append(rapida)
-            for o in sorted(lista, key=_preco):
-                if len(selecionadas) >= 4:
-                    break
-                if o is not rapida:
-                    selecionadas.append(o)
-        return {"ok": True, "opcoes": selecionadas}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "erro": f"Falha ao consultar frete: {e}"}, 502
+    if erro:
+        codigo = 400 if "config" in erro or "CEP" in erro else 502
+        return {"ok": False, "erro": erro}, codigo
+    return {"ok": True, "opcoes": opcoes}
 
 
 @bp.route("/cupons")

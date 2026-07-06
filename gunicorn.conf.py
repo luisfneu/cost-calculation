@@ -18,3 +18,8 @@ graceful_timeout = 30
 accesslog = "-"   # loga acessos no stdout
 errorlog = "-"
 loglevel = os.environ.get("LOG_LEVEL", "info")
+
+# macOS: evita o abort de "fork safety" do Objective-C quando um worker forkado
+# toca em frameworks do sistema (ex.: detecção de proxy via _scproxy). Sem efeito
+# em Linux. Rede de segurança — o código de frete já evita o proxy do sistema.
+raw_env = ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES"]
