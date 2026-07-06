@@ -18,14 +18,14 @@ def _venda(app, seed, pago_valor=0.0, vencimento=None):
 
 def test_pedido_com_saldo_aparece(client, app, seed):
     vid = _venda(app, seed, pago_valor=50.0)  # total 200, pago 50, saldo 150
-    body = client.get("/contas-a-receber").get_data(as_text=True)
+    body = client.get("/console/erp/contas-a-receber").get_data(as_text=True)
     assert f"#{vid}" in body
     assert "150,00" in body
 
 
 def test_pedido_quitado_nao_aparece(client, app, seed):
     vid = _venda(app, seed, pago_valor=200.0)  # quitado
-    body = client.get("/contas-a-receber").get_data(as_text=True)
+    body = client.get("/console/erp/contas-a-receber").get_data(as_text=True)
     assert f"#{vid}" not in body
     assert "Nenhuma parcela de crediário em aberto" in body
 
@@ -33,7 +33,7 @@ def test_pedido_quitado_nao_aparece(client, app, seed):
 def test_vencido_destacado(client, app, seed):
     ontem = date.today() - timedelta(days=1)
     _venda(app, seed, pago_valor=0.0, vencimento=ontem)
-    body = client.get("/contas-a-receber").get_data(as_text=True)
+    body = client.get("/console/erp/contas-a-receber").get_data(as_text=True)
     assert "vencido" in body
     assert "table-danger" in body
 
@@ -46,7 +46,7 @@ def test_fluxo_caixa_atraso_e_despesa(client, app, seed):
         db.session.add(Despesa(descricao="Aluguel", valor=300.0,
                                vencimento=date.today() + timedelta(days=5), pago=False))
         db.session.commit()
-    body = client.get("/fluxo-caixa").get_data(as_text=True)
+    body = client.get("/console/erp/fluxo-caixa").get_data(as_text=True)
     assert "Fluxo de caixa projetado" in body
     assert "Em atraso" in body
     assert "200,00" in body   # a receber em atraso
@@ -59,7 +59,7 @@ def test_fluxo_caixa_ignora_despesa_paga(client, app, seed):
         db.session.add(Despesa(descricao="Paga", valor=999.0,
                                vencimento=date.today(), pago=True))
         db.session.commit()
-    body = client.get("/fluxo-caixa").get_data(as_text=True)
+    body = client.get("/console/erp/fluxo-caixa").get_data(as_text=True)
     assert "999,00" not in body
 
 
@@ -82,7 +82,7 @@ def test_relatorio_comparativo_mensal(client, app, seed):
     from app.models import Pagamento  # noqa: F401 (usado em _venda_em)
     _venda_em(app, seed, date(2026, 5, 10), 150)
     _venda_em(app, seed, date(2026, 6, 10), 250)  # +66% vs mês anterior
-    body = client.get("/relatorio?ano=2026").get_data(as_text=True)
+    body = client.get("/console/erp/relatorio?ano=2026").get_data(as_text=True)
     assert "Comparativo mensal" in body
     assert "Salvar PDF" in body
     assert "mai/2026" in body and "jun/2026" in body

@@ -62,7 +62,7 @@ def test_cupom_aniversario(client, app):
         db.session.commit()
         cid = c.id
 
-    r = client.post(f"/crm/cupom-aniversario/{cid}", follow_redirects=True)
+    r = client.post(f"/console/erp/crm/cupom-aniversario/{cid}", follow_redirects=True)
     assert r.status_code == 200
     with app.app_context():
         cup = Cupom.query.filter_by(cliente_id=cid).first()
@@ -71,7 +71,7 @@ def test_cupom_aniversario(client, app):
         assert cup.valido is True
 
     # Não duplica: segundo clique avisa que já existe.
-    r2 = client.post(f"/crm/cupom-aniversario/{cid}", follow_redirects=True)
+    r2 = client.post(f"/console/erp/crm/cupom-aniversario/{cid}", follow_redirects=True)
     with app.app_context():
         assert Cupom.query.filter_by(cliente_id=cid).count() == 1
 
@@ -83,7 +83,7 @@ def test_crm_mensagem_tem_vitrine_e_quebras(client, app):
         db.session.add(Cliente(nome="Bday", telefone="5551999990000",
                                nascimento=date(1985, hoje.month, min(hoje.day + 1, 28))))
         db.session.commit()
-    html = client.get("/crm").get_data(as_text=True)
+    html = client.get("/console/erp/crm").get_data(as_text=True)
     # A mensagem do WhatsApp deve ter quebras de linha (%0A) e a vitrine.
     assert "%0A" in html
     assert "publico/vitrine" in html or "vitrine" in html
@@ -98,7 +98,7 @@ def test_filtro_por_tipo(client, app):
         db.session.add(Peca(nome="Vestido A", tipo="Vestido", preco_etiqueta=100, sku="SH-A"))
         db.session.add(Peca(nome="Blusa B", tipo="Blusa", preco_etiqueta=80, sku="SH-B"))
         db.session.commit()
-    corpo = client.get("/pecas?tipo=Vestido").get_data(as_text=True)
+    corpo = client.get("/console/erp/pecas?tipo=Vestido").get_data(as_text=True)
     assert "Vestido A" in corpo and "Blusa B" not in corpo
 
 
@@ -113,7 +113,7 @@ def test_url_vitrine_configuravel(client, app):
         db.session.add(Cliente(nome="Cli", telefone="5551999991111",
                                nascimento=date(1990, hoje.month, min(hoje.day + 1, 28))))
         db.session.commit()
-    html = client.get("/crm").get_data(as_text=True)
+    html = client.get("/console/erp/crm").get_data(as_text=True)
     assert "minhaloja.com.br" in html
 
 
@@ -121,7 +121,7 @@ def test_url_vitrine_configuravel(client, app):
 # Página de erro amigável
 # ----------------------------------------------------------------------------
 def test_pagina_404(client):
-    r = client.get("/rota-inexistente-xyz")
+    r = client.get("/console/erp/rota-inexistente-xyz")
     assert r.status_code == 404
     assert "Voltar ao painel" in r.get_data(as_text=True)
 
@@ -135,10 +135,10 @@ def test_login_throttling(app):
     c = app.test_client()
     # Erra a senha _LOGIN_MAX vezes.
     for _ in range(_LOGIN_MAX):
-        r = c.post("/login", data={"senha": "errada"})
+        r = c.post("/console/erp/login", data={"senha": "errada"})
         assert r.status_code == 200
     # Próxima tentativa é bloqueada (429), mesmo com a senha certa.
-    r = c.post("/login", data={"senha": "test"})
+    r = c.post("/console/erp/login", data={"senha": "test"})
     assert r.status_code == 429
     _LOGIN_FALHAS.clear()
 
@@ -162,7 +162,7 @@ def test_uploader_fotos_principal(client, app, tmp_path):
             "nome": "Peça Fotos", "preco_etiqueta": "100", "principal": "nova:1",
             "fotos": [(_png("red"), "a.png"), (_png("green"), "b.png"), (_png("blue"), "c.png")],
         }
-        r = client.post("/pecas/nova", data=data, content_type="multipart/form-data",
+        r = client.post("/console/erp/pecas/nova", data=data, content_type="multipart/form-data",
                         follow_redirects=True)
         assert r.status_code == 200
         p = Peca.query.filter_by(nome="Peça Fotos").first()
@@ -181,7 +181,7 @@ def test_toggle_vitrine_publica(client, app):
         db.session.commit()
     pub = client.get("/publico/vitrine").get_data(as_text=True)
     assert "Publica On" in pub and "Publica Off" not in pub
-    interna = client.get("/vitrine").get_data(as_text=True)
+    interna = client.get("/console/erp/vitrine").get_data(as_text=True)
     assert "Publica On" in interna and "Publica Off" in interna
 
 
@@ -206,7 +206,7 @@ def test_fuso_horario_dt(app):
 # ----------------------------------------------------------------------------
 def test_cookie_httponly(app):
     c = app.test_client()
-    r = c.post("/login", data={"senha": "test"})
+    r = c.post("/console/erp/login", data={"senha": "test"})
     cookies = " ".join(r.headers.get_all("Set-Cookie"))
     assert "HttpOnly" in cookies and "SameSite=Lax" in cookies
 
@@ -216,7 +216,7 @@ def test_cookie_httponly(app):
 # ----------------------------------------------------------------------------
 def test_despesa_valor_arredondado(client, app):
     from app.models import Despesa
-    client.post("/despesas/nova", data={"descricao": "Conta luz", "valor": "10,999"},
+    client.post("/console/erp/despesas/nova", data={"descricao": "Conta luz", "valor": "10,999"},
                 follow_redirects=True)
     with app.app_context():
         d = Despesa.query.filter_by(descricao="Conta luz").first()
@@ -235,8 +235,8 @@ def test_cupom_pessoal_restrito(client, app):
         db.session.commit()
         aid, bid = a.id, b.id
     # Cliente errado -> rejeitado
-    r = client.post("/cupons/validar", data={"codigo": "NIVERA", "cliente_id": bid})
+    r = client.post("/console/erp/cupons/validar", data={"codigo": "NIVERA", "cliente_id": bid})
     assert r.get_json()["ok"] is False
     # Cliente dono -> ok
-    r = client.post("/cupons/validar", data={"codigo": "NIVERA", "cliente_id": aid})
+    r = client.post("/console/erp/cupons/validar", data={"codigo": "NIVERA", "cliente_id": aid})
     assert r.get_json()["ok"] is True

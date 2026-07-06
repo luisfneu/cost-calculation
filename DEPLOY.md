@@ -8,6 +8,12 @@ roteador. Barato (túnel grátis) e os dados ficam com você.
 Internet ──HTTPS──> Cloudflare ──túnel──> cloudflared ──HTTP──> Gunicorn (127.0.0.1:8000) ──> app
 ```
 
+### Endereços
+- **Raiz `/`** → **vitrine pública** (loja para o cliente). Ex.: `https://www.sabrinahansen.com.br/`
+- **`/console/erp/`** → **sistema (ERP)**, protegido por login. Ex.: `.../console/erp/login`
+- **`/health`** → checagem de status (para monitor externo).
+- APIs públicas da vitrine: `/publico/frete`, `/publico/cupom`, `/publico/pedido`.
+
 ---
 
 ## 0) Uma vez: preparar o ambiente

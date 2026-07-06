@@ -43,7 +43,7 @@ def db(app):
 def client(app):
     """Client HTTP já autenticado (sessão logada)."""
     c = app.test_client()
-    c.post("/login", data={"senha": "test"})
+    c.post("/console/erp/login", data={"senha": "test"})
     return c
 
 

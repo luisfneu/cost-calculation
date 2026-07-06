@@ -35,7 +35,7 @@ def _cria_venda(app, seed, paga=False):
 
 def test_recibo_pagina(client, app, seed):
     vid = _cria_venda(app, seed, paga=True)
-    r = client.get(f"/vendas/{vid}/recibo")
+    r = client.get(f"/console/erp/vendas/{vid}/recibo")
     assert r.status_code == 200
     body = r.get_data(as_text=True)
     assert "Total" in body and "quitado" in body
@@ -43,7 +43,7 @@ def test_recibo_pagina(client, app, seed):
 
 def test_botao_whatsapp_no_detalhe(client, app, seed):
     vid = _cria_venda(app, seed, paga=True)
-    body = client.get(f"/vendas/{vid}").get_data(as_text=True)
+    body = client.get(f"/console/erp/vendas/{vid}").get_data(as_text=True)
     assert "Enviar recibo" in body
     assert "wa.me/5511999998888" in body
 
@@ -51,12 +51,12 @@ def test_botao_whatsapp_no_detalhe(client, app, seed):
 def test_pix_config_no_detalhe(client, app, seed):
     vid = _cria_venda(app, seed, paga=False)  # tem saldo
     # sem config: PIX é null (chave não aparece no JS)
-    assert "email@exemplo.com" not in client.get(f"/vendas/{vid}").get_data(as_text=True)
-    client.post("/configuracoes", data={
+    assert "email@exemplo.com" not in client.get(f"/console/erp/vendas/{vid}").get_data(as_text=True)
+    client.post("/console/erp/configuracoes", data={
         "pix_chave": "email@exemplo.com", "pix_nome": "Sabrina",
         "pix_cidade": "Sao Paulo", "meta_mensal": "0",
     })
-    body = client.get(f"/vendas/{vid}").get_data(as_text=True)
+    body = client.get(f"/console/erp/vendas/{vid}").get_data(as_text=True)
     # com config: a chave entra no PIX do JS e o modal do QR está na página
     assert "email@exemplo.com" in body
     assert 'id="modal-pix"' in body
@@ -73,11 +73,11 @@ def test_validar_cupom_endpoint(client, app):
                              validade=date.today() - timedelta(days=1)))
         db.session.commit()
 
-    ok = client.post("/cupons/validar", data={"codigo": "verao10"}).get_json()
+    ok = client.post("/console/erp/cupons/validar", data={"codigo": "verao10"}).get_json()
     assert ok["ok"] is True and ok["tipo"] == "percentual" and ok["valor"] == 10
 
-    exp = client.post("/cupons/validar", data={"codigo": "EXPIRADO"}).get_json()
+    exp = client.post("/console/erp/cupons/validar", data={"codigo": "EXPIRADO"}).get_json()
     assert exp["ok"] is False
 
-    nao = client.post("/cupons/validar", data={"codigo": "NAOEXISTE"}).get_json()
+    nao = client.post("/console/erp/cupons/validar", data={"codigo": "NAOEXISTE"}).get_json()
     assert nao["ok"] is False

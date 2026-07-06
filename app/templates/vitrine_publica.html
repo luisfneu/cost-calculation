@@ -50,7 +50,7 @@
         </select>
       </div>
       <div class="col-6 col-md-1 d-grid"><button class="btn btn-sm btn-light">Buscar</button></div>
-      {% if q or tipo or colecao or ordem %}<div class="col-auto"><a href="{{ url_for('main.vitrine_publica') }}" class="btn btn-sm btn-link text-white">limpar</a></div>{% endif %}
+      {% if q or tipo or colecao or ordem %}<div class="col-auto"><a href="{{ url_for('publico.vitrine_publica') }}" class="btn btn-sm btn-link text-white">limpar</a></div>{% endif %}
     </form>
     {% if pecas %}
       <div class="row g-4 mb-4">
@@ -405,7 +405,7 @@
       if (!Object.keys(cart).length) { freteMsg.textContent = 'Seu pedido está vazio.'; return; }
       calcBtn.disabled = true;
       freteMsg.textContent = 'Calculando…';
-      fetch('{{ url_for("main.frete_publico") }}', {
+      fetch('{{ url_for("publico.frete_publico") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cep: cep, itens: itensParaFrete() }),
@@ -430,7 +430,7 @@
       if (!Object.keys(cart).length) { cupomMsg.textContent = 'Seu pedido está vazio.'; return; }
       cupomBtn.disabled = true;
       cupomMsg.textContent = 'Validando…';
-      fetch('{{ url_for("main.cupom_publico") }}', {
+      fetch('{{ url_for("publico.cupom_publico") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codigo: cod, subtotal: subtotalAtual() }),
@@ -590,7 +590,7 @@
       if (cli.telefone.replace(/\D/g, '').length < 10) { pcMsg.className = 'small mb-2 text-danger'; pcMsg.textContent = 'Informe um WhatsApp válido com DDD.'; return; }
       const btn = document.getElementById('cart-enviar-pedido');
       btn.disabled = true; pcMsg.textContent = 'Enviando…';
-      fetch('{{ url_for("main.pedido_publico") }}', {
+      fetch('{{ url_for("publico.pedido_publico") }}', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cliente: cli,

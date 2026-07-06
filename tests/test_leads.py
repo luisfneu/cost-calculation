@@ -14,17 +14,17 @@ def _novo_lead(app, **kw):
 
 def test_listar_leads_exige_admin(app):
     c = app.test_client()
-    c.post("/login", data={"senha": "test"})
+    c.post("/console/erp/login", data={"senha": "test"})
     with c.session_transaction() as s:
         s["admin"] = False
-    r = c.get("/leads", follow_redirects=False)
+    r = c.get("/console/erp/leads", follow_redirects=False)
     assert r.status_code == 302  # redirecionado (acesso restrito)
 
 
 def test_confirmar_lead_cria_cliente(client, app):
     from app.models import Cliente, Lead
     lid = _novo_lead(app, nome="Ana Vitrine", cidade="Porto Alegre", uf="RS")
-    r = client.post(f"/leads/{lid}/confirmar", follow_redirects=True)
+    r = client.post(f"/console/erp/leads/{lid}/confirmar", follow_redirects=True)
     assert r.status_code == 200
     with app.app_context():
         lead = Lead.query.get(lid)
@@ -43,7 +43,7 @@ def test_confirmar_lead_dedup_por_whatsapp(client, app):
         db.session.commit()
         antes = Cliente.query.count()
     lid = _novo_lead(app, nome="João Novo", telefone="51988887777")
-    client.post(f"/leads/{lid}/confirmar", follow_redirects=True)
+    client.post(f"/console/erp/leads/{lid}/confirmar", follow_redirects=True)
     with app.app_context():
         assert Cliente.query.count() == antes            # não duplicou
         lead = Lead.query.get(lid)
@@ -53,6 +53,6 @@ def test_confirmar_lead_dedup_por_whatsapp(client, app):
 def test_descartar_lead(client, app):
     from app.models import Lead
     lid = _novo_lead(app)
-    client.post(f"/leads/{lid}/descartar", follow_redirects=True)
+    client.post(f"/console/erp/leads/{lid}/descartar", follow_redirects=True)
     with app.app_context():
         assert Lead.query.get(lid).status == "descartado"

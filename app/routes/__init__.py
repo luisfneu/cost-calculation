@@ -50,16 +50,18 @@ from ..models import (
     db,
 )
 
+# ERP: registrado sob /console/erp (ver create_app). Rotas internas do sistema.
 bp = Blueprint("main", __name__)
-
-# Endpoints acessíveis sem login (público / estáticos).
-_PUBLICOS = {"main.login", "main.vitrine_publica", "main.frete_publico",
-             "main.cupom_publico", "main.pedido_publico", "main.health", "static"}
+# Público: registrado na raiz. Vitrine + APIs públicas (frete/cupom/pedido) + health.
+publico_bp = Blueprint("publico", __name__)
 
 
 @bp.before_app_request
 def _exigir_login():
-    if request.endpoint in _PUBLICOS:
+    # Só protege o ERP (blueprint 'main'). Público, estáticos e health ficam livres.
+    if request.blueprint != "main":
+        return None
+    if request.endpoint == "main.login":
         return None
     if not session.get("logado"):
         return redirect(url_for("main.login", next=request.path))
