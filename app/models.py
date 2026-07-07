@@ -434,6 +434,13 @@ class Cliente(db.Model):
     nome = db.Column(db.String(160), nullable=False)
     instagram = db.Column(db.String(80), default="")
     telefone = db.Column(db.String(40), default="")
+    # E-mail: login da área do cliente na vitrine. Único (case-insensitive via
+    # normalização em minúsculas na gravação). Opcional para clientes só de balcão.
+    email = db.Column(db.String(160), unique=True)
+    # Senha da conta na vitrine (só clientes que criaram login têm hash).
+    senha_hash = db.Column(db.String(255), nullable=False, default="")
+    # Opt-in de novidades/marketing (preferência da conta).
+    aceita_novidades = db.Column(db.Boolean, nullable=False, default=False)
     # Data de nascimento (para lembrete de aniversário).
     nascimento = db.Column(db.Date)
     # Tamanho habitual informado manualmente (sobrepõe o calculado).
@@ -451,6 +458,28 @@ class Cliente(db.Model):
     criado_em = db.Column(db.DateTime, default=_agora)
 
     vendas = db.relationship("Venda", back_populates="cliente")
+
+    # ----- Conta na vitrine (login por e-mail + senha) -----
+    def set_senha(self, senha):
+        self.senha_hash = generate_password_hash(senha)
+
+    def conferir_senha(self, senha) -> bool:
+        return bool(self.senha_hash) and check_password_hash(self.senha_hash, senha)
+
+    @property
+    def tem_conta(self) -> bool:
+        """Cliente com login ativo na vitrine (e-mail + senha definidos)."""
+        return bool(self.email and self.senha_hash)
+
+    @staticmethod
+    def normalizar_email(email: str) -> str:
+        return (email or "").strip().lower()
+
+    @classmethod
+    def por_email(cls, email: str):
+        """Busca por e-mail (case-insensitive). None se vazio."""
+        email = cls.normalizar_email(email)
+        return cls.query.filter(db.func.lower(cls.email) == email).first() if email else None
 
     @property
     def tem_endereco(self) -> bool:
@@ -977,8 +1006,11 @@ class Cupom(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     codigo = db.Column(db.String(40), unique=True, nullable=False)
-    tipo = db.Column(db.String(12), nullable=False, default="percentual")  # percentual | valor
-    valor = db.Column(db.Float, nullable=False, default=0.0)  # % ou R$
+    tipo = db.Column(db.String(12), nullable=False, default="percentual")  # percentual | valor | frete
+    # % (percentual), R$ (valor) ou R$ limite do desconto no frete (frete).
+    # Para tipo='frete': valor em branco (0) = frete 100% grátis; valor
+    # preenchido = desconto no frete limitado a esse valor.
+    valor = db.Column(db.Float, nullable=False, default=0.0)
     validade = db.Column(db.Date)  # None = sem validade
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     usos = db.Column(db.Integer, nullable=False, default=0)
@@ -1000,9 +1032,24 @@ class Cupom(db.Model):
         return True
 
     def desconto_para(self, subtotal: float) -> float:
+        """Desconto sobre o subtotal dos itens. Cupom de frete não entra aqui
+        (usar desconto_frete_para) — evita aplicar o mesmo cupom duas vezes."""
+        if self.tipo == "frete":
+            return 0.0
         if self.tipo == "percentual":
             return round(subtotal * self.valor / 100.0, 2)
         return min(self.valor, subtotal)
+
+    def desconto_frete_para(self, frete: float) -> float:
+        """Desconto sobre o valor do frete (só para tipo='frete'). Limitado ao
+        próprio frete — nunca gera valor negativo. valor em branco (0) no
+        cadastro do cupom = frete 100% grátis; valor preenchido = desconto até
+        esse teto."""
+        frete = frete or 0.0
+        if self.tipo != "frete" or frete <= 0:
+            return 0.0
+        limite = self.valor if self.valor and self.valor > 0 else frete
+        return round(min(limite, frete), 2)
 
 
 class Vale(db.Model):

@@ -43,8 +43,10 @@
           <td data-label="Saldo" class="text-end fw-bold {{ 'text-success' if v.saldo > 0.01 else 'text-muted' }}">{{ v.saldo | moeda }}</td>
           <td data-label="Obs." class="small text-muted">{{ v.observacao }}</td>
           <td class="text-end">
-            <form method="post" action="{{ url_for('main.desativar_vale', vale_id=v.id) }}">
-              <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if v.ativo else 'Ativar' }}</button>
+            <form method="post" action="{{ url_for('main.desativar_vale', vale_id=v.id) }}" class="d-inline-flex m-0">
+              <div class="form-check form-switch m-0 d-flex align-items-center" title="{{ 'Desativar' if v.ativo else 'Ativar' }}">
+                <input class="form-check-input m-0" type="checkbox" role="switch" onchange="this.form.submit()" {{ 'checked' if v.ativo }}>
+              </div>
             </form>
           </td>
         </tr>

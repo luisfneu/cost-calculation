@@ -23,7 +23,22 @@
   <div class="topo">
     <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:300px; max-width:80%;" loading="lazy">
     <div style="color:#fff; letter-spacing:4px; font-size:.7rem; text-transform:uppercase; margin-top:4px">Vitrine</div>
+    <div class="vitrine-conta-nav" style="margin-top:8px; font-size:.8rem; letter-spacing:1px;">
+      {% if cliente_logado %}
+        <span style="color:#fff;">Olá, {{ cliente_logado.nome.split(' ')[0] }}</span>
+        <a href="{{ url_for('publico.conta_pedidos') }}" style="color:#fff;"><i class="bi bi-bag"></i> Meus pedidos</a>
+        <a href="{{ url_for('publico.conta_preferencias') }}" style="color:#fff;"><i class="bi bi-gear"></i> Preferências</a>
+        <a href="{{ url_for('publico.conta_sair') }}" style="color:#fff;"><i class="bi bi-box-arrow-right"></i> Sair</a>
+      {% else %}
+        <a href="{{ url_for('publico.conta_entrar') }}" style="color:#fff;"><i class="bi bi-person"></i> Entrar</a>
+        <a href="{{ url_for('publico.conta_cadastro') }}" style="color:#fff;"><i class="bi bi-person-plus"></i> Criar conta</a>
+      {% endif %}
+    </div>
   </div>
+  <style>
+    .vitrine-conta-nav a { text-decoration: none; margin: 0 6px; }
+    .vitrine-conta-nav a:hover { text-decoration: underline; }
+  </style>
   <div class="container pb-5">
     <form method="get" class="row g-2 mb-4 justify-content-center">
       <div class="col-6 col-md-3">
@@ -155,6 +170,10 @@
 
         <!-- Pré-cadastro + envio do pedido -->
         <div id="cart-form" hidden class="mt-3 border-top pt-3">
+          <div id="pc-conta-banner" hidden class="alert alert-light border py-1 px-2 small mb-2"></div>
+          <div id="pc-conta-cta" hidden class="small text-muted mb-2">
+            Já é cliente? <a href="{{ url_for('publico.conta_entrar') }}">Entrar</a> para preencher automático — ou continue como convidado.
+          </div>
           <h6 class="mb-2"><i class="bi bi-person-lines-fill"></i> Seus dados</h6>
           <input type="text" id="pc-nome" class="form-control form-control-sm mb-2" placeholder="Nome completo *" autocomplete="name">
           <input type="text" id="pc-whats" class="form-control form-control-sm mb-2" placeholder="WhatsApp com DDD *" inputmode="tel" autocomplete="tel">
@@ -200,6 +219,15 @@
   <script>
   (function () {
     const WHATS = "{{ whatsapp }}";
+    // Cliente logado (para pré-preencher o checkout). null se compra como convidado.
+    const CLIENTE = {% if cliente_logado %}{{ {
+      'nome': cliente_logado.nome, 'telefone': cliente_logado.telefone,
+      'instagram': cliente_logado.instagram, 'cep': cliente_logado.cep,
+      'logradouro': cliente_logado.logradouro, 'numero': cliente_logado.numero,
+      'complemento': cliente_logado.complemento, 'bairro': cliente_logado.bairro,
+      'cidade': cliente_logado.cidade, 'uf': cliente_logado.uf,
+      'tamanho': cliente_logado.tamanho_habitual,
+    } | tojson }}{% else %}null{% endif %};
     const KEY = "sh_cart_v1";
     const fmt = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -238,6 +266,28 @@
       fab.classList.remove('cart-pulou');
       void fab.offsetWidth;              // força reflow para reiniciar a animação
       fab.classList.add('cart-pulou');
+    }
+
+    // Abre o carrinho por ~5s ao adicionar um item (para o cliente perceber a
+    // interação) e fecha sozinho. Se a pessoa mexer no carrinho, cancela o
+    // fechamento automático — ela assumiu o controle.
+    const cartEl = document.getElementById('sh-cart');
+    let cartTimer = null;
+    function abrirCarrinhoBreve() {
+      if (!cartEl || !window.bootstrap) return;
+      const oc = bootstrap.Offcanvas.getOrCreateInstance(cartEl);
+      oc.show();
+      if (cartTimer) clearTimeout(cartTimer);
+      cartTimer = setTimeout(() => { oc.hide(); cartTimer = null; }, 5000);
+    }
+    if (cartEl) {
+      const cancelarFechamento = () => {
+        if (cartTimer) { clearTimeout(cartTimer); cartTimer = null; }
+      };
+      // Qualquer interação dentro do carrinho mantém ele aberto.
+      ['mouseenter', 'pointerdown', 'focusin', 'touchstart'].forEach(ev =>
+        cartEl.addEventListener(ev, cancelarFechamento));
+      cartEl.addEventListener('hidden.bs.offcanvas', cancelarFechamento);
     }
 
     // Máscara de CEP: 00000-000.
@@ -288,11 +338,21 @@
     };
     const subtotalAtual = () =>
       Object.values(cart).reduce((s, it) => s + it.qtd * it.preco, 0);
+    // Desconto sobre os itens (cupom de frete não entra aqui — ver descontoFreteAtual).
     const descontoAtual = () => {
-      if (!cupom) return 0;
+      if (!cupom || cupom.tipo === 'frete') return 0;
       const sub = subtotalAtual();
       const d = cupom.tipo === 'percentual' ? sub * cupom.valor / 100 : Math.min(cupom.valor, sub);
       return Math.round(d * 100) / 100;
+    };
+    // Desconto sobre o frete escolhido — limitado a ele. valor em branco (0
+    // no cupom) = frete 100% grátis; valor preenchido = desconto até esse teto.
+    const descontoFreteAtual = () => {
+      if (!cupom || cupom.tipo !== 'frete') return 0;
+      const freteAtual = frete ? (parseFloat(frete.preco) || 0) : 0;
+      if (!freteAtual) return 0;
+      const limite = cupom.valor > 0 ? cupom.valor : freteAtual;
+      return Math.round(Math.min(limite, freteAtual) * 100) / 100;
     };
     function limparFrete() {   // carrinho mudou: frete e cupom precisam ser refeitos/recalculados
       frete = null; opcoesFrete = [];
@@ -362,22 +422,26 @@
       rodape.hidden = qtdTotal === 0;
       const freteValorNum = frete ? (parseFloat(frete.preco) || 0) : 0;
       const descNum = descontoAtual();
+      const descFreteNum = descontoFreteAtual();
       subEl.textContent = fmt(valorTotal);
-      if (cupom && descNum > 0) {
+      if (cupom && (descNum > 0 || descFreteNum > 0)) {
         descLinha.hidden = false;
-        descNome.textContent = cupom.codigo;
-        descValor.textContent = '−' + fmt(descNum);
+        descNome.textContent = cupom.codigo + (descFreteNum > 0 ? ' (frete)' : '');
+        descValor.textContent = '−' + fmt(descNum || descFreteNum);
       } else {
         descLinha.hidden = true;
       }
       if (frete) {
         freteLinha.hidden = false;
         freteNome.textContent = frete.nome + (frete.prazo ? ` · ${frete.prazo} dia(s)` : '');
-        freteValor.textContent = freteValorNum ? fmt(freteValorNum) : 'Grátis';
+        const freteFinal = Math.max(0, freteValorNum - descFreteNum);
+        freteValor.textContent = freteFinal ? fmt(freteFinal) : 'Grátis';
       } else {
         freteLinha.hidden = true;
       }
-      totalEl.textContent = fmt(Math.max(0, valorTotal - descNum) + freteValorNum);
+      // Baldes separados (itens / frete) evitam que um desconto de frete maior
+      // que o subtotal "suma" no arredondamento — cada um clampa só o seu lado.
+      totalEl.textContent = fmt(Math.max(0, valorTotal - descNum) + Math.max(0, freteValorNum - descFreteNum));
     }
 
     function add(dados) {
@@ -385,7 +449,7 @@
       if (!cart[key]) cart[key] = Object.assign({ qtd: 0 }, dados);
       cart[key].qtd++;
       limparFrete();                            // itens mudaram: recalcular frete
-      salvar(); render(); animarCarrinho();
+      salvar(); render(); animarCarrinho(); abrirCarrinhoBreve();
     }
     function mudar(key, delta) {
       if (!cart[key]) return;
@@ -567,10 +631,30 @@
       el.addEventListener('input', () => localStorage.setItem(KEY + '_pc_' + k, el.value));
     });
 
+    // Pré-preenche os dados quando o cliente está logado; senão mostra o CTA de login.
+    function prefillCliente() {
+      const banner = document.getElementById('pc-conta-banner');
+      const cta = document.getElementById('pc-conta-cta');
+      if (!CLIENTE) { if (cta) cta.hidden = false; return; }
+      const set = (id, v) => { const el = pcEl(id); if (el && v && !el.value) el.value = v; };
+      set('nome', CLIENTE.nome); set('whats', CLIENTE.telefone); set('insta', CLIENTE.instagram);
+      set('logradouro', CLIENTE.logradouro); set('numero', CLIENTE.numero);
+      set('complemento', CLIENTE.complemento); set('bairro', CLIENTE.bairro);
+      set('cidade', CLIENTE.cidade); set('uf', CLIENTE.uf);
+      if (CLIENTE.cep && !cepEl.value) { cepEl.value = CLIENTE.cep; mascararCep(); }
+      if (banner) {
+        banner.innerHTML = '<i class="bi bi-person-check"></i> Comprando como <strong>'
+          + CLIENTE.nome + '</strong> · <a href="{{ url_for("publico.conta_sair") }}">não é você?</a>';
+        banner.hidden = false;
+      }
+      if (cta) cta.hidden = true;
+    }
+    prefillCliente();
+
     document.getElementById('cart-abrir-form').addEventListener('click', () => {
       if (!Object.keys(cart).length) return;
       formEl.hidden = !formEl.hidden;
-      if (!formEl.hidden) formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (!formEl.hidden) { prefillCliente(); formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
     });
 
     function dadosCliente() {

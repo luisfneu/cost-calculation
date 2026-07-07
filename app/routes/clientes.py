@@ -60,7 +60,8 @@ def listar_clientes():
     query = Cliente.query
     if q:
         like = f"%{q}%"
-        query = query.filter(db.or_(Cliente.nome.ilike(like), Cliente.instagram.ilike(like)))
+        query = query.filter(db.or_(Cliente.nome.ilike(like), Cliente.instagram.ilike(like),
+                                     Cliente.email.ilike(like)))
     clientes = query.order_by(Cliente.nome).all()
     clientes, pagina, total_paginas = _paginar(clientes)
     return render_template("clientes.html", clientes=clientes, q=q, pagina=pagina, total_paginas=total_paginas)
@@ -76,10 +77,19 @@ def form_cliente(cliente_id=None):
         if not nome:
             flash("O nome do cliente é obrigatório.", "erro")
             return render_template("cliente_form.html", cliente=cliente)
+        # E-mail (login da conta na vitrine): opcional, mas único quando informado.
+        email = Cliente.normalizar_email(request.form.get("email", ""))
+        if email:
+            existente = Cliente.por_email(email)
+            if existente and (cliente is None or existente.id != cliente.id):
+                flash("Já existe um cliente com esse e-mail.", "erro")
+                return render_template("cliente_form.html", cliente=cliente)
         if cliente is None:
             cliente = Cliente()
             db.session.add(cliente)
         cliente.nome = nome
+        cliente.email = email or None
+        cliente.aceita_novidades = request.form.get("aceita_novidades") == "on"
         cliente.instagram = request.form.get("instagram", "").strip()
         cliente.telefone = request.form.get("telefone", "").strip()
         cliente.nascimento = _to_date(request.form.get("nascimento"))

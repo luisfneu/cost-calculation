@@ -69,8 +69,8 @@
       <td class="fw-bold text-success">{{ peca.preco_venda | moeda }}</td>
       <td>{{ peca.lucro | moeda }}</td>
       <td class="text-end text-nowrap">
-        <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary">Abrir</a>
-        <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Editar</a>
+        <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" title="Abrir"><i class="bi bi-eye"></i></a>
+        <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
       </td>
     </tr>
   {% endfor %}
