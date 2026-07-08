@@ -9,35 +9,25 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <style>
     body { font-family: 'Jost', sans-serif; background: #f0ece3; margin: 0; padding: 24px; text-align: center; }
-    .etiqueta {
-      width: 280px; margin: 0 auto; background: #fff; border: 1px solid #c9a96a;
-      border-radius: 10px; padding: 18px;
-    }
-    .marca { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; letter-spacing: 3px; text-transform: uppercase; }
-    .sub { font-size: .6rem; letter-spacing: 4px; text-transform: uppercase; color: #b08a4f; margin-bottom: 10px; }
-    .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; margin: 8px 0 2px; }
-    .nome .tam-badge { font-family: 'Jost'; font-size: .8rem; color: #fff; background: #b08a4f; border-radius: 6px; padding: 1px 8px; vertical-align: middle; margin-left: 6px; }
-    .colecao { font-size: .8rem; color: #6b5f52; }
-    .preco { font-size: 1.4rem; color: #b08a4f; font-weight: 500; margin: 8px 0; }
-    #qr { display: flex; justify-content: center; margin-top: 10px; }
-    .sku-txt { font-size: .7rem; letter-spacing: 1px; color: #6b5f52; margin-top: 6px; }
+    /* Moldura em volta do canvas (não sai na impressão/imagem — só guia visual). */
+    .etiqueta-wrap { display: inline-block; background: #fff; border: 1px solid #c9a96a; border-radius: 10px; padding: 4px; }
+    #etiqueta { display: block; width: 300px; height: 500px; }  /* proporção 3:5 = etiqueta 30×50mm */
     .acoes { margin-top: 20px; }
     .acoes select { font-family: 'Jost'; padding: 7px 10px; border: 1px solid #c9a96a; border-radius: 6px; margin-right: 8px; }
-    button { font-family: 'Jost'; padding: 8px 18px; border: 1px solid #b08a4f; background: #b08a4f; color: #fff; border-radius: 6px; cursor: pointer; }
+    button { font-family: 'Jost'; padding: 8px 18px; border: 1px solid #b08a4f; background: #b08a4f; color: #fff; border-radius: 6px; cursor: pointer; margin: 0 4px; }
+    button.sec { background: #fff; color: #b08a4f; }
     .aviso { color: #a5624f; font-size: .8rem; margin-top: 10px; }
-    @media print { body { background: #fff; } .acoes, .aviso { display: none; } .etiqueta { border: 1px dashed #999; } }
+    #qr-oculto { position: absolute; left: -9999px; top: -9999px; }  /* fonte do QR, fora da tela */
+    @media print {
+      body { background: #fff; padding: 0; }
+      .acoes, .aviso { display: none; }
+      .etiqueta-wrap { border: none; padding: 0; }
+    }
   </style>
 </head>
 <body>
-  <div class="etiqueta">
-    <img src="{{ url_for('static', filename='monograma.svg') }}" alt="sh" style="height:42px; margin-bottom:2px;">
-    <div class="marca">Sabrina Hansen</div>
-    <div class="sub">Atelier</div>
-    <div class="nome">{{ peca.nome }}<span class="tam-badge" id="tam-badge" style="{{ '' if tam_sel else 'display:none' }}">{{ tam_sel }}</span></div>
-    {% if peca.colecao %}<div class="colecao">{{ peca.colecao }}</div>{% endif %}
-    <div class="preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
-    <div id="qr"></div>
-    <div class="sku-txt" id="sku-txt"></div>
+  <div class="etiqueta-wrap">
+    <canvas id="etiqueta" width="900" height="1500"></canvas>  <!-- backing 3× p/ impressão nítida -->
   </div>
 
   {% if not peca.sku %}
@@ -51,37 +41,159 @@
         {% for t in tamanhos %}<option value="{{ t }}" {{ 'selected' if t == tam_sel }}>{{ t }}</option>{% endfor %}
       </select>
     </label>
-    <button onclick="window.print()">🖨️ Imprimir etiqueta</button>
+    <button onclick="window.print()">🖨️ Imprimir</button>
+    <button class="sec" id="btn-png">🖼️ Salvar imagem</button>
     <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}">voltar</a>
   </div>
 
+  <div id="qr-oculto"></div>
+
   <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
   <script>
-    const SKU = {{ (peca.sku or '') | tojson }};
-    const selTam = document.getElementById('sel-tam');
-    const badge = document.getElementById('tam-badge');
-    const skuTxt = document.getElementById('sku-txt');
-    const qrBox = document.getElementById('qr');
+    const SKU    = {{ (peca.sku or '') | tojson }};
+    const NOME   = {{ peca.nome | tojson }};
+    const COLECAO= {{ (peca.colecao or '') | tojson }};
+    const PRECO  = {{ (peca.preco_etiqueta_efetivo | moeda) | tojson }};
+    const MONO   = {{ url_for('static', filename='monograma.svg') | tojson }};
+    const GOLD = "#b08a4f", INK = "#2c2620", MUTE = "#6b5f52";
 
-    function conteudoQR(tam) {
-      // Formato lido na venda: SKU--TAMANHO (o tamanho é opcional).
-      return tam ? `${SKU}--${tam}` : SKU;
+    const canvas = document.getElementById('etiqueta');
+    const ctx = canvas.getContext('2d');
+    const selTam = document.getElementById('sel-tam');
+    const qrBox  = document.getElementById('qr-oculto');
+    const DPR = 3, W = 300, H = 500;   // design em 300×500 (30×50mm); backing 3×
+
+    let monoImg = null;
+
+    function carregarMono() {
+      return new Promise((res) => {
+        const img = new Image();
+        img.onload = () => { monoImg = img; res(); };
+        img.onerror = () => res();          // sem monograma: segue sem quebrar
+        img.src = MONO;
+      });
     }
-    function gerar() {
+
+    // Gera o QR num canvas oculto e devolve seu elemento <canvas> p/ desenhar na etiqueta.
+    function qrCanvas(texto) {
+      qrBox.innerHTML = '';
+      new QRCode(qrBox, { text: texto || ' ', width: 240, height: 240,
+                          colorDark: INK, colorLight: "#ffffff" });
+      return qrBox.querySelector('canvas');
+    }
+
+    function conteudoQR(tam) { return tam ? `${SKU}--${tam}` : SKU; }  // formato lido na venda
+
+    function desenhar() {
       const tam = selTam.value;
       const texto = conteudoQR(tam);
-      qrBox.innerHTML = '';
-      new QRCode(qrBox, {
-        text: texto || ' ',
-        width: 120, height: 120,
-        colorDark: "#2c2620", colorLight: "#ffffff",
-      });
-      skuTxt.textContent = texto;
-      badge.textContent = tam;
-      badge.style.display = tam ? '' : 'none';
+
+      ctx.save();
+      ctx.scale(DPR, DPR);
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+
+      // borda tracejada da etiqueta (área de corte)
+      ctx.strokeStyle = "#c9a96a"; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      ctx.strokeRect(6, 6, W - 12, H - 12); ctx.setLineDash([]);
+
+      ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+
+      // monograma (grande, destaque na impressão)
+      if (monoImg && monoImg.width) {
+        const h = 88, w = monoImg.width / monoImg.height * h;
+        ctx.drawImage(monoImg, (W - w) / 2, 30, w, h);
+      }
+      // marca + sub
+      ctx.fillStyle = INK;
+      ctx.font = '600 20px "Cormorant Garamond", serif';
+      espacado("SABRINA HANSEN", W / 2, 150, 3);
+      ctx.fillStyle = GOLD;
+      ctx.font = '11px "Jost", sans-serif';
+      espacado("ATELIER", W / 2, 168, 4);
+
+      // nome (encolhe se não couber) + badge de tamanho
+      let fs = 24;
+      ctx.fillStyle = INK;
+      const maxW = W - 50;
+      do { ctx.font = `600 ${fs}px "Cormorant Garamond", serif`; fs -= 1; }
+      while (ctx.measureText(NOME).width > maxW && fs > 12);
+      const nomeW = ctx.measureText(NOME).width;
+
+      ctx.font = 'bold 12px "Jost", sans-serif';
+      const bTxtW = tam ? ctx.measureText(tam).width : 0;
+      const bW = tam ? bTxtW + 18 : 0;                 // padding 9px cada lado
+      const grupoW = nomeW + (tam ? bW + 8 : 0);
+      const x0 = (W - grupoW) / 2;
+      const nomeY = 222;
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = INK;
+      ctx.font = `600 ${fs + 1}px "Cormorant Garamond", serif`;
+      ctx.fillText(NOME, x0, nomeY);
+      if (tam) {
+        const bx = x0 + nomeW + 8, by = nomeY - 15, bh = 20;
+        ctx.fillStyle = GOLD;
+        roundRect(bx, by, bW, bh, 5); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.font = 'bold 12px "Jost", sans-serif';
+        ctx.textAlign = "center";
+        ctx.fillText(tam, bx + bW / 2, by + 14);
+      }
+      ctx.textAlign = "center";
+
+      // coleção
+      if (COLECAO) {
+        ctx.fillStyle = MUTE; ctx.font = '14px "Cormorant Garamond", serif';
+        ctx.fillText(COLECAO, W / 2, 246);
+      }
+      // preço
+      ctx.fillStyle = GOLD; ctx.font = '500 26px "Jost", sans-serif';
+      ctx.fillText(PRECO, W / 2, 288);
+
+      // QR
+      const qc = qrCanvas(texto);
+      const qs = 140, qx = (W - qs) / 2, qy = 310;
+      if (qc) ctx.drawImage(qc, qx, qy, qs, qs);
+
+      // sku
+      ctx.fillStyle = MUTE; ctx.font = '12px "Jost", sans-serif';
+      ctx.fillText(texto, W / 2, qy + qs + 24);
+
+      ctx.restore();
     }
-    selTam.addEventListener('change', gerar);
-    gerar();
+
+    // texto com espaçamento entre letras (letter-spacing) centralizado
+    function espacado(txt, cx, y, sp) {
+      const larg = [...txt].reduce((a, c) => a + ctx.measureText(c).width + sp, -sp);
+      let x = cx - larg / 2;
+      ctx.textAlign = "left";
+      for (const c of txt) { ctx.fillText(c, x, y); x += ctx.measureText(c).width + sp; }
+      ctx.textAlign = "center";
+    }
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    async function boot() {
+      await carregarMono();
+      try { await document.fonts.ready; } catch (e) {}   // fontes carregadas antes de medir/desenhar
+      desenhar();
+      selTam.addEventListener('change', desenhar);
+      document.getElementById('btn-png').addEventListener('click', () => {
+        const tam = selTam.value;
+        const a = document.createElement('a');
+        a.download = `etiqueta-${SKU || 'peca'}${tam ? '-' + tam : ''}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      });
+    }
+    boot();
   </script>
 </body>
 </html>

@@ -1,0 +1,38 @@
+{% extends "conta_base.html" %}
+{% set largo = true %}
+{% block titulo %}Meus pedidos{% endblock %}
+{% block conteudo %}
+<div class="conta-card wide">
+  <div class="card">
+    <div class="card-body">
+      <h1 class="conta-tit h4 mb-1">Olá, {{ cliente.nome }}</h1>
+      <p class="text-muted small mb-3">Seus pedidos ficam registrados aqui.</p>
+      {% if pedidos %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Pedido</th><th>Data</th><th>Itens</th><th class="text-end">Total</th><th>Situação</th></tr></thead>
+            <tbody>
+              {% for v in pedidos %}
+              <tr>
+                <td>#{{ v.id }}</td>
+                <td class="small">{{ v.criado_em | dt }}</td>
+                <td class="small">
+                  {% for it in v.itens %}
+                    {{ it.quantidade | num }}× {{ it.peca.nome if it.peca else '—' }}{% if it.tamanho %} ({{ it.tamanho }}){% endif %}{% if not loop.last %}<br>{% endif %}
+                  {% endfor %}
+                </td>
+                <td class="text-end">{{ v.receita | moeda }}</td>
+                <td><span class="badge bg-secondary">{{ v.status_label }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-center text-muted my-4">Você ainda não fez pedidos.
+          <br><a href="{{ url_for('publico.vitrine_publica') }}">Ver a vitrine</a>.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -13,14 +13,20 @@
       </div>
       <div class="col-md-2">
         <label class="form-label">Tipo</label>
-        <select name="tipo" class="form-select">
+        <select name="tipo" class="form-select" id="cupom-tipo">
           <option value="percentual">% percentual</option>
           <option value="valor">R$ valor fixo</option>
+          <option value="frete">Desconto no frete</option>
         </select>
       </div>
       <div class="col-md-2">
-        <label class="form-label">Valor</label>
-        <input type="text" name="valor" class="form-control" placeholder="10">
+        <label class="form-label">
+          Valor
+          <i class="bi bi-question-circle text-muted" id="cupom-valor-ajuda" hidden
+             data-bs-toggle="tooltip" data-bs-placement="top"
+             title="Em branco = frete 100% grátis. Preenchido = desconto no frete limitado a esse valor."></i>
+        </label>
+        <input type="text" name="valor" id="cupom-valor" class="form-control" placeholder="10">
       </div>
       <div class="col-md-2">
         <label class="form-label">Validade</label>
@@ -34,6 +40,20 @@
     </form>
   </div>
 </div>
+<script>
+(function () {
+  const tipo = document.getElementById('cupom-tipo');
+  const ajuda = document.getElementById('cupom-valor-ajuda');
+  const valor = document.getElementById('cupom-valor');
+  function alternar() {
+    const frete = tipo.value === 'frete';
+    ajuda.hidden = !frete;
+    valor.placeholder = frete ? 'em branco = grátis' : '10';
+  }
+  tipo.addEventListener('change', alternar);
+  alternar();
+})();
+</script>
 
 <div class="card bg-white">
   <div class="card-body">
@@ -44,17 +64,25 @@
       {% for c in cupons %}
         <tr class="{{ '' if c.valido else 'text-muted' }}">
           <td data-label="Código"><strong>{{ c.codigo }}</strong></td>
-          <td data-label="Desconto">{% if c.tipo == 'percentual' %}{{ c.valor | num }}%{% else %}{{ c.valor | moeda }}{% endif %}</td>
+          <td data-label="Desconto">
+            {% if c.tipo == 'percentual' %}{{ c.valor | num }}%
+            {% elif c.tipo == 'frete' %}<i class="bi bi-truck"></i> {% if c.valor %}até {{ c.valor | moeda }} de frete{% else %}frete grátis{% endif %}
+            {% else %}{{ c.valor | moeda }}{% endif %}
+          </td>
           <td data-label="Validade">{{ c.validade.strftime('%d/%m/%Y') if c.validade else '—' }}</td>
           <td data-label="Usos">{{ c.usos }}{% if c.max_usos %} / {{ c.max_usos }}{% endif %}</td>
           <td data-label="Status">{% if c.valido %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">inativo/expirado</span>{% endif %}</td>
           <td class="text-end text-nowrap">
-            <form method="post" action="{{ url_for('main.toggle_cupom', cupom_id=c.id) }}" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if c.ativo else 'Ativar' }}</button>
-            </form>
-            <form method="post" action="{{ url_for('main.excluir_cupom', cupom_id=c.id) }}" class="d-inline" data-confirm="Excluir cupom?">
-              <button class="btn btn-sm btn-outline-danger">Excluir</button>
-            </form>
+            <div class="d-inline-flex align-items-center gap-2">
+              <form method="post" action="{{ url_for('main.toggle_cupom', cupom_id=c.id) }}" class="d-flex m-0">
+                <div class="form-check form-switch m-0 d-flex align-items-center" title="{{ 'Desativar' if c.ativo else 'Ativar' }}">
+                  <input class="form-check-input m-0" type="checkbox" role="switch" onchange="this.form.submit()" {{ 'checked' if c.ativo }}>
+                </div>
+              </form>
+              <form method="post" action="{{ url_for('main.excluir_cupom', cupom_id=c.id) }}" class="d-flex m-0" data-confirm="Excluir cupom?">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
           </td>
         </tr>
       {% endfor %}

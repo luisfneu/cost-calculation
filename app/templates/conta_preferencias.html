@@ -1,0 +1,65 @@
+{% extends "conta_base.html" %}
+{% set largo = true %}
+{% block titulo %}Preferências{% endblock %}
+{% block conteudo %}
+<div class="conta-card wide">
+  <div class="card">
+    <div class="card-body">
+      <h1 class="conta-tit h4 mb-3">Minhas preferências</h1>
+      <form method="post" action="{{ url_for('publico.conta_preferencias') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Nome*</label>
+            <input type="text" name="nome" class="form-control" required value="{{ cliente.nome }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">E-mail*</label>
+            <input type="email" name="email" class="form-control" required value="{{ cliente.email or '' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">WhatsApp</label>
+            <input type="tel" name="telefone" class="form-control" value="{{ cliente.telefone or '' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Tamanho habitual</label>
+            <select name="tamanho_habitual" class="form-select">
+              <option value="">—</option>
+              {% for t in ['PP', 'P', 'M', 'G', 'GG'] %}
+                <option value="{{ t }}" {{ 'selected' if cliente.tamanho_habitual == t }}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <hr class="my-3">
+        <div class="text-muted small mb-2"><i class="bi bi-truck"></i> Endereço para entrega</div>
+        <div class="row g-2">
+          <div class="col-4 col-md-3"><input type="text" name="cep" class="form-control form-control-sm" placeholder="CEP" value="{{ cliente.cep or '' }}"></div>
+          <div class="col-8 col-md-6"><input type="text" name="logradouro" class="form-control form-control-sm" placeholder="Rua" value="{{ cliente.logradouro or '' }}"></div>
+          <div class="col-4 col-md-3"><input type="text" name="numero" class="form-control form-control-sm" placeholder="Nº" value="{{ cliente.numero or '' }}"></div>
+          <div class="col-12 col-md-6"><input type="text" name="complemento" class="form-control form-control-sm" placeholder="Complemento" value="{{ cliente.complemento or '' }}"></div>
+          <div class="col-12 col-md-6"><input type="text" name="bairro" class="form-control form-control-sm" placeholder="Bairro" value="{{ cliente.bairro or '' }}"></div>
+          <div class="col-9 col-md-9"><input type="text" name="cidade" class="form-control form-control-sm" placeholder="Cidade" value="{{ cliente.cidade or '' }}"></div>
+          <div class="col-3 col-md-3"><input type="text" name="uf" class="form-control form-control-sm" placeholder="UF" maxlength="2" value="{{ cliente.uf or '' }}"></div>
+        </div>
+
+        <hr class="my-3">
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="aceita_novidades" id="nov" {{ 'checked' if cliente.aceita_novidades }}>
+          <label class="form-check-label small" for="nov">Quero receber novidades e lançamentos</label>
+        </div>
+
+        <details class="mb-3">
+          <summary class="small text-muted">Trocar senha</summary>
+          <div class="mt-2" style="max-width:320px">
+            <input type="password" name="nova_senha" class="form-control form-control-sm" placeholder="Nova senha (mín. 6)" autocomplete="new-password">
+          </div>
+        </details>
+
+        <button class="btn btn-dark">Salvar preferências</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

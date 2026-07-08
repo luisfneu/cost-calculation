@@ -417,12 +417,22 @@
     const descTotal = num(document.getElementById('in-desconto').value);
     const cortesia = document.getElementById('chk-cortesia').checked;
     const comissao = totalItens * mkt / 100;
-    // Desconto do cupom (prévia) — mesma regra do servidor: sobre o total dos itens.
+    // Desconto do cupom (prévia) — mesma regra do servidor: percentual/valor
+    // incidem sobre o total dos itens; frete incide sobre o frete (limitado a
+    // ele; sem "cortesia" o frete já é 0, então o desconto também é 0).
     let cupomDesc = 0;
     if (window.__CUPOM) {
-      cupomDesc = window.__CUPOM.tipo === 'percentual'
-        ? totalItens * window.__CUPOM.valor / 100
-        : Math.min(window.__CUPOM.valor, totalItens);
+      if (window.__CUPOM.tipo === 'percentual') {
+        cupomDesc = totalItens * window.__CUPOM.valor / 100;
+      } else if (window.__CUPOM.tipo === 'frete') {
+        const freteEfetivo = cortesia ? 0 : frete;
+        if (freteEfetivo > 0) {
+          const limite = window.__CUPOM.valor > 0 ? window.__CUPOM.valor : freteEfetivo;
+          cupomDesc = Math.min(limite, freteEfetivo);
+        }
+      } else {
+        cupomDesc = Math.min(window.__CUPOM.valor, totalItens);
+      }
       cupomDesc = Math.round(cupomDesc * 100) / 100;
     }
     const valorTotal = totalItens + (cortesia ? 0 : frete) - descTotal - cupomDesc;
@@ -538,12 +548,51 @@
   });
   corpo.addEventListener('input', recalcular);
   corpo.addEventListener('change', recalcular);
+  // O menu é filho de uma célula dentro de .table-responsive (overflow-x:auto),
+  // que corta qualquer coisa posicionada em 'absolute'. Ao abrir, promovemos o
+  // menu para 'fixed' com coordenadas calculadas a partir do botão — assim ele
+  // escapa do corte e fica sempre legível, ainda que a linha esteja no fim da
+  // tabela ou perto da borda da tela.
+  function abrirPicker(toggle, menu) {
+    const r = toggle.getBoundingClientRect();
+    const alturaMax = 320;
+    const espacoAbaixo = window.innerHeight - r.bottom;
+    menu.style.position = 'fixed';
+    menu.style.left = r.left + 'px';
+    menu.style.width = r.width + 'px';
+    menu.style.right = 'auto';
+    menu.style.margin = '0';
+    if (espacoAbaixo < alturaMax && r.top > espacoAbaixo) {
+      // Pouco espaço abaixo: abre para cima do botão.
+      menu.style.top = 'auto';
+      menu.style.bottom = (window.innerHeight - r.top) + 'px';
+    } else {
+      menu.style.top = (r.bottom + 2) + 'px';
+      menu.style.bottom = 'auto';
+    }
+    menu.classList.add('aberto');
+  }
+  function fecharPicker(menu) {
+    menu.classList.remove('aberto');
+    menu.style.position = '';
+    menu.style.left = '';
+    menu.style.right = '';
+    menu.style.top = '';
+    menu.style.bottom = '';
+    menu.style.width = '';
+    menu.style.margin = '';
+  }
+  function fecharTodosPickers(excetoMenu) {
+    document.querySelectorAll('.picker-menu.aberto').forEach(m => { if (m !== excetoMenu) fecharPicker(m); });
+  }
+
   corpo.addEventListener('click', function (e) {
     const toggle = e.target.closest('.picker-toggle');
     if (toggle) {
       const menu = toggle.nextElementSibling;
-      document.querySelectorAll('.picker-menu.aberto').forEach(m => { if (m !== menu) m.classList.remove('aberto'); });
-      menu.classList.toggle('aberto');
+      const jaAberto = menu.classList.contains('aberto');
+      fecharTodosPickers(menu);
+      jaAberto ? fecharPicker(menu) : abrirPicker(toggle, menu);
       return;
     }
     const opt = e.target.closest('.picker-option');
@@ -552,7 +601,7 @@
       const p = acha(opt.dataset.id);
       tr.querySelector('.picker-value').value = p.id;
       tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${p.nome}`;
-      tr.querySelector('.picker-menu').classList.remove('aberto');
+      fecharPicker(tr.querySelector('.picker-menu'));
       preencherTamanhos(tr, p.estoque, null);
       if (tr.querySelector('.in-preco').value === '') tr.querySelector('.in-preco').value = String(p.preco.toFixed(2)).replace('.', ',');
       recalcular();
@@ -560,6 +609,15 @@
     }
     if (e.target.classList.contains('rem-item')) { e.target.closest('.item-row').remove(); recalcular(); }
   });
+  // Fecha ao rolar (a página ou a própria tabela) — um menu 'fixed' parado
+  // no lugar enquanto a página rola pareceria "descolado" do botão. Mas a
+  // lista de opções também rola (max-height + overflow-y:auto) e, por causa
+  // do capture:true, esse scroll interno chega aqui primeiro — sem o filtro
+  // abaixo, rolar a própria lista fechava o menu antes de dar tempo de clicar.
+  window.addEventListener('scroll', (e) => {
+    if (e.target instanceof Element && e.target.closest('.picker-menu')) return;
+    fecharTodosPickers(null);
+  }, true);
   corpo.addEventListener('blur', function (e) {
     if (e.target.classList.contains('in-desc')) e.target.value = fmt2(e.target.value);
   }, true);
@@ -604,7 +662,9 @@
     if (inCupom.value.trim()) aplicarCupom();  // prefill
   }
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('.peca-picker')) document.querySelectorAll('.picker-menu.aberto').forEach(m => m.classList.remove('aberto'));
+    // O menu agora é 'fixed' fora do fluxo do .peca-picker, mas continua filho
+    // dele no DOM — closest() ainda enxerga o clique dentro do menu como "dentro".
+    if (!e.target.closest('.peca-picker')) fecharTodosPickers(null);
   });
 
   // Remove linhas ainda sem peça selecionada (ex.: a linha vazia inicial).

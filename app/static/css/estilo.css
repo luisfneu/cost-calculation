@@ -214,8 +214,11 @@ main.container { max-width: 1100px; }
 .picker-toggle { display: flex; align-items: center; gap: .25rem; }
 .picker-menu {
   display: none;
+  /* Posição real (fixed, ancorada na viewport) é calculada em JS ao abrir —
+     escapa do overflow-x:auto do .table-responsive, que senão corta o menu.
+     Isto aqui é só o estado fechado / fallback. */
   position: absolute;
-  z-index: 20;
+  z-index: 1050;
   top: 100%;
   left: 0;
   right: 0;

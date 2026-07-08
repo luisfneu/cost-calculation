@@ -441,7 +441,7 @@ def validar_cupom():
             return {"ok": False, "erro": f"Cupom exclusivo de {dono}. Selecione esse cliente na venda."}
     return {
         "ok": True, "codigo": cupom.codigo, "tipo": cupom.tipo, "valor": cupom.valor,
-        "rotulo": (f"{cupom.valor:g}%" if cupom.tipo == "percentual" else _brl(cupom.valor)),
+        "rotulo": _rotulo_cupom(cupom),
     }
 
 
@@ -454,7 +454,9 @@ def salvar_cupom():
     if Cupom.query.filter(db.func.upper(Cupom.codigo) == codigo).first():
         flash("Já existe um cupom com esse código.", "erro")
         return redirect(url_for("main.listar_cupons"))
-    tipo = "valor" if request.form.get("tipo") == "valor" else "percentual"
+    tipo = request.form.get("tipo", "percentual")
+    if tipo not in ("percentual", "valor", "frete"):
+        tipo = "percentual"
     c = Cupom(
         codigo=codigo, tipo=tipo, valor=_to_float(request.form.get("valor")),
         validade=_to_date(request.form.get("validade")),

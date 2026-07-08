@@ -655,7 +655,7 @@ def cupom_publico():
     return {
         "ok": True, "codigo": cupom.codigo, "tipo": cupom.tipo, "valor": cupom.valor,
         "desconto": cupom.desconto_para(subtotal),
-        "rotulo": (f"{cupom.valor:g}%" if cupom.tipo == "percentual" else _brl(cupom.valor)),
+        "rotulo": _rotulo_cupom(cupom),
     }
 
 
@@ -709,21 +709,31 @@ def pedido_publico():
         return {"ok": False, "erro": "Seu pedido está vazio."}, 400
     subtotal = dinheiro(subtotal)
 
-    # Cupom (só geral) e frete (informado; o admin confere na confirmação).
-    desconto, cupom_cod = 0.0, ""
-    cod = str((dados.get("cupom") or {}).get("codigo", "")).strip().upper()
-    if cod:
-        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
-        if cupom and cupom.valido and not cupom.cliente_id:
-            desconto = cupom.desconto_para(subtotal)
-            cupom_cod = cupom.codigo
+    # Frete (informado; o admin confere na confirmação) — calculado antes do
+    # cupom porque um cupom de frete precisa do valor do frete para saber
+    # quanto descontar (limitado a ele).
     frete = dados.get("frete") or {}
     frete_nome = str(frete.get("nome", "")).strip()
     try:
         frete_valor = max(0.0, float(frete.get("preco", 0) or 0))
     except (TypeError, ValueError):
         frete_valor = 0.0
-    total = dinheiro(max(0.0, subtotal - desconto) + frete_valor)
+
+    # Cupom (só geral — pessoal fica reservado à confirmação manual no WhatsApp).
+    # Desconto de itens e de frete ficam em "baldes" separados: um cupom de
+    # frete não deve reduzir o subtotal dos itens, e vice-versa.
+    desconto_itens, desconto_frete, cupom_cod = 0.0, 0.0, ""
+    cod = str((dados.get("cupom") or {}).get("codigo", "")).strip().upper()
+    if cod:
+        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
+        if cupom and cupom.valido and not cupom.cliente_id:
+            if cupom.tipo == "frete":
+                desconto_frete = cupom.desconto_frete_para(frete_valor)
+            else:
+                desconto_itens = cupom.desconto_para(subtotal)
+            cupom_cod = cupom.codigo
+    desconto = dinheiro(desconto_itens + desconto_frete)
+    total = dinheiro(max(0.0, subtotal - desconto_itens) + max(0.0, frete_valor - desconto_frete))
 
     pedido = {
         "itens": linhas, "subtotal": subtotal, "desconto": desconto, "cupom": cupom_cod,
@@ -735,28 +745,52 @@ def pedido_publico():
                   for x in linhas]
     resumo = "\n".join(linhas_txt)
     resumo += f"\nSubtotal: {_brl(subtotal)}"
-    if cupom_cod:
-        resumo += f"\nCupom {cupom_cod}: −{_brl(desconto)}"
+    if desconto_itens:
+        resumo += f"\nCupom {cupom_cod}: −{_brl(desconto_itens)}"
+    elif desconto_frete:
+        resumo += f"\nCupom {cupom_cod} (frete): −{_brl(desconto_frete)}"
     if frete_nome:
-        resumo += f"\nFrete ({frete_nome}): {_brl(frete_valor) if frete_valor else 'grátis'}"
+        frete_final = max(0.0, frete_valor - desconto_frete)
+        resumo += f"\nFrete ({frete_nome}): {_brl(frete_final) if frete_final else 'grátis'}"
     resumo += f"\nTotal: {_brl(total)}"
 
-    lead = Lead(
-        nome=nome, telefone=telefone, instagram=str(cli.get("instagram", "")).strip(),
-        cep=str(cli.get("cep", "")).strip(), logradouro=str(cli.get("logradouro", "")).strip(),
-        numero=str(cli.get("numero", "")).strip(), complemento=str(cli.get("complemento", "")).strip(),
-        bairro=str(cli.get("bairro", "")).strip(), cidade=str(cli.get("cidade", "")).strip(),
-        uf=str(cli.get("uf", "")).strip().upper()[:2],
-        observacao=resumo, pedido_json=json.dumps(pedido, ensure_ascii=False),
-    )
-    db.session.add(lead)
-    db.session.flush()
+    # Cliente logado na vitrine? O pedido já vincula à conta dele (entra no
+    # histórico da conta) e NÃO gera Lead. Convidado continua virando Lead.
+    from .conta import _cliente_logado
+    cliente = _cliente_logado()
+
+    lead = None
+    if cliente is None:
+        lead = Lead(
+            nome=nome, telefone=telefone, instagram=str(cli.get("instagram", "")).strip(),
+            cep=str(cli.get("cep", "")).strip(), logradouro=str(cli.get("logradouro", "")).strip(),
+            numero=str(cli.get("numero", "")).strip(), complemento=str(cli.get("complemento", "")).strip(),
+            bairro=str(cli.get("bairro", "")).strip(), cidade=str(cli.get("cidade", "")).strip(),
+            uf=str(cli.get("uf", "")).strip().upper()[:2],
+            observacao=resumo, pedido_json=json.dumps(pedido, ensure_ascii=False),
+        )
+        db.session.add(lead)
+        db.session.flush()
+    else:
+        # Atualiza o endereço/telefone da conta com o que foi informado no checkout
+        # (só preenche campos vazios ou efetivamente enviados — mantém entrega correta).
+        def _atualiza(campo, valor, upper=False):
+            valor = str(valor or "").strip()
+            if upper:
+                valor = valor.upper()[:2]
+            if valor:
+                setattr(cliente, campo, valor)
+        _atualiza("telefone", cli.get("telefone") or telefone)
+        for c in ("cep", "logradouro", "numero", "complemento", "bairro", "cidade"):
+            _atualiza(c, cli.get(c))
+        _atualiza("uf", cli.get("uf"), upper=True)
 
     # Cria o pedido como PRÉ-PEDIDO na tela de vendas (não efetiva: sem baixa de
     # estoque). Marca itens sem estoque no tamanho como 'a produzir'.
     venda = Venda(
         status="pre-pedido", tipo="venda", pago=False, estoque_baixado=False,
-        comprador=nome, lead_id=lead.id, frete=frete_valor,
+        comprador=nome, lead_id=(lead.id if lead else None),
+        cliente_id=(cliente.id if cliente else None), frete=frete_valor,
         desconto_total=desconto, cupom_codigo=cupom_cod,
     )
     db.session.add(venda)
@@ -772,10 +806,11 @@ def pedido_publico():
             preco_unitario=x["preco"], custo_unitario=peca.custo_total, produzir=produzir,
         ))
     db.session.commit()
-    _log("pedido_vitrine", f"{nome}: pré-pedido #{venda.id}, {len(linhas)} itens, total {_brl(total)}")
+    quem = f"conta {cliente.nome}" if cliente else nome
+    _log("pedido_vitrine", f"{quem}: pré-pedido #{venda.id}, {len(linhas)} itens, total {_brl(total)}")
 
     return {
-        "ok": True, "lead_id": lead.id, "pedido_id": venda.id, "total": total,
+        "ok": True, "lead_id": (lead.id if lead else None), "pedido_id": venda.id, "total": total,
         # Mesmo txid do detalhe da venda (PEDIDO<id>) para reconciliar o pagamento.
         "pix": _pix_publico(total, f"PEDIDO{venda.id}"),
         "whatsapp": Parametro.obter("whatsapp", ""), "resumo": resumo,

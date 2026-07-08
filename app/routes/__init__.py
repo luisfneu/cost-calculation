@@ -82,5 +82,5 @@ def _injetar_leads_pendentes():
 
 # Reexporta helpers para compatibilidade (ex.: testes usam app.routes._pix_payload).
 # Importa os módulos de rota para registrá-los no blueprint.
-from . import catalogo, clientes, estoque, financeiro, sistema, vendas  # noqa: E402,F401
+from . import catalogo, clientes, conta, estoque, financeiro, sistema, vendas  # noqa: E402,F401
 from .helpers import *  # noqa: E402,F401,F403

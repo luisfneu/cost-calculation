@@ -51,7 +51,7 @@ from ..models import (
     dinheiro,
 )
 
-__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes']
+__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes']
 
 
 def _usuario_atual():
@@ -467,7 +467,13 @@ def _processar_pedido(modo):
     if cod:
         cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
         if cupom and cupom.valido:
-            venda.desconto_total += cupom.desconto_para(venda.receita_itens)
+            if cupom.tipo == "frete":
+                # Desconto sobre o frete efetivamente cobrado (0 se já é cortesia)
+                # — mantém venda.frete como registro do valor nominal do envio.
+                frete_efetivo = 0.0 if venda.frete_cortesia else (venda.frete or 0.0)
+                venda.desconto_total += cupom.desconto_frete_para(frete_efetivo)
+            else:
+                venda.desconto_total += cupom.desconto_para(venda.receita_itens)
             venda.cupom_codigo = cupom.codigo
             cupom.usos += 1
         else:
@@ -492,6 +498,15 @@ def _processar_pedido(modo):
 
 def _brl(v):
     return ("R$ " + f"{float(v or 0):,.2f}").replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _rotulo_cupom(cupom):
+    """Texto curto do desconto do cupom, para prévia (ERP e vitrine)."""
+    if cupom.tipo == "percentual":
+        return f"{cupom.valor:g}%"
+    if cupom.tipo == "frete":
+        return "frete grátis" if not cupom.valor else f"até {_brl(cupom.valor)} de frete"
+    return _brl(cupom.valor)
 
 
 def _pix_ascii(texto, limite):

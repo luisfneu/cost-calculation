@@ -25,6 +25,30 @@
   </div>
   <div class="row">
     <div class="col-md-6 mb-3">
+      <label class="form-label"><i class="bi bi-envelope"></i> E-mail
+        <span class="text-muted small" style="letter-spacing:normal;text-transform:none">(login da vitrine · único)</span></label>
+      <input type="email" name="email" class="form-control"
+             value="{{ cliente.email if cliente and cliente.email else '' }}" placeholder="cliente@email.com">
+      {% if cliente %}
+        <div class="form-text">
+          {% if cliente.tem_conta %}<i class="bi bi-shield-check text-success"></i> Tem conta ativa na vitrine (senha definida).
+          {% elif cliente.email %}<i class="bi bi-shield-slash text-muted"></i> E-mail cadastrado, mas sem senha (só balcão).
+          {% else %}<i class="bi bi-shield-slash text-muted"></i> Sem conta na vitrine.{% endif %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="col-md-6 mb-3 d-flex align-items-center">
+      <div class="form-check mt-3">
+        <input class="form-check-input" type="checkbox" name="aceita_novidades" id="aceita_novidades"
+               {{ 'checked' if cliente and cliente.aceita_novidades }}>
+        <label class="form-check-label" for="aceita_novidades">
+          <i class="bi bi-megaphone"></i> Aceita receber novidades e lançamentos
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-6 mb-3">
       <label class="form-label"><i class="bi bi-gift"></i> Data de nascimento</label>
       <input type="date" name="nascimento" class="form-control"
              value="{{ cliente.nascimento.isoformat() if cliente and cliente.nascimento else '' }}">

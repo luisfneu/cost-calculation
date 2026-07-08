@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Minha conta{% endblock %} · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <style>
+    body { background: #b89a78; font-family: 'Jost', sans-serif; }
+    .topo { text-align: center; padding: 24px 0 6px; }
+    .conta-nav { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+                 padding: 6px 0 18px; font-size: .85rem; }
+    .conta-nav a { color: #fff; text-decoration: none; letter-spacing: 1px; }
+    .conta-nav a:hover { text-decoration: underline; }
+    .conta-card { max-width: 480px; margin: 0 auto; }
+    .conta-card.wide { max-width: 760px; }
+    .conta-tit { font-family: 'Cormorant Garamond', serif; }
+  </style>
+</head>
+<body>
+  <div class="topo">
+    <a href="{{ url_for('publico.vitrine_publica') }}">
+      <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:240px; max-width:70%;">
+    </a>
+  </div>
+  <nav class="conta-nav">
+    <a href="{{ url_for('publico.vitrine_publica') }}"><i class="bi bi-shop"></i> Vitrine</a>
+    {% if cliente_logado %}
+      <a href="{{ url_for('publico.conta_pedidos') }}"><i class="bi bi-bag"></i> Meus pedidos</a>
+      <a href="{{ url_for('publico.conta_preferencias') }}"><i class="bi bi-gear"></i> Preferências</a>
+      <a href="{{ url_for('publico.conta_sair') }}"><i class="bi bi-box-arrow-right"></i> Sair</a>
+    {% else %}
+      <a href="{{ url_for('publico.conta_entrar') }}"><i class="bi bi-person"></i> Entrar</a>
+      <a href="{{ url_for('publico.conta_cadastro') }}"><i class="bi bi-person-plus"></i> Criar conta</a>
+    {% endif %}
+  </nav>
+  <div class="container pb-5">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% if mensagens %}
+        <div class="conta-card{{ ' wide' if largo }}">
+          {% for categoria, msg in mensagens %}
+            <div class="alert alert-{{ 'danger' if categoria == 'erro' else 'success' }} py-2">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block conteudo %}{% endblock %}
+  </div>
+</body>
+</html>

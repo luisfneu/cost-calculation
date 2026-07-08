@@ -74,21 +74,21 @@
       </td>
       <td>{{ insumo.estoque_minimo | num }}</td>
       <td class="text-end text-nowrap">
-        <button type="button" class="btn btn-sm btn-outline-primary btn-mov"
+        <button type="button" class="btn btn-sm btn-outline-primary btn-mov" title="Movimentar"
                 data-bs-toggle="modal" data-bs-target="#modal-mov"
                 data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}"
                 data-unidade="{{ insumo.unidade }}" data-estoque="{{ insumo.estoque | num }}">
-          <i class="bi bi-arrow-down-up"></i> Movimentar
+          <i class="bi bi-arrow-down-up"></i>
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary btn-hist"
                 data-bs-toggle="modal" data-bs-target="#modal-hist"
                 data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}" title="Ver movimentação">
           <i class="bi bi-clock-history"></i>
         </button>
-        <a href="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+        <a href="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
         <form method="post" action="{{ url_for('main.excluir_insumo', insumo_id=insumo.id) }}" class="d-inline"
               data-confirm="Excluir este insumo?">
-          <button class="btn btn-sm btn-outline-danger">Excluir</button>
+          <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
         </form>
       </td>
     </tr>
@@ -222,7 +222,9 @@
 
     modal.addEventListener('show.bs.modal', function (ev) {
       const b = ev.relatedTarget;
-      form.action = `/insumos/${b.dataset.id}/movimentar`;
+      // URL montada a partir do url_for (respeita o prefixo /console/erp).
+      form.action = "{{ url_for('main.movimentar_estoque', insumo_id=0) }}"
+        .replace(/\/0\/movimentar$/, `/${b.dataset.id}/movimentar`);
       nome.textContent = b.dataset.nome;
       estoque.textContent = `· estoque atual: ${b.dataset.estoque} ${b.dataset.unidade}`;
       // Limpa os campos manualmente (form.reset() apagaria o token CSRF injetado).
@@ -263,7 +265,8 @@
     modal.addEventListener('show.bs.modal', function (ev) {
       const b = ev.relatedTarget;
       nome.textContent = b.dataset.nome;
-      carregar(`/insumos/${b.dataset.id}/movimentos`);
+      carregar("{{ url_for('main.movimentos_insumo', insumo_id=0) }}"
+        .replace(/\/0\/movimentos$/, `/${b.dataset.id}/movimentos`));
     });
     // Paginação dentro do modal (intercepta os links do fragmento).
     body.addEventListener('click', function (e) {
