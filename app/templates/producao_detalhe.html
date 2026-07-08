@@ -23,7 +23,10 @@
           <tbody>
           {% for it in ordem.itens %}
             <tr>
-              <td>{{ it.peca.nome }}</td>
+              <td>
+                <a href="#" class="link-atelier btn-op-peca" data-bs-toggle="modal" data-bs-target="#modal-op-peca"
+                   data-id="{{ it.peca.id }}" title="Ver ficha técnica">{{ it.peca.nome }}</a>
+              </td>
               <td>{{ it.tamanho }}</td>
               <td>{{ it.quantidade|int }}</td>
               {% if ordem.status == 'aberta' %}
@@ -107,6 +110,77 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Modal: peça (fotos + ficha técnica) — abre ao clicar no nome, na lista de itens -->
+<div class="modal fade" id="modal-op-peca" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="opp-nome"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-2" id="opp-foto-wrap">
+          <img id="opp-foto" class="img-fluid rounded" style="max-height:260px" alt="" loading="lazy">
+        </div>
+        <div id="opp-sem-foto" class="text-center text-muted mb-2" style="display:none">sem foto</div>
+        <div class="d-flex flex-wrap gap-2 justify-content-center mb-3" id="opp-galeria"></div>
+        <h6 class="text-muted mb-2">Insumos necessários (por unidade)</h6>
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light"><tr><th>Insumo</th><th class="text-end">Quantidade</th></tr></thead>
+          <tbody id="opp-insumos"></tbody>
+        </table>
+        <p class="text-muted small mt-2 mb-0" id="opp-sem-insumos" style="display:none">Nenhum insumo na ficha técnica.</p>
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="opp-abrir" class="btn btn-sm btn-outline-primary" target="_blank">Abrir peça</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script id="dados-op-peca-detalhe" type="application/json">
+  [{% for it in ordem.itens %}{
+    "id": {{ it.peca.id }},
+    "nome": {{ it.peca.nome | tojson }},
+    "foto": {{ (url_for('static', filename='uploads/' ~ it.peca.foto) if it.peca.foto else '') | tojson }},
+    "fotos": [{% for f in it.peca.fotos %}{{ (url_for('static', filename='uploads/' ~ f.arquivo)) | tojson }}{{ "," if not loop.last }}{% endfor %}],
+    "insumos": [{% for pi in it.peca.insumos %}{"nome": {{ pi.insumo.nome | tojson }}, "quantidade": {{ pi.quantidade }}, "unidade": {{ pi.insumo.unidade | tojson }}, "foto": {{ (url_for('static', filename='uploads/' ~ pi.insumo.foto) if pi.insumo.foto else '') | tojson }}}{{ "," if not loop.last }}{% endfor %}]
+  }{{ "," if not loop.last }}{% endfor %}]
+</script>
+<script>
+(function () {
+  const modal = document.getElementById('modal-op-peca');
+  if (!modal) return;
+  const DADOS = JSON.parse(document.getElementById('dados-op-peca-detalhe').textContent);
+  const ABRIR_BASE = "{{ url_for('main.detalhe_peca', peca_id=0) }}".replace(/\/0$/, '/');
+  modal.addEventListener('show.bs.modal', function (ev) {
+    const p = DADOS.find(x => String(x.id) === String(ev.relatedTarget.dataset.id));
+    if (!p) return;
+    document.getElementById('opp-nome').textContent = p.nome;
+    const wrap = document.getElementById('opp-foto-wrap');
+    const sem = document.getElementById('opp-sem-foto');
+    if (p.foto) { document.getElementById('opp-foto').src = p.foto; wrap.style.display = ''; sem.style.display = 'none'; }
+    else { wrap.style.display = 'none'; sem.style.display = ''; }
+    document.getElementById('opp-galeria').innerHTML =
+      p.fotos.map(f => `<img src="${f}" class="foto-thumb-vert" alt="" loading="lazy">`).join('');
+    const tabela = document.getElementById('opp-insumos').closest('table');
+    const semIns = document.getElementById('opp-sem-insumos');
+    if (p.insumos.length) {
+      document.getElementById('opp-insumos').innerHTML = p.insumos.map(i => {
+        const thumb = i.foto
+          ? `<img src="${i.foto}" class="foto-thumb me-2" alt="">`
+          : `<span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>`;
+        return `<tr><td class="d-flex align-items-center">${thumb}${i.nome}</td><td class="text-end">${i.quantidade} ${i.unidade}</td></tr>`;
+      }).join('');
+      tabela.style.display = ''; semIns.style.display = 'none';
+    } else {
+      document.getElementById('opp-insumos').innerHTML = '';
+      tabela.style.display = 'none'; semIns.style.display = '';
+    }
+    document.getElementById('opp-abrir').href = ABRIR_BASE + p.id;
+  });
+})();
+</script>
 
 {% if ordem.status == 'aberta' and pecas %}
 <script id="dados-pecas-op" type="application/json">

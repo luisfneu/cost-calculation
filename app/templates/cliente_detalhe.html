@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block conteudo %}
+{% if duplicados %}
+<div class="alert alert-warning d-flex flex-column gap-2">
+  <div><i class="bi bi-people-fill"></i> <strong>Possível cadastro duplicado</strong> — mesmo WhatsApp deste cliente:</div>
+  {% for d in duplicados %}
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span>
+        <a href="{{ url_for('main.detalhe_cliente', cliente_id=d.id) }}">{{ d.nome }}</a>
+        <span class="text-muted small">
+          {% if d.email %}· {{ d.email }}{% endif %}
+          {% if d.instagram_handle %}· @{{ d.instagram_handle }}{% endif %}
+          {% if d.vendas %}· {{ d.vendas|length }} pedido(s){% endif %}
+        </span>
+      </span>
+      <form method="post" action="{{ url_for('main.mesclar_cliente', cliente_id=cliente.id, duplicado_id=d.id) }}"
+            onsubmit="return confirm('Mesclar «{{ d.nome }}» dentro deste cadastro? Pedidos e dados vão para «{{ cliente.nome }}» e o outro é apagado. Não dá para desfazer.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-union"></i> Mesclar aqui</button>
+      </form>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
     <h1 class="h3 mb-1">{{ cliente.nome }}</h1>

@@ -481,6 +481,25 @@ class Cliente(db.Model):
         email = cls.normalizar_email(email)
         return cls.query.filter(db.func.lower(cls.email) == email).first() if email else None
 
+    @staticmethod
+    def normalizar_whatsapp(telefone: str) -> str:
+        """Só dígitos, com DDI 55 se parecer número nacional sem código."""
+        d = re.sub(r"\D", "", telefone or "")
+        if d and not d.startswith("55") and len(d) <= 11:
+            d = "55" + d
+        return d
+
+    @classmethod
+    def por_whatsapp(cls, telefone: str):
+        """Primeiro cliente com o mesmo WhatsApp (dígitos normalizados). None se vazio.
+        Prefere um cadastro SEM conta (balcão), candidato natural a ser reivindicado."""
+        alvo = cls.normalizar_whatsapp(telefone)
+        if not alvo:
+            return None
+        iguais = [c for c in cls.query.all() if c.whatsapp_numero == alvo]
+        iguais.sort(key=lambda c: c.tem_conta)  # sem conta primeiro
+        return iguais[0] if iguais else None
+
     @property
     def tem_endereco(self) -> bool:
         return bool(self.logradouro or self.cep or self.cidade)
@@ -507,10 +526,7 @@ class Cliente(db.Model):
     @property
     def whatsapp_numero(self) -> str:
         """Só dígitos, com DDI 55 se parecer número nacional sem código."""
-        d = re.sub(r"\D", "", self.telefone or "")
-        if d and not d.startswith("55") and len(d) <= 11:
-            d = "55" + d
-        return d
+        return self.normalizar_whatsapp(self.telefone)
 
     @property
     def telefone_formatado(self) -> str:

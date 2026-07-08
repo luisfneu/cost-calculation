@@ -15,6 +15,7 @@ Flask 3 · Flask-SQLAlchemy · SQLite · Alembic/Flask-Migrate · Flask-WTF (CSR
 .venv/bin/ruff check . && .venv/bin/ruff format .
 ```
 Portas: 8000 (5000 é sequestrada pelo AirPlay do macOS → 403).
+Reload sem downtime após deploy de código: `kill -HUP $(pgrep -f "gunicorn.*wsgi:app" | head -1)` (HUP no master recarrega os workers). Túnel Cloudflare roda à parte, não reinicia junto.
 
 ## URLs (importante)
 Dois blueprints:
@@ -36,6 +37,7 @@ Guarda de login protege só o blueprint `main`. Templates usam 100% `url_for` �
 - **Ler DB com servidor no ar:** usar `sqlite3` direto (snapshot via `.backup()`), não `create_app` inline — WAL fica stale e há lock.
 - **`.env` com chave duplicada:** dotenv usa a **última**; linha de exemplo fraca ofusca a forte e `_checar_segredos` recusa subir (`PRODUCAO=1`).
 - Schema é **só Alembic** — não há fallback `db.create_all()`. Sem `migrations/versions` o app não sobe.
+- **Cache da vitrine:** `/` tem `@cache.cached(timeout=60)`. Mudanças no ERP (visibilidade, preço, estoque, foto, coleção) **não aparecem** até invalidar. Já resolvido por um listener `after_commit` (em `app/__init__.py`, nível de módulo — `db.session` é global) que chama `_limpar_cache_vitrine()`. Se criar novo endpoint cacheado, lembrar que esse listener limpa **tudo**.
 
 ## Segurança
 Nunca commitar `.env`. Produção: `PRODUCAO=1`, `SECRET_KEY`/`APP_SENHA` fortes, `SESSION_COOKIE_SECURE=1`.

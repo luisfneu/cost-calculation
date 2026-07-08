@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{# Ícone de ajuda com tooltip (mesmo padrão da tela de Cupons). #}
+{% macro ajuda(texto) %}<i class="bi bi-question-circle text-muted small" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ texto }}"></i>{% endmacro %}
 {% block conteudo %}
 <h1 class="h3 mb-4">{{ 'Editar peça' if peca else 'Nova peça' }}</h1>
 
@@ -10,7 +12,7 @@
              value="{{ peca.nome if peca else '' }}" placeholder="Ex.: Camiseta básica gola redonda">
     </div>
     <div class="col-md-3 mb-3">
-      <label class="form-label">Tipo de peça</label>
+      <label class="form-label">Tipo de peça {{ ajuda('Categoria da peça (ex.: Vestido, Blusa). Vira filtro na vitrine e nos relatórios.') }}</label>
       <input type="text" name="tipo" class="form-control" list="lista-tipos"
              value="{{ peca.tipo if peca else '' }}" placeholder="Ex.: Vestido">
       <datalist id="lista-tipos">
@@ -51,10 +53,11 @@
            {{ 'checked' if not peca or peca.vitrine_publica }}>
     <label class="form-check-label" for="vitrine_publica">
       <i class="bi bi-shop"></i> Mostrar na <b>vitrine pública</b>
+      {{ ajuda('Liga/desliga a peça na loja pública (raiz do site). Desligada, some da vitrine.') }}
     </label>
   </div>
   <div class="mb-3">
-    <label class="form-label">Tags</label>
+    <label class="form-label">Tags {{ ajuda('Palavras-chave para busca e filtro (ex.: verão, algodão, festa).') }}</label>
     <div class="tags-input form-control" id="tags-box">
       <input type="hidden" name="tags" id="tags-hidden" value="{{ peca.tags if peca else '' }}">
       <span id="tags-chips"></span>
@@ -63,44 +66,41 @@
     <small class="text-muted">Digite e pressione <kbd>,</kbd> ou <kbd>Enter</kbd> para criar cada tag.</small>
   </div>
   <div class="mb-3">
-    <label class="form-label">Descrição</label>
+    <label class="form-label">Descrição {{ ajuda('Texto opcional mostrado na vitrine pública da peça.') }}</label>
     <textarea name="descricao" class="form-control" rows="2">{{ peca.descricao if peca else '' }}</textarea>
   </div>
   <div class="row">
     <div class="col-md-4 mb-3">
-      <label class="form-label">Mão de obra (R$)</label>
+      <label class="form-label">Mão de obra (R$) {{ ajuda('Custo da sua mão de obra por peça. Entra no custo total (base do preço calculado).') }}</label>
       <input type="text" name="custo_mao_de_obra" class="form-control"
              value="{{ peca.custo_mao_de_obra if peca else '' }}" placeholder="0,00">
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">Custos extras (R$)</label>
+      <label class="form-label">Custos extras (R$) {{ ajuda('Outros custos por peça (embalagem, frete de material...). Entra no custo total.') }}</label>
       <input type="text" name="custos_extras" class="form-control"
              value="{{ peca.custos_extras if peca else '' }}" placeholder="embalagem, frete...">
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">Margem de lucro (%)</label>
+      <label class="form-label">Margem de lucro (%) {{ ajuda('Percentual de lucro sobre o custo. Define o preço calculado (custo + margem).') }}</label>
       <input type="text" name="margem_percentual" class="form-control"
              value="{{ peca.margem_percentual if peca else '' }}" placeholder="Ex.: 40">
     </div>
   </div>
   <div class="row">
     <div class="col-md-4 mb-3">
-      <label class="form-label">Preço etiqueta (R$)</label>
+      <label class="form-label">Preço etiqueta (R$) {{ ajuda('Preço comercial usado como padrão na venda. Vazio = usa o preço calculado (custo + margem).') }}</label>
       <input type="text" name="preco_etiqueta" class="form-control"
              value="{{ '%.2f'|format(peca.preco_etiqueta) if peca and peca.preco_etiqueta else '' }}" placeholder="preço comercial">
-      <small class="text-muted">Preço comercial usado como padrão na venda. Deixe vazio para usar o calculado.</small>
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">Preço promocional (R$) <span class="text-muted small">(de/por)</span></label>
+      <label class="form-label">Preço promocional (R$) <span class="text-muted small">(de/por)</span> {{ ajuda('Se preenchido, vira o preço da venda e mostra o preço cheio riscado.') }}</label>
       <input type="text" name="preco_promocional" class="form-control"
              value="{{ '%.2f'|format(peca.preco_promocional) if peca and peca.preco_promocional else '' }}" placeholder="preço em promoção">
-      <small class="text-muted">Se preenchido, vira o preço da venda e mostra o preço cheio riscado.</small>
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">SKU (gerado automaticamente)</label>
+      <label class="form-label">SKU (gerado automaticamente) {{ ajuda('Gerado ao salvar: SH-00000000 (id da peça). Usado na busca e na leitura por câmera.') }}</label>
       <input type="text" class="form-control bg-light" readonly
              value="{{ peca.sku if peca else 'gerado ao salvar' }}">
-      <small class="text-muted">Padrão SH-00000000 (id da peça). Usado na busca e leitura por câmera.</small>
     </div>
   </div>
   <div class="mb-3">
@@ -121,7 +121,7 @@
   <script id="fotos-existentes" type="application/json">{{ _existentes | tojson }}</script>
   <script>window.__UPLOADS_URL = "{{ url_for('static', filename='uploads/') }}";</script>
 
-  <div class="section-titulo">Envio (opcional — para cálculo de frete)</div>
+  <div class="section-titulo">Envio (opcional — para cálculo de frete) {{ ajuda('Dimensões e peso da peça embalada. Usados para calcular o frete real (Correios/transportadora) na vitrine e na venda.') }}</div>
   <div class="row">
     <div class="col-6 col-md-3 mb-3">
       <label class="form-label">Peso (g)</label>

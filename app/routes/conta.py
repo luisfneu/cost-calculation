@@ -60,15 +60,26 @@ def _injetar_cliente_logado():
         return {"cliente_logado": None}
 
 
-def _ler_endereco(form, alvo):
-    """Copia os campos de endereço do form para um Cliente."""
-    alvo.cep = form.get("cep", "").strip()
-    alvo.logradouro = form.get("logradouro", "").strip()
-    alvo.numero = form.get("numero", "").strip()
-    alvo.complemento = form.get("complemento", "").strip()
-    alvo.bairro = form.get("bairro", "").strip()
-    alvo.cidade = form.get("cidade", "").strip()
-    alvo.uf = form.get("uf", "").strip().upper()[:2]
+def _ler_endereco(form, alvo, preservar=False):
+    """Copia os campos de endereço do form para um Cliente.
+
+    preservar=True: só grava os campos **preenchidos** — não apaga dados já
+    existentes com valores em branco. Usado ao reivindicar um cadastro de balcão
+    (feito no ERP): o cliente pode não redigitar o endereço, e não queremos zerar
+    o que o ateliê já tinha.
+    """
+    campos = {
+        "cep": form.get("cep", "").strip(),
+        "logradouro": form.get("logradouro", "").strip(),
+        "numero": form.get("numero", "").strip(),
+        "complemento": form.get("complemento", "").strip(),
+        "bairro": form.get("bairro", "").strip(),
+        "cidade": form.get("cidade", "").strip(),
+        "uf": form.get("uf", "").strip().upper()[:2],
+    }
+    for campo, valor in campos.items():
+        if valor or not preservar:
+            setattr(alvo, campo, valor)
 
 
 # --------------------------------------------------------------------------- #
@@ -101,6 +112,15 @@ def conta_cadastro():
         # balcão, feito pelo ateliê), deixamos ele "reivindicar" a conta definindo
         # a senha agora. Se já tem senha, é conta de verdade: manda fazer login.
         existente = None if erro else Cliente.por_email(email)
+        # Sem e-mail casado: tenta pelo WhatsApp, evitando duplicar um cadastro de
+        # balcão (ERP) que não tinha e-mail. Se o WhatsApp já é de uma conta real,
+        # manda fazer login (não cria segundo cadastro).
+        if existente is None and not erro:
+            por_zap = Cliente.por_whatsapp(telefone)
+            if por_zap and por_zap.tem_conta:
+                erro = "Já existe uma conta com esse WhatsApp. Faça login."
+            elif por_zap:
+                existente = por_zap
         if existente and existente.tem_conta:
             erro = "Já existe uma conta com esse e-mail. Faça login."
         if erro:
@@ -110,9 +130,12 @@ def conta_cadastro():
         if existente:                       # reivindica cadastro de balcão existente
             cliente = existente
             cliente.nome = nome
+            cliente.email = email           # casado por WhatsApp pode não ter e-mail ainda
             cliente.telefone = telefone
             cliente.aceita_novidades = form.get("aceita_novidades") == "on"
-            _ler_endereco(form, cliente)
+            # preservar=True: não zera o endereço já cadastrado no ERP se o cliente
+            # deixar os campos em branco no cadastro da vitrine.
+            _ler_endereco(form, cliente, preservar=True)
             cliente.set_senha(senha)
             msg = f"Bem-vinda de volta, {cliente.nome}! Sua conta está pronta."
         else:

@@ -112,7 +112,60 @@ def form_cliente(cliente_id=None):
 def detalhe_cliente(cliente_id):
     cliente = Cliente.query.get_or_404(cliente_id)
     vendas = sorted(cliente.vendas, key=lambda v: v.criado_em, reverse=True)
-    return render_template("cliente_detalhe.html", cliente=cliente, vendas=vendas)
+    # Possíveis duplicados: mesmo WhatsApp, outro registro (ex.: balcão + vitrine).
+    duplicados = []
+    if cliente.whatsapp_numero:
+        duplicados = [c for c in Cliente.query.all()
+                      if c.id != cliente.id and c.whatsapp_numero == cliente.whatsapp_numero]
+    return render_template("cliente_detalhe.html", cliente=cliente, vendas=vendas,
+                           duplicados=duplicados)
+
+
+def _mesclar_clientes(principal, duplicado):
+    """Une dois cadastros do mesmo cliente: move pedidos/leads/cupons/vales do
+    `duplicado` para o `principal`, completa os campos vazios do principal e apaga
+    o duplicado. Nunca sobrescreve dado já preenchido no principal."""
+    if principal.id == duplicado.id:
+        return principal
+    # Repontar todas as FKs que apontam para o cliente.
+    for Modelo in (Venda, Lead, Cupom, Vale):
+        Modelo.query.filter_by(cliente_id=duplicado.id).update(
+            {"cliente_id": principal.id}, synchronize_session=False)
+    # Completa só o que falta no principal.
+    for campo in ("instagram", "telefone", "cep", "logradouro", "numero",
+                  "complemento", "bairro", "cidade", "uf", "nascimento",
+                  "tamanho_habitual"):
+        if not getattr(principal, campo):
+            valor = getattr(duplicado, campo)
+            if valor:
+                setattr(principal, campo, valor)
+    # Herda o login (e-mail + senha) se o principal ainda não tem conta.
+    if not principal.tem_conta and duplicado.tem_conta:
+        principal.email = duplicado.email
+        principal.senha_hash = duplicado.senha_hash
+        duplicado.email = None  # libera o UNIQUE do e-mail antes de apagar
+    principal.aceita_novidades = principal.aceita_novidades or duplicado.aceita_novidades
+    db.session.delete(duplicado)
+    return principal
+
+
+@bp.route("/clientes/<int:cliente_id>/mesclar/<int:duplicado_id>", methods=["POST"])
+def mesclar_cliente(cliente_id, duplicado_id):
+    """Mescla o cadastro `duplicado_id` dentro de `cliente_id` (mantém este)."""
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    principal = Cliente.query.get_or_404(cliente_id)
+    duplicado = Cliente.query.get_or_404(duplicado_id)
+    if principal.whatsapp_numero != duplicado.whatsapp_numero:
+        flash("Só é possível mesclar cadastros com o mesmo WhatsApp.", "erro")
+        return redirect(url_for("main.detalhe_cliente", cliente_id=principal.id))
+    nome_dup = duplicado.nome
+    _mesclar_clientes(principal, duplicado)
+    db.session.commit()
+    _log("cliente_mesclado", f"#{duplicado_id} ({nome_dup}) → #{principal.id} ({principal.nome})")
+    flash(f"Cadastro de {nome_dup} mesclado neste cliente.", "sucesso")
+    return redirect(url_for("main.detalhe_cliente", cliente_id=principal.id))
 
 
 @bp.route("/crm")
@@ -287,6 +340,15 @@ def confirmar_lead(lead_id):
         )
         db.session.add(cliente)
         db.session.flush()
+    else:
+        # Cliente já existe (mesmo WhatsApp): completa só os campos vazios com o
+        # que o lead trouxe — nunca sobrescreve dados que o ateliê já tinha.
+        for campo in ("instagram", "telefone", "cep", "logradouro", "numero",
+                      "complemento", "bairro", "cidade", "uf"):
+            if not (getattr(cliente, campo) or "").strip():
+                valor = (getattr(lead, campo) or "").strip()
+                if valor:
+                    setattr(cliente, campo, valor)
 
     # Vincula o cliente ao(s) pré-pedido(s) que este lead gerou (não efetiva a venda;
     # o pedido é confirmado depois na própria tela do pedido).

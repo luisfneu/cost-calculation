@@ -37,6 +37,20 @@ def _fuso_atual():
 migrate = Migrate()
 csrf = CSRFProtect()
 
+# Invalida o cache da vitrine sempre que algo é gravado (visibilidade, preço,
+# estoque, foto, coleção). A vitrine é o único endpoint cacheado e as leituras
+# públicas não commitam — então o cache continua protegendo os picos de acesso.
+# Registrado no nível do módulo (1×) porque db.session é global; registrar dentro
+# de create_app acumularia um listener por app criado (ex.: a cada teste).
+from sqlalchemy import event as _sa_event  # noqa: E402
+
+
+@_sa_event.listens_for(db.session, "after_commit")
+def _invalida_cache_vitrine(sessao):  # noqa: ARG001
+    # Import lazy: evita puxar o pacote de rotas no import do app (risco de ciclo).
+    from .routes.helpers import _limpar_cache_vitrine
+    _limpar_cache_vitrine()
+
 # Diretório das migrações Alembic (raiz do projeto/migrations).
 _MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations")
 
