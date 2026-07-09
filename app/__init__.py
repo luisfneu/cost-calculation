@@ -5,10 +5,11 @@ from datetime import UTC
 from logging.handlers import RotatingFileHandler
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Flask, g, render_template
+from flask import Flask, flash, g, redirect, render_template, request, url_for
 from flask_migrate import Migrate
 from flask_migrate import upgrade as _alembic_upgrade
 from flask_wtf import CSRFProtect
+from flask_wtf.csrf import CSRFError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
@@ -17,7 +18,7 @@ from .extensions import cache, limiter
 from .models import Parametro, db
 
 # Versão exibida em /health (útil para saber o que está no ar). Suba a cada release.
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.4.0"
 
 FUSO_PADRAO = "America/Sao_Paulo"
 
@@ -36,6 +37,20 @@ def _fuso_atual():
 
 migrate = Migrate()
 csrf = CSRFProtect()
+
+# Invalida o cache da vitrine sempre que algo é gravado (visibilidade, preço,
+# estoque, foto, coleção). A vitrine é o único endpoint cacheado e as leituras
+# públicas não commitam — então o cache continua protegendo os picos de acesso.
+# Registrado no nível do módulo (1×) porque db.session é global; registrar dentro
+# de create_app acumularia um listener por app criado (ex.: a cada teste).
+from sqlalchemy import event as _sa_event  # noqa: E402
+
+
+@_sa_event.listens_for(db.session, "after_commit")
+def _invalida_cache_vitrine(sessao):  # noqa: ARG001
+    # Import lazy: evita puxar o pacote de rotas no import do app (risco de ciclo).
+    from .routes.helpers import _limpar_cache_vitrine
+    _limpar_cache_vitrine()
 
 # Diretório das migrações Alembic (raiz do projeto/migrations).
 _MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations")
@@ -136,6 +151,16 @@ def create_app(config_class=Config):
             titulo="Página não encontrada",
             msg="O endereço que você tentou acessar não existe ou foi movido.",
         ), 404
+
+    @app.errorhandler(CSRFError)
+    def _erro_csrf(e):
+        # Sessão expirada/ausente (ex.: página de login aberta tempo demais, cookie
+        # velho após troca de SECRET_KEY). Em vez de 400 seco, volta ao formulário
+        # com sessão nova e um aviso — o próximo envio funciona.
+        app.logger.warning("CSRF falhou: %s", e.description)
+        flash("Sua sessão expirou. Recarregamos a página — tente novamente.", "erro")
+        destino = request.referrer or url_for("main.login")
+        return redirect(destino), 302
 
     @app.errorhandler(413)
     def _erro_413(e):

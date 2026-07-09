@@ -96,7 +96,26 @@ def listar_encomendas():
 @bp.route("/encomendas/item/<int:item_id>/produzido", methods=["POST"])
 def marcar_item_produzido(item_id):
     item = VendaItem.query.get_or_404(item_id)
-    item.produzido = not item.produzido
+    novo = not item.produzido
+    if novo and not item.insumo_baixado:
+        # Concluiu a produção: baixa os insumos da ficha técnica (uma vez só).
+        for pi in item.peca.insumos:
+            _registrar_movimento(
+                pi.insumo, "saida", pi.quantidade * item.quantidade,
+                observacao=f"Produção encomenda: {item.quantidade:g}x '{item.peca.nome}' "
+                           f"tam {item.tamanho} (venda #{item.venda_id})",
+            )
+        item.insumo_baixado = True
+    elif not novo and item.insumo_baixado:
+        # Reabriu a produção: estorna os insumos consumidos.
+        for pi in item.peca.insumos:
+            _registrar_movimento(
+                pi.insumo, "entrada", pi.quantidade * item.quantidade,
+                observacao=f"Reabertura produção: {item.quantidade:g}x '{item.peca.nome}' "
+                           f"tam {item.tamanho} (venda #{item.venda_id})",
+            )
+        item.insumo_baixado = False
+    item.produzido = novo
     db.session.commit()
     estado = "produzido" if item.produzido else "reaberto"
     _log("producao_encomenda", f"item #{item.id} ({item.peca.nome}) {estado}")

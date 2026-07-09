@@ -16,6 +16,7 @@ from flask import (
     url_for,
 )
 
+from ..emails import enviar_email, gerar_token_reset, ler_token_reset
 from ..extensions import limiter
 from ..models import Cliente, Venda, db
 from . import publico_bp
@@ -60,15 +61,39 @@ def _injetar_cliente_logado():
         return {"cliente_logado": None}
 
 
-def _ler_endereco(form, alvo):
-    """Copia os campos de endereço do form para um Cliente."""
-    alvo.cep = form.get("cep", "").strip()
-    alvo.logradouro = form.get("logradouro", "").strip()
-    alvo.numero = form.get("numero", "").strip()
-    alvo.complemento = form.get("complemento", "").strip()
-    alvo.bairro = form.get("bairro", "").strip()
-    alvo.cidade = form.get("cidade", "").strip()
-    alvo.uf = form.get("uf", "").strip().upper()[:2]
+def _confere_identidade(existente, email, telefone):
+    """Para reivindicar um cadastro que já existe, os dados JÁ registrados nele
+    (e-mail e/ou WhatsApp) precisam bater com os informados. Campos ausentes no
+    registro não bloqueiam (serão preenchidos agora). Isso fecha o buraco de
+    reivindicar a conta de alguém sabendo só o e-mail (ou só o telefone) quando o
+    outro dado já está no cadastro. (OTP por WhatsApp seria a proteção definitiva.)"""
+    if existente.email and Cliente.normalizar_email(existente.email) != Cliente.normalizar_email(email):
+        return False
+    if existente.telefone and Cliente.normalizar_whatsapp(existente.telefone) != Cliente.normalizar_whatsapp(telefone):
+        return False
+    return True
+
+
+def _ler_endereco(form, alvo, preservar=False):
+    """Copia os campos de endereço do form para um Cliente.
+
+    preservar=True: só grava os campos **preenchidos** — não apaga dados já
+    existentes com valores em branco. Usado ao reivindicar um cadastro de balcão
+    (feito no ERP): o cliente pode não redigitar o endereço, e não queremos zerar
+    o que o ateliê já tinha.
+    """
+    campos = {
+        "cep": form.get("cep", "").strip(),
+        "logradouro": form.get("logradouro", "").strip(),
+        "numero": form.get("numero", "").strip(),
+        "complemento": form.get("complemento", "").strip(),
+        "bairro": form.get("bairro", "").strip(),
+        "cidade": form.get("cidade", "").strip(),
+        "uf": form.get("uf", "").strip().upper()[:2],
+    }
+    for campo, valor in campos.items():
+        if valor or not preservar:
+            setattr(alvo, campo, valor)
 
 
 # --------------------------------------------------------------------------- #
@@ -101,8 +126,21 @@ def conta_cadastro():
         # balcão, feito pelo ateliê), deixamos ele "reivindicar" a conta definindo
         # a senha agora. Se já tem senha, é conta de verdade: manda fazer login.
         existente = None if erro else Cliente.por_email(email)
+        # Sem e-mail casado: tenta pelo WhatsApp, evitando duplicar um cadastro de
+        # balcão (ERP) que não tinha e-mail. Se o WhatsApp já é de uma conta real,
+        # manda fazer login (não cria segundo cadastro).
+        if existente is None and not erro:
+            por_zap = Cliente.por_whatsapp(telefone)
+            if por_zap and por_zap.tem_conta:
+                erro = "Já existe uma conta com esse WhatsApp. Faça login."
+            elif por_zap:
+                existente = por_zap
         if existente and existente.tem_conta:
             erro = "Já existe uma conta com esse e-mail. Faça login."
+        # Só deixa reivindicar um cadastro pré-existente se os dados conferem.
+        if existente and not erro and not _confere_identidade(existente, email, telefone):
+            erro = ("Já existe um cadastro com esses dados, mas eles não conferem. "
+                    "Fale com o ateliê pelo WhatsApp para ativar sua conta.")
         if erro:
             flash(erro, "erro")
             return render_template("conta_cadastro.html", dados=form)
@@ -110,9 +148,12 @@ def conta_cadastro():
         if existente:                       # reivindica cadastro de balcão existente
             cliente = existente
             cliente.nome = nome
+            cliente.email = email           # casado por WhatsApp pode não ter e-mail ainda
             cliente.telefone = telefone
             cliente.aceita_novidades = form.get("aceita_novidades") == "on"
-            _ler_endereco(form, cliente)
+            # preservar=True: não zera o endereço já cadastrado no ERP se o cliente
+            # deixar os campos em branco no cadastro da vitrine.
+            _ler_endereco(form, cliente, preservar=True)
             cliente.set_senha(senha)
             msg = f"Bem-vinda de volta, {cliente.nome}! Sua conta está pronta."
         else:
@@ -154,6 +195,48 @@ def conta_entrar():
         flash("E-mail ou senha incorretos.", "erro")
 
     return render_template("conta_entrar.html", email=request.form.get("email", ""))
+
+
+@publico_bp.route("/conta/esqueci", methods=["GET", "POST"])
+@limiter.limit("10 per hour", methods=["POST"])
+def conta_esqueci():
+    """Envia um link de redefinição de senha por e-mail. Resposta sempre genérica
+    (não revela quais e-mails têm conta)."""
+    if request.method == "POST":
+        email = Cliente.normalizar_email(request.form.get("email", ""))
+        cliente = Cliente.por_email(email) if email else None
+        if cliente and cliente.tem_conta:
+            token = gerar_token_reset(cliente.id)
+            link = url_for("publico.conta_redefinir", token=token, _external=True)
+            html = render_template("email_reset.html", cliente=cliente, link=link)
+            enviar_email(cliente.email, "Redefinir sua senha · Sabrina Hansen Atelier", html)
+            _log("cliente_reset_solicitado", f"#{cliente.id} ({cliente.nome})")
+        flash("Se este e-mail tiver conta, enviamos um link para redefinir a senha.", "sucesso")
+        return redirect(url_for("publico.conta_entrar"))
+    return render_template("conta_esqueci.html")
+
+
+@publico_bp.route("/conta/redefinir/<token>", methods=["GET", "POST"])
+@limiter.limit("20 per hour")
+def conta_redefinir(token):
+    cid = ler_token_reset(token)
+    cliente = Cliente.query.get(cid) if cid else None
+    if cliente is None or not cliente.tem_conta:
+        flash("Link inválido ou expirado. Peça um novo.", "erro")
+        return redirect(url_for("publico.conta_esqueci"))
+    if request.method == "POST":
+        senha = request.form.get("senha", "")
+        if len(senha) < 6:
+            flash("A senha precisa ter ao menos 6 caracteres.", "erro")
+            return render_template("conta_redefinir.html", token=token)
+        cliente.set_senha(senha)
+        db.session.commit()
+        _log("cliente_reset_concluido", f"#{cliente.id} ({cliente.nome})")
+        session["cliente_id"] = cliente.id
+        session["cliente_nome"] = cliente.nome
+        flash("Senha redefinida! Você já está logada.", "sucesso")
+        return redirect(url_for("publico.conta"))
+    return render_template("conta_redefinir.html", token=token)
 
 
 @publico_bp.route("/conta/sair")

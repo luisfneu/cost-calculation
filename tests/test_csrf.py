@@ -29,8 +29,14 @@ def test_login_tem_token(app_csrf):
 
 
 def test_post_sem_token_bloqueado(app_csrf):
-    r = app_csrf.test_client().post("/console/erp/login", data={"senha": "test"})
-    assert r.status_code == 400  # CSRF ausente → rejeitado
+    c = app_csrf.test_client()
+    r = c.post("/console/erp/login", data={"senha": "test"})
+    # CSRF ausente → NÃO efetiva o login; redireciona ao formulário (302) em vez
+    # de 400 seco (tratamento gracioso do CSRFError).
+    assert r.status_code == 302
+    assert "/console/erp/login" in r.headers["Location"]
+    with c.session_transaction() as s:
+        assert not s.get("logado")   # login não aconteceu
 
 
 def test_meta_token_nas_paginas(app_csrf):

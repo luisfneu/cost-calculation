@@ -350,6 +350,15 @@ def detalhe_peca(peca_id):
 @bp.route("/pecas/<int:peca_id>/excluir", methods=["POST"])
 def excluir_peca(peca_id):
     peca = Peca.query.get_or_404(peca_id)
+    # Guarda: não apagar peça que já tem histórico (vendas ou ordens de produção).
+    # Apagar quebraria recibos/vendas antigos (it.peca vira None → erro) e perderia
+    # o custo registrado. Nesses casos, oculte da vitrine em vez de excluir.
+    em_vendas = VendaItem.query.filter_by(peca_id=peca.id).count()
+    em_producao = OrdemProducaoItem.query.filter_by(peca_id=peca.id).count()
+    if em_vendas or em_producao:
+        flash("Esta peça tem histórico (vendas/produção) e não pode ser excluída. "
+              "Desmarque 'vitrine pública' para ocultá-la.", "erro")
+        return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
     _remover_foto(peca.foto)
     for f in peca.fotos:
         _remover_foto(f.arquivo)
@@ -668,6 +677,34 @@ def _pix_publico(valor, txid):
                         Parametro.obter("pix_cidade", ""), valor, txid[:25])
 
 
+def _frete_recalculado(cep, linhas, frete_nome):
+    """Recalcula o frete no servidor para a opção escolhida — nunca confia no
+    preço enviado pelo navegador. Retorna (valor, ok). ok=False quando não deu
+    para recalcular (retirar em mãos retorna 0/True; API fora ou opção
+    desconhecida retorna (None, False) e o chamador decide o fallback)."""
+    if not frete_nome or "retirar" in frete_nome.lower():
+        return 0.0, True
+    ids = [x["id"] for x in linhas]
+    peso = altura = largura = comprimento = 0.0
+    for peca in Peca.query.filter(Peca.id.in_(ids)).all():
+        q = sum(x["qtd"] for x in linhas if x["id"] == peca.id)
+        peso += (peca.peso_g or 0) * q
+        altura += (peca.altura_cm or 0) * q
+        largura = max(largura, peca.largura_cm or 0)
+        comprimento = max(comprimento, peca.comprimento_cm or 0)
+    opcoes, erro = _frete_opcoes(cep, peso_g=peso, altura_cm=altura,
+                                 largura_cm=largura, comprimento_cm=comprimento)
+    if erro:
+        return None, False
+    match = next((o for o in opcoes if o.get("nome") == frete_nome), None)
+    if not match:
+        return None, False
+    try:
+        return max(0.0, float(match.get("preco", 0) or 0)), True
+    except (TypeError, ValueError):
+        return None, False
+
+
 @publico_bp.route("/publico/pedido", methods=["POST"])
 @csrf.exempt
 @limiter.limit("10 per minute")
@@ -709,15 +746,22 @@ def pedido_publico():
         return {"ok": False, "erro": "Seu pedido está vazio."}, 400
     subtotal = dinheiro(subtotal)
 
-    # Frete (informado; o admin confere na confirmação) — calculado antes do
-    # cupom porque um cupom de frete precisa do valor do frete para saber
-    # quanto descontar (limitado a ele).
+    # Frete — recalculado no servidor (não confiamos no preço enviado pelo
+    # navegador). Calculado antes do cupom porque um cupom de frete precisa do
+    # valor do frete para saber quanto descontar (limitado a ele).
     frete = dados.get("frete") or {}
     frete_nome = str(frete.get("nome", "")).strip()
     try:
-        frete_valor = max(0.0, float(frete.get("preco", 0) or 0))
+        frete_cliente = max(0.0, float(frete.get("preco", 0) or 0))
     except (TypeError, ValueError):
-        frete_valor = 0.0
+        frete_cliente = 0.0
+    frete_valor, recalculado = _frete_recalculado(
+        str(cli.get("cep", "")).strip(), linhas, frete_nome)
+    if not recalculado:
+        # API de frete indisponível / opção não reconhecida: cai no valor exibido
+        # ao cliente (o admin confere de qualquer jeito no WhatsApp).
+        current_app.logger.warning("Frete não recalculado (%r); usando valor do cliente.", frete_nome)
+        frete_valor = frete_cliente
 
     # Cupom (só geral — pessoal fica reservado à confirmação manual no WhatsApp).
     # Desconto de itens e de frete ficam em "baldes" separados: um cupom de
