@@ -5,6 +5,8 @@ import io
 import math
 import os
 import re
+import secrets
+import string
 import unicodedata
 import uuid
 from datetime import date, datetime
@@ -166,6 +168,25 @@ def mesclar_cliente(cliente_id, duplicado_id):
     _log("cliente_mesclado", f"#{duplicado_id} ({nome_dup}) → #{principal.id} ({principal.nome})")
     flash(f"Cadastro de {nome_dup} mesclado neste cliente.", "sucesso")
     return redirect(url_for("main.detalhe_cliente", cliente_id=principal.id))
+
+
+@bp.route("/clientes/<int:cliente_id>/resetar-senha", methods=["POST"])
+def resetar_senha_cliente(cliente_id):
+    """Gera uma senha temporária para o cliente (não há e-mail transacional).
+    O ateliê envia pelo WhatsApp e o cliente troca em Preferências. Evita ter de
+    'reivindicar' (que é o caminho inseguro)."""
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    cliente = Cliente.query.get_or_404(cliente_id)
+    alfabeto = string.ascii_lowercase + string.digits
+    temp = "sh" + "".join(secrets.choice(alfabeto) for _ in range(6))
+    cliente.set_senha(temp)
+    db.session.commit()
+    _log("cliente_senha_reset", f"#{cliente.id} ({cliente.nome})")
+    flash(f"Senha temporária de {cliente.nome}: {temp} — envie pelo WhatsApp e "
+          "peça para trocá-la em Preferências.", "sucesso")
+    return redirect(url_for("main.detalhe_cliente", cliente_id=cliente.id))
 
 
 @bp.route("/crm")

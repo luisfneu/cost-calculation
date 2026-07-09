@@ -997,6 +997,7 @@ class VendaItem(db.Model):
     # Item sem estoque no fechamento: precisa ser produzido (aparece em Encomendas).
     produzir = db.Column(db.Boolean, nullable=False, default=False)
     produzido = db.Column(db.Boolean, nullable=False, default=False)  # produção concluída
+    insumo_baixado = db.Column(db.Boolean, nullable=False, default=False)  # insumos já consumidos
 
     venda = db.relationship("Venda", back_populates="itens")
     peca = db.relationship("Peca")

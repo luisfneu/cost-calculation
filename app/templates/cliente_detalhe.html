@@ -60,6 +60,11 @@
       {% endif %}
       {% if cliente.tem_conta %}
         <span class="badge text-bg-success"><i class="bi bi-shield-check"></i> Conta na vitrine</span>
+        <form method="post" action="{{ url_for('main.resetar_senha_cliente', cliente_id=cliente.id) }}"
+              onsubmit="return confirm('Gerar nova senha temporária para {{ cliente.nome }}? A senha atual deixa de funcionar.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-key"></i> Redefinir senha</button>
+        </form>
       {% endif %}
       {% if cliente.aceita_novidades %}
         <span class="badge text-bg-info"><i class="bi bi-megaphone"></i> Aceita novidades</span>
