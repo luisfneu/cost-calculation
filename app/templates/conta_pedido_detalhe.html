@@ -1,0 +1,93 @@
+{% extends "conta_v2_base.html" %}
+{% set secao = 'pedidos' %}
+{% block titulo %}Pedido #{{ venda.id }}{% endblock %}
+{% block conta %}
+{% set frete_val = 0 if venda.frete_cortesia else venda.frete %}
+{% set subtotal = venda.subtotal_bruto %}
+{% set desconto = (subtotal + frete_val - venda.receita) %}
+
+<a href="{{ url_for('publico.conta_pedidos') }}" class="link-atelier small"><i class="bi bi-chevron-left"></i> Voltar</a>
+
+<div class="pedido-box mt-2">
+  <div class="d-flex justify-content-between flex-wrap gap-3">
+    <div>
+      <div class="small text-muted">Situação</div>
+      <div class="fw-bold">{{ venda.etapa_label }}</div>
+    </div>
+    <div class="text-end">
+      <div class="small"><strong>Pedido nº:</strong> {{ venda.id }}</div>
+      <div class="small"><strong>Data:</strong> {{ venda.criado_em | dt }}</div>
+      <div class="small"><strong>Total:</strong> {{ venda.receita | moeda }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Stepper: 6 bolinhas (grupos); a ativa mostra o sub-status atual -->
+<div class="pedido-box">
+  {% set ultimo = venda.GRUPOS|length - 1 %}
+  <div class="stepper-cli">
+    {% for glabel in venda.GRUPOS %}
+    {% set gi = loop.index0 %}
+    <div class="step-cli {{ 'done' if gi <= venda.grupo_atual }} {{ 'atual' if gi == venda.grupo_atual }} {{ 'big' if gi == ultimo }}">
+      <div class="dot">
+        {% if gi < venda.grupo_atual %}<i class="bi bi-check-lg"></i>
+        {% elif gi == ultimo %}<i class="bi bi-house-door-fill"></i>
+        {% else %}{{ loop.index }}{% endif %}
+      </div>
+      <div class="lbl">{{ venda.etapa_label if gi == venda.grupo_atual else glabel }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if venda.grupo_atual >= 2 %}
+  <div class="text-center mt-2">
+    <a href="{{ url_for('publico.conta_pedido_recibo', venda_id=venda.id) }}" target="_blank" class="link-atelier small">
+      <i class="bi bi-receipt"></i> Ver / imprimir recibo
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Produtos -->
+<div class="pedido-box">
+  <div class="conta-sec-tit">Produtos</div>
+  {% for it in venda.itens %}
+  <div class="pdi-item">
+    {% if it.peca and it.peca.foto %}
+      <img src="{{ url_for('static', filename=(it.peca.foto | thumb)) }}" alt="" loading="lazy">
+    {% else %}<div class="pdi-item-semfoto" style="width:54px;height:68px;border-radius:6px;background:var(--cream-soft)"></div>{% endif %}
+    <div class="flex-grow-1">
+      <div class="fw-bold">{{ it.peca.nome if it.peca else '—' }}</div>
+      <div class="small text-muted">Tam: {{ it.tamanho }} · Qtd: {{ it.quantidade | num }}</div>
+    </div>
+    <div class="text-end">
+      <div class="small text-muted">{{ it.preco_unitario | moeda }}</div>
+      <div class="fw-bold">{{ it.subtotal_bruto | moeda }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3">
+  <!-- Endereço -->
+  <div class="col-md-6">
+    <div class="pedido-box h-100">
+      <div class="conta-sec-tit">Endereço de entrega</div>
+      <div class="fw-bold">{{ venda.comprador or cliente.nome }}</div>
+      {% if cliente.tem_endereco %}
+        <div class="text-muted">{{ cliente.endereco_completo }}</div>
+      {% else %}<div class="text-muted">A combinar pelo WhatsApp.</div>{% endif %}
+      {% if cliente.telefone %}<div class="text-muted small">Tel.: {{ cliente.telefone }}</div>{% endif %}
+    </div>
+  </div>
+  <!-- Resumo -->
+  <div class="col-md-6">
+    <div class="pedido-box h-100">
+      <div class="conta-sec-tit">Resumo</div>
+      <div class="pdi-resumo"><span>Subtotal</span><span>{{ subtotal | moeda }}</span></div>
+      {% if desconto > 0.005 %}<div class="pdi-resumo"><span>Desconto</span><span class="text-success">− {{ desconto | moeda }}</span></div>{% endif %}
+      <div class="pdi-resumo"><span>Frete</span><span>{{ 'Grátis' if not frete_val else frete_val | moeda }}</span></div>
+      <div class="pdi-resumo total"><span>Total</span><span>{{ venda.receita | moeda }}</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

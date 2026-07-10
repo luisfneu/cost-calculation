@@ -50,6 +50,7 @@ from ..models import (
     Vale,
     Venda,
     VendaItem,
+    cpf_valido,
     db,
 )
 from . import bp
@@ -86,6 +87,10 @@ def form_cliente(cliente_id=None):
             if existente and (cliente is None or existente.id != cliente.id):
                 flash("Já existe um cliente com esse e-mail.", "erro")
                 return render_template("cliente_form.html", cliente=cliente)
+        cpf = re.sub(r"\D", "", request.form.get("cpf", ""))
+        if not cpf_valido(cpf):
+            flash("CPF inválido.", "erro")
+            return render_template("cliente_form.html", cliente=cliente)
         if cliente is None:
             cliente = Cliente()
             db.session.add(cliente)
@@ -95,6 +100,8 @@ def form_cliente(cliente_id=None):
         cliente.instagram = request.form.get("instagram", "").strip()
         cliente.telefone = request.form.get("telefone", "").strip()
         cliente.nascimento = _to_date(request.form.get("nascimento"))
+        cliente.genero = request.form.get("genero", "").strip()
+        cliente.cpf = cpf
         cliente.tamanho_habitual = request.form.get("tamanho_habitual", "").strip().upper()
         cliente.cep = request.form.get("cep", "").strip()
         cliente.logradouro = request.form.get("logradouro", "").strip()

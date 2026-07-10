@@ -1,0 +1,114 @@
+{% extends "conta_v2_base.html" %}
+{% set secao = 'enderecos' %}
+{% block titulo %}Meus endereços{% endblock %}
+{% block conta %}
+<div class="conta-sec-tit">Meus endereços</div>
+
+{% set principal = (enderecos | selectattr('principal') | list | first) %}
+{% set cobranca = (enderecos | selectattr('cobranca') | list | first) %}
+{% if principal or cobranca %}
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="text-muted small text-uppercase mb-1" style="letter-spacing:1px"><i class="bi bi-truck"></i> Endereço de envio</div>
+    {% if principal %}
+      <div><strong>{{ principal.destinatario or cliente.nome }}</strong>{% if principal.apelido %} <span class="text-muted">({{ principal.apelido }})</span>{% endif %}</div>
+      <div class="text-muted">{{ principal.endereco_completo }}</div>
+    {% else %}<div class="text-muted">—</div>{% endif %}
+  </div>
+  <div class="col-md-6">
+    <div class="text-muted small text-uppercase mb-1" style="letter-spacing:1px"><i class="bi bi-receipt"></i> Endereço de cobrança</div>
+    {% if cobranca and principal and cobranca.id == principal.id %}
+      <div class="text-muted">O mesmo do endereço de envio.</div>
+    {% elif cobranca %}
+      <div><strong>{{ cobranca.destinatario or cliente.nome }}</strong>{% if cobranca.apelido %} <span class="text-muted">({{ cobranca.apelido }})</span>{% endif %}</div>
+      <div class="text-muted">{{ cobranca.endereco_completo }}</div>
+    {% else %}<div class="text-muted">—</div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div class="text-muted small text-uppercase" style="letter-spacing:1px">Endereços cadastrados</div>
+  <button type="button" class="btn btn-link link-atelier small p-0" onclick="mostrarFormEnd()"><i class="bi bi-plus-circle"></i> Criar novo</button>
+</div>
+
+{% if enderecos %}
+  {% for e in enderecos %}
+  <div class="pedido-card">
+    <div class="flex-grow-1">
+      <div><strong>{{ e.destinatario or cliente.nome }}</strong>{% if e.apelido %} <span class="text-muted">· {{ e.apelido }}</span>{% endif %}
+        {% if e.principal %}<span class="badge text-bg-secondary">envio</span>{% endif %}
+        {% if e.cobranca %}<span class="badge text-bg-light border">cobrança</span>{% endif %}</div>
+      <div class="text-muted small">{{ e.endereco_completo }}</div>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      {% if not e.principal %}
+      <form method="post" action="{{ url_for('publico.conta_endereco_principal', end_id=e.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-primary" title="Tornar endereço de envio"><i class="bi bi-truck"></i> Envio</button>
+      </form>
+      {% endif %}
+      {% if not e.cobranca %}
+      <form method="post" action="{{ url_for('publico.conta_endereco_cobranca', end_id=e.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" title="Tornar de cobrança"><i class="bi bi-receipt"></i> Cobrança</button>
+      </form>
+      {% endif %}
+      <a href="{{ url_for('publico.conta_enderecos', editar=e.id) }}#form-end" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+      <form method="post" action="{{ url_for('publico.conta_endereco_excluir', end_id=e.id) }}"
+            onsubmit="return confirm('Excluir este endereço?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="text-muted">Nenhum endereço cadastrado ainda.</p>
+{% endif %}
+
+<div id="form-end-wrap" {{ '' if em_edicao else 'hidden' }}>
+<hr class="my-4" id="form-end">
+<div class="conta-sec-tit">{{ 'Editar endereço' if em_edicao else 'Novo endereço' }}</div>
+<form method="post" action="{{ url_for('publico.conta_endereco_salvar') }}" style="max-width:640px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if em_edicao %}<input type="hidden" name="id" value="{{ em_edicao.id }}">{% endif %}
+  {% set e = em_edicao %}
+  <div class="row g-2">
+    <div class="col-md-6"><input type="text" name="apelido" class="form-control" placeholder="Apelido (Casa, Trabalho…)" value="{{ e.apelido if e else '' }}"></div>
+    <div class="col-md-6"><input type="text" name="destinatario" class="form-control" placeholder="Quem recebe" value="{{ (e.destinatario if e else '') or cliente.nome }}"></div>
+    <div class="col-4 col-md-3">
+      <input type="text" name="cep" class="form-control" placeholder="CEP" inputmode="numeric" maxlength="9"
+             autocomplete="postal-code" data-cep-autofill value="{{ e.cep if e else '' }}">
+      <span data-cep-status class="small"></span>
+    </div>
+    <div class="col-8 col-md-6"><input type="text" name="logradouro" class="form-control" placeholder="Rua" value="{{ e.logradouro if e else '' }}"></div>
+    <div class="col-4 col-md-3"><input type="text" name="numero" class="form-control" placeholder="Nº" value="{{ e.numero if e else '' }}"></div>
+    <div class="col-12 col-md-6"><input type="text" name="complemento" class="form-control" placeholder="Complemento" value="{{ e.complemento if e else '' }}"></div>
+    <div class="col-12 col-md-6"><input type="text" name="bairro" class="form-control" placeholder="Bairro" value="{{ e.bairro if e else '' }}"></div>
+    <div class="col-9 col-md-9"><input type="text" name="cidade" class="form-control" placeholder="Cidade" value="{{ e.cidade if e else '' }}"></div>
+    <div class="col-3 col-md-3"><input type="text" name="uf" class="form-control" placeholder="UF" maxlength="2" style="text-transform:uppercase" value="{{ e.uf if e else '' }}"></div>
+  </div>
+  <div class="form-check mt-2">
+    <input class="form-check-input" type="checkbox" name="principal" id="end-princ" {{ 'checked' if (e and e.principal) or not enderecos }}>
+    <label class="form-check-label small" for="end-princ">Usar como endereço de <strong>envio</strong></label>
+  </div>
+  <div class="form-check">
+    <input class="form-check-input" type="checkbox" name="cobranca" id="end-cob" {{ 'checked' if (e and e.cobranca) or not enderecos }}>
+    <label class="form-check-label small" for="end-cob">Usar como endereço de <strong>cobrança</strong></label>
+  </div>
+  <button class="btn btn-primary mt-3">Salvar endereço</button>
+  <a href="{{ url_for('publico.conta_enderecos') }}" class="btn btn-link">cancelar</a>
+</form>
+</div><!-- /form-end-wrap -->
+{% endblock %}
+{% block conta_scripts %}
+<script src="{{ url_for('static', filename='js/cep-autofill.js') }}"></script>
+<script>
+  function mostrarFormEnd() {
+    var w = document.getElementById('form-end-wrap');
+    w.hidden = false;
+    w.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "conta_v2_base.html" %}
+{% set secao = 'vales' %}
+{% block titulo %}Meus vales{% endblock %}
+{% block conta %}
+<div class="conta-sec-tit">Meus vales</div>
+{% if vales %}
+  {% for vale in vales %}
+  <div class="vale-card">
+    <div>
+      <div class="cod">{{ vale.codigo }}</div>
+      <div class="small text-muted">
+        {{ vale.tipo_label }}{% if vale.observacao %} · {{ vale.observacao }}{% endif %}
+        {% if not vale.disponivel %} · <span class="text-danger">indisponível</span>{% endif %}
+      </div>
+    </div>
+    <div class="text-end">
+      <div class="saldo">{{ vale.saldo | moeda }}</div>
+      <div class="small text-muted">de {{ vale.valor_inicial | moeda }}</div>
+    </div>
+  </div>
+  {% endfor %}
+  <p class="small text-muted mt-3">Vales são gerados em devoluções/trocas e usados no fechamento do pedido pelo WhatsApp.</p>
+{% else %}
+  <div class="text-center text-muted my-5">
+    <i class="bi bi-ticket-perforated" style="font-size:2rem"></i>
+    <p class="mt-2 mb-0">Você ainda não tem vales.<br>Vales de crédito de devoluções aparecem aqui.</p>
+  </div>
+{% endif %}
+{% endblock %}

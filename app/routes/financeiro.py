@@ -265,6 +265,7 @@ def pagar_parcela(parcela_id):
     venda.pago = venda.total_pago >= venda.receita - 0.01
     if venda.crediario_quitado and venda.status == "crediario":
         venda.status = "pago"
+    venda.sincronizar_etapa()
     db.session.commit()
     _log("pagamento", f"parcela {p.rotulo} pedido #{venda.id}: {_brl(p.valor)}")
     flash(f"Parcela {p.rotulo} do pedido #{venda.id} recebida.", "sucesso")
