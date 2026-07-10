@@ -4,15 +4,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vitrine · Sabrina Hansen Atelier</title>
+  <title>{{ colecao ~ ' · ' if colecao }}Sabrina Hansen Atelier</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+
+  <meta name="description" content="{{ meta_desc }}">
+  <link rel="canonical" href="{{ url_for('publico.vitrine_publica', _external=True) }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sabrina Hansen Atelier">
+  <meta property="og:title" content="{{ colecao ~ ' · ' if colecao }}Sabrina Hansen Atelier">
+  <meta property="og:description" content="{{ meta_desc }}">
+  <meta property="og:url" content="{{ url_for('publico.vitrine_publica', _external=True) }}">
+  {% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+  <meta name="twitter:card" content="{{ 'summary_large_image' if og_image else 'summary' }}">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   <style>
-    body { background: #b89a78; font-family: 'Jost', sans-serif; }
+    body { background: var(--mocha); font-family: var(--fonte-corpo); }
     .topo { text-align: center; padding: 28px 0 10px; }
     .mono { font-family: 'Parisienne', cursive; font-size: 3rem; color: #fff; line-height: 1; }
     .marca { font-family: 'Cormorant Garamond', serif; letter-spacing: 5px; text-transform: uppercase; color: #fff; }
@@ -40,24 +50,24 @@
     .vitrine-conta-nav a:hover { text-decoration: underline; }
   </style>
   <div class="container pb-5">
-    <form method="get" class="row g-2 mb-4 justify-content-center">
+    <form method="get" class="row g-2 mb-4 justify-content-center" role="search" aria-label="Buscar peças">
       <div class="col-6 col-md-3">
-        <input type="text" name="q" class="form-control form-control-sm" placeholder="buscar peça…" value="{{ q }}">
+        <input type="text" name="q" class="form-control form-control-sm" placeholder="buscar peça…" value="{{ q }}" aria-label="Buscar peça">
       </div>
       <div class="col-6 col-md-2">
-        <select name="colecao" class="form-select form-select-sm" onchange="this.form.submit()">
+        <select name="colecao" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filtrar por coleção">
           <option value="">Todas as coleções</option>
           {% for c in colecoes %}<option value="{{ c }}" {{ 'selected' if colecao == c }}>{{ c }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-6 col-md-2">
-        <select name="tipo" class="form-select form-select-sm" onchange="this.form.submit()">
+        <select name="tipo" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filtrar por tipo">
           <option value="">Todos os tipos</option>
           {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if tipo == t }}>{{ t }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-6 col-md-2">
-        <select name="ordem" class="form-select form-select-sm" onchange="this.form.submit()">
+        <select name="ordem" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Ordenar">
           <option value="">Ordenar por…</option>
           <option value="nome" {{ 'selected' if ordem == 'nome' }}>Nome</option>
           <option value="preco_asc" {{ 'selected' if ordem == 'preco_asc' }}>Menor preço</option>
@@ -77,7 +87,7 @@
             <span class="vitrine-esgotado{{ '' if peca.sob_encomenda else ' d-none' }}">sob encomenda</span>
             {{ ui.carrossel(peca, colecao_fotos, lightbox=True) }}
             <div class="card-body">
-              <div class="vitrine-nome">{{ peca.nome }}</div>
+              <div class="vitrine-nome"><a href="{{ url_for('publico.peca_publica', peca_id=peca.id) }}" class="text-reset text-decoration-none stretched-link-none">{{ peca.nome }}</a></div>
               {% if peca.sob_encomenda %}
                 <div class="vitrine-preco">{{ peca.preco_vitrine | moeda }}</div>
               {% elif peca.em_promocao %}
@@ -100,7 +110,7 @@
                         data-id="{{ peca.id }}" data-nome="{{ peca.nome }}"
                         data-preco="{{ peca.preco_vitrine }}"
                         data-encomenda="{{ '1' if peca.sob_encomenda else '0' }}"
-                        data-foto="{{ url_for('static', filename='uploads/' ~ foto) if foto else '' }}">
+                        data-foto="{{ url_for('static', filename=(foto | thumb)) if foto else '' }}">
                   <i class="bi bi-bag-plus"></i> Adicionar ao pedido
                 </button>
               {% endif %}
@@ -145,7 +155,7 @@
         <!-- Cupom -->
         <label class="form-label small mb-1 mt-2" for="cart-cupom">Cupom (opcional)</label>
         <div class="input-group input-group-sm mb-1">
-          <input type="text" id="cart-cupom" class="form-control" placeholder="ex.: SEUCUPOM" autocomplete="off" autocapitalize="characters">
+          <input type="text" id="cart-cupom" class="form-control" placeholder="ex.: SEUCUPOM" autocomplete="off" autocapitalize="characters" aria-label="Código do cupom">
           <button type="button" class="btn btn-outline-secondary" id="cart-aplicar-cupom">Aplicar</button>
         </div>
         <div id="cart-cupom-msg" class="small mb-2"></div>
@@ -175,18 +185,18 @@
             Já é cliente? <a href="{{ url_for('publico.conta_entrar') }}">Entrar</a> para preencher automático — ou continue como convidado.
           </div>
           <h6 class="mb-2"><i class="bi bi-person-lines-fill"></i> Seus dados</h6>
-          <input type="text" id="pc-nome" class="form-control form-control-sm mb-2" placeholder="Nome completo *" autocomplete="name">
-          <input type="text" id="pc-whats" class="form-control form-control-sm mb-2" placeholder="WhatsApp com DDD *" inputmode="tel" autocomplete="tel">
-          <input type="text" id="pc-insta" class="form-control form-control-sm mb-2" placeholder="Instagram (opcional)">
+          <input type="text" id="pc-nome" class="form-control form-control-sm mb-2" placeholder="Nome completo *" autocomplete="name" aria-label="Nome completo">
+          <input type="text" id="pc-whats" class="form-control form-control-sm mb-2" placeholder="WhatsApp com DDD *" inputmode="tel" autocomplete="tel" aria-label="WhatsApp com DDD">
+          <input type="text" id="pc-insta" class="form-control form-control-sm mb-2" placeholder="Instagram (opcional)" aria-label="Instagram">
           <div class="row g-2">
-            <div class="col-8"><input type="text" id="pc-logradouro" class="form-control form-control-sm mb-2" placeholder="Rua / Av."></div>
-            <div class="col-4"><input type="text" id="pc-numero" class="form-control form-control-sm mb-2" placeholder="Nº"></div>
+            <div class="col-8"><input type="text" id="pc-logradouro" class="form-control form-control-sm mb-2" placeholder="Rua / Av." aria-label="Rua ou avenida"></div>
+            <div class="col-4"><input type="text" id="pc-numero" class="form-control form-control-sm mb-2" placeholder="Nº" aria-label="Número"></div>
           </div>
-          <input type="text" id="pc-complemento" class="form-control form-control-sm mb-2" placeholder="Complemento (opcional)">
-          <input type="text" id="pc-bairro" class="form-control form-control-sm mb-2" placeholder="Bairro">
+          <input type="text" id="pc-complemento" class="form-control form-control-sm mb-2" placeholder="Complemento (opcional)" aria-label="Complemento">
+          <input type="text" id="pc-bairro" class="form-control form-control-sm mb-2" placeholder="Bairro" aria-label="Bairro">
           <div class="row g-2">
-            <div class="col-8"><input type="text" id="pc-cidade" class="form-control form-control-sm mb-2" placeholder="Cidade"></div>
-            <div class="col-4"><input type="text" id="pc-uf" class="form-control form-control-sm mb-2" placeholder="UF" maxlength="2" style="text-transform:uppercase"></div>
+            <div class="col-8"><input type="text" id="pc-cidade" class="form-control form-control-sm mb-2" placeholder="Cidade" aria-label="Cidade"></div>
+            <div class="col-4"><input type="text" id="pc-uf" class="form-control form-control-sm mb-2" placeholder="UF" maxlength="2" style="text-transform:uppercase" aria-label="Estado (UF)"></div>
           </div>
           <div id="pc-msg" class="small mb-2"></div>
           <button type="button" class="btn btn-primary w-100" id="cart-enviar-pedido"><i class="bi bi-send"></i> Enviar pedido</button>

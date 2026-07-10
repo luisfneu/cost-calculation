@@ -31,7 +31,8 @@
               <td>{{ it.quantidade|int }}</td>
               {% if ordem.status == 'aberta' %}
               <td class="text-end">
-                <form method="post" action="{{ url_for('main.excluir_item_ordem', ordem_id=ordem.id, item_id=it.id) }}">
+                <form method="post" action="{{ url_for('main.excluir_item_ordem', ordem_id=ordem.id, item_id=it.id) }}"
+                      data-confirm="Remover este item da ordem de produção?">
                   <button class="btn btn-sm btn-outline-danger">×</button>
                 </form>
               </td>

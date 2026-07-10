@@ -7,13 +7,14 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
   <style>
-    body { background: #b89a78; font-family: 'Jost', sans-serif; min-height: 100vh; display: flex; align-items: center; }
-    .cartao { max-width: 360px; margin: 0 auto; background: #f7f1e6; border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.15); }
-    .mono { font-family: 'Parisienne', cursive; font-size: 3rem; color: #b08a4f; line-height: 1; }
-    .marca { font-family: 'Cormorant Garamond', serif; letter-spacing: 4px; text-transform: uppercase; color: #2c2620; }
-    .sub { letter-spacing: 4px; font-size: .65rem; text-transform: uppercase; color: #b08a4f; margin-bottom: 20px; }
+    body { background: var(--mocha); font-family: var(--fonte-corpo); min-height: 100vh; display: flex; align-items: center; }
+    .cartao { max-width: 360px; margin: 0 auto; background: var(--cream); border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.15); }
+    .mono { font-family: 'Parisienne', cursive; font-size: 3rem; color: var(--gold); line-height: 1; }
+    .marca { font-family: var(--fonte-titulo); letter-spacing: 4px; text-transform: uppercase; color: var(--ink); }
+    .sub { letter-spacing: 4px; font-size: .65rem; text-transform: uppercase; color: var(--gold); margin-bottom: 20px; }
   </style>
 </head>
 <body>
@@ -28,7 +29,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="text" name="login" class="form-control mb-2" placeholder="Usuário" autofocus autocomplete="username">
         <input type="password" name="senha" class="form-control mb-3" placeholder="Senha" autocomplete="current-password" required>
-        <button class="btn btn-primary w-100" style="background:#b08a4f;border-color:#b08a4f">Entrar</button>
+        <button class="btn btn-primary w-100" style="background:var(--gold);border-color:var(--gold)">Entrar</button>
         <div class="text-muted mt-2" style="font-size:.75rem">Deixe o usuário em branco para entrar com a senha-mestre.</div>
       </form>
     </div>

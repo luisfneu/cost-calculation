@@ -117,6 +117,7 @@ def _salvar_foto(arquivo):
     caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
     arquivo.save(caminho)
     _otimizar_imagem(caminho)
+    _gerar_thumbnail(nome)      # miniatura leve para a grade da vitrine
     return nome
 
 
@@ -136,12 +137,42 @@ def _otimizar_imagem(caminho, lado_max=1200):
         pass
 
 
+def _nome_thumb(nome):
+    """Nome do arquivo de miniatura correspondente (thumb_<base>.jpg)."""
+    return f"thumb_{nome.rsplit('.', 1)[0]}.jpg"
+
+
+def _gerar_thumbnail(nome, lado=500):
+    """Cria uma miniatura JPEG (uploads/thumb_<base>.jpg) para a grade da vitrine —
+    a imagem cheia (até 1200px, ~1 MB) só é baixada no zoom. Best-effort: sem
+    Pillow ou em erro, ignora (a grade cai para a imagem cheia via filtro `thumb`)."""
+    if not nome:
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    origem = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
+    if not os.path.exists(origem):
+        return None
+    destino = os.path.join(current_app.config["UPLOAD_FOLDER"], _nome_thumb(nome))
+    try:
+        with Image.open(origem) as img:
+            img = img.convert("RGB")
+            img.thumbnail((lado, lado))
+            img.save(destino, "JPEG", quality=82, optimize=True)
+        return _nome_thumb(nome)
+    except Exception:  # noqa: BLE001 — miniatura é best-effort
+        return None
+
+
 def _remover_foto(nome):
     if not nome:
         return
-    caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
-    if os.path.exists(caminho):
-        os.remove(caminho)
+    for alvo in (nome, _nome_thumb(nome)):     # remove a imagem e sua miniatura
+        caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], alvo)
+        if os.path.exists(caminho):
+            os.remove(caminho)
 
 
 def _copiar_foto(nome):
@@ -155,6 +186,7 @@ def _copiar_foto(nome):
     novo = f"{uuid.uuid4().hex}.{ext}"
     import shutil
     shutil.copyfile(origem, os.path.join(current_app.config["UPLOAD_FOLDER"], novo))
+    _gerar_thumbnail(novo)      # miniatura para a cópia
     return novo
 
 

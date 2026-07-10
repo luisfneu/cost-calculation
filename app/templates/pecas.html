@@ -3,7 +3,10 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Peças</h1>
-  <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary">+ Nova peça</a>
+  <div class="d-flex gap-2">
+    <button id="btn-etiquetas" class="btn btn-primary" disabled title="Selecione peças para imprimir etiquetas"><i class="bi bi-tags"></i> Etiquetas</button>
+    <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary">+ Nova peça</a>
+  </div>
 </div>
 <div class="card bg-white"><div class="card-body">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -30,11 +33,12 @@
 <div class="table-responsive">
 <table class="table table-hover align-middle">
   <thead class="table-light">
-    <tr><th></th><th>Peça</th><th>Estoque</th><th>Custo total</th><th>Margem</th><th>Preço de venda</th><th>Lucro</th><th></th></tr>
+    <tr><th style="width:30px"><input type="checkbox" id="chk-todas-p" aria-label="Selecionar todas"></th><th></th><th>Peça</th><th>Estoque</th><th>Custo total</th><th>Margem</th><th>Preço de venda</th><th>Lucro</th><th></th></tr>
   </thead>
   <tbody>
   {% for peca in pecas %}
     <tr>
+      <td><input type="checkbox" class="chk-peca" value="{{ peca.id }}" aria-label="Selecionar {{ peca.nome }}"></td>
       <td>
         {% if peca.foto %}
           <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb-vert" alt="" loading="lazy">
@@ -135,6 +139,25 @@
       const sem = document.getElementById('pc-sem-foto');
       if (d.foto) { document.getElementById('pc-foto').src = d.foto; wrap.style.display = ''; sem.style.display = 'none'; }
       else { wrap.style.display = 'none'; sem.style.display = ''; }
+    });
+  })();
+
+  // ---- Seleção para imprimir etiquetas em lote ----
+  (function () {
+    const btn = document.getElementById('btn-etiquetas');
+    const todas = document.getElementById('chk-todas-p');
+    const chks = () => [...document.querySelectorAll('.chk-peca')];
+    const marcadas = () => chks().filter(c => c.checked).map(c => c.value);
+    function sync() {
+      const n = marcadas().length;
+      btn.disabled = n === 0;
+      btn.innerHTML = '<i class="bi bi-tags"></i> Etiquetas' + (n ? ' (' + n + ')' : '');
+    }
+    if (todas) todas.addEventListener('change', () => { chks().forEach(c => c.checked = todas.checked); sync(); });
+    document.addEventListener('change', (e) => { if (e.target.classList.contains('chk-peca')) sync(); });
+    btn.addEventListener('click', () => {
+      const ids = marcadas();
+      if (ids.length) window.open("{{ url_for('main.etiquetas_lote') }}?ids=" + ids.join(','), '_blank');
     });
   })();
 </script>

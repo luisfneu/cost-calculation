@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   <style>
-    body { background: #b89a78; font-family: 'Jost', sans-serif; }
+    body { background: var(--mocha); font-family: var(--fonte-corpo); }
     .topo { text-align: center; padding: 24px 0 6px; }
     .conta-nav { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
                  padding: 6px 0 18px; font-size: .85rem; }
@@ -43,9 +43,19 @@
       {% if mensagens %}
         <div class="conta-card{{ ' wide' if largo }}">
           {% for categoria, msg in mensagens %}
-            <div class="alert alert-{{ 'danger' if categoria == 'erro' else 'success' }} py-2">{{ msg }}</div>
+            <div class="alert alert-{{ 'danger' if categoria == 'erro' else 'success' }} py-2 fade show js-flash"
+                 role="alert" onclick="this.remove()" style="cursor:pointer" title="Clique para fechar">{{ msg }}</div>
           {% endfor %}
         </div>
+        <script>
+          // Flash temporário: some sozinho após alguns segundos (fade do Bootstrap).
+          setTimeout(function () {
+            document.querySelectorAll('.js-flash').forEach(function (el) {
+              el.classList.remove('show');            // dispara o fade (opacity → 0)
+              setTimeout(function () { el.remove(); }, 300);
+            });
+          }, 4500);
+        </script>
       {% endif %}
     {% endwith %}
     {% block conteudo %}{% endblock %}

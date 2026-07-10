@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-br">
+{% import "_macros.html" as ui %}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ peca.nome }} · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+
+  <meta name="description" content="{{ meta_desc }}">
+  <link rel="canonical" href="{{ url_for('publico.peca_publica', peca_id=peca.id, _external=True) }}">
+  <meta property="og:type" content="product">
+  <meta property="og:site_name" content="Sabrina Hansen Atelier">
+  <meta property="og:title" content="{{ peca.nome }}">
+  <meta property="og:description" content="{{ meta_desc }}">
+  <meta property="og:url" content="{{ url_for('publico.peca_publica', peca_id=peca.id, _external=True) }}">
+  {% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+  <meta name="twitter:card" content="{{ 'summary_large_image' if og_image else 'summary' }}">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <style>
+    body { background: var(--mocha); font-family: var(--fonte-corpo); }
+    .topo { text-align: center; padding: 20px 0 6px; }
+    .peca-card { max-width: 760px; margin: 0 auto; }
+    .peca-nome { font-family: var(--fonte-titulo); }
+    .vitrine-foto { width: 100%; height: 420px; object-fit: cover; border-radius: 10px 10px 0 0; }
+  </style>
+</head>
+<body>
+  <div class="topo">
+    <a href="{{ url_for('publico.vitrine_publica') }}">
+      <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:220px; max-width:70%;">
+    </a>
+  </div>
+
+  <div class="container pb-5">
+    <div class="peca-card">
+      <p class="mb-2"><a href="{{ url_for('publico.vitrine_publica') }}" class="text-white text-decoration-none"><i class="bi bi-arrow-left"></i> Voltar à vitrine</a></p>
+      <div class="card position-relative">
+        {% if peca.colecao %}<div class="vitrine-colecao-bar">{{ peca.colecao }}</div>{% endif %}
+        <span class="vitrine-esgotado{{ '' if peca.sob_encomenda else ' d-none' }}">sob encomenda</span>
+        {{ ui.carrossel(peca, colecao_fotos) }}
+        <div class="card-body">
+          <h1 class="peca-nome h3 mb-1">{{ peca.nome }}</h1>
+          {% if peca.tipo %}<div class="text-muted small mb-2">{{ peca.tipo }}</div>{% endif %}
+
+          {% if peca.sob_encomenda %}
+            <div class="vitrine-preco fs-4">{{ peca.preco_vitrine | moeda }}</div>
+          {% elif peca.em_promocao %}
+            <div class="vitrine-preco fs-4">
+              <span class="preco-de">{{ peca.preco_base | moeda }}</span>
+              <span class="preco-por">{{ peca.preco_etiqueta_efetivo | moeda }}</span>
+              <span class="badge-promo">promo</span>
+            </div>
+          {% else %}
+            <div class="vitrine-preco fs-4">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+          {% endif %}
+
+          {% if peca.descricao %}<p class="mt-3 mb-2">{{ peca.descricao }}</p>{% endif %}
+
+          {% if whatsapp %}
+          <div class="mt-3">
+            <div class="small text-muted mb-1">Escolha o tamanho:</div>
+            <div class="vitrine-tamanhos" id="tamanhos" role="group" aria-label="Tamanhos">
+              {% for t in tamanhos %}
+                {%- set sem_estoque = (not peca.sob_encomenda) and peca.disponivel_por_tamanho[t] <= 0 -%}
+                <button type="button" class="tam-chip{{ ' sem-estoque' if sem_estoque }}" data-tam="{{ t }}"
+                        data-sem-estoque="{{ '1' if sem_estoque else '0' }}" title="Tamanho {{ t }}{{ ' — sob encomenda' if sem_estoque }}">{{ t }}</button>
+              {% endfor %}
+            </div>
+            <div id="banda-encomenda" class="small mt-1 text-muted d-none"><i class="bi bi-clock"></i> Tamanho sob encomenda — combinamos o prazo no WhatsApp.</div>
+
+            <button type="button" class="btn btn-primary mt-3" id="btn-add-peca"
+                    data-id="{{ peca.id }}" data-nome="{{ peca.nome }}" data-preco="{{ peca.preco_vitrine }}"
+                    data-encomenda="{{ '1' if peca.sob_encomenda else '0' }}"
+                    data-foto="{{ url_for('static', filename=(peca.foto | thumb)) if peca.foto else '' }}">
+              <i class="bi bi-bag-plus"></i> Adicionar ao pedido
+            </button>
+
+            <div id="add-ok" class="alert alert-success mt-3 d-none py-2">
+              Adicionado! <a href="{{ url_for('publico.vitrine_publica') }}" class="alert-link">Ver meu pedido na vitrine</a>.
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+  {% if whatsapp %}
+  <script>
+  (function () {
+    const KEY = "sh_cart_v1";
+    const chips = document.getElementById('tamanhos');
+    const banda = document.getElementById('banda-encomenda');
+    const btn = document.getElementById('btn-add-peca');
+    const okMsg = document.getElementById('add-ok');
+    const inerente = btn.dataset.encomenda === '1';   // peça já é toda sob encomenda
+
+    chips.addEventListener('click', (e) => {
+      const chip = e.target.closest('.tam-chip');
+      if (!chip) return;
+      chips.querySelectorAll('.tam-chip').forEach(c => c.classList.remove('sel'));
+      chip.classList.add('sel');
+      if (banda) banda.classList.toggle('d-none', inerente || chip.dataset.semEstoque !== '1');
+    });
+
+    btn.addEventListener('click', () => {
+      const sel = chips.querySelector('.tam-chip.sel');
+      if (!sel) { chips.classList.add('pede-tamanho'); setTimeout(() => chips.classList.remove('pede-tamanho'), 1200); return; }
+      let cart = {};
+      try { cart = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { cart = {}; }
+      const item = {
+        id: btn.dataset.id, nome: btn.dataset.nome,
+        preco: parseFloat(btn.dataset.preco) || 0, tam: sel.dataset.tam,
+        encomenda: inerente || sel.dataset.semEstoque === '1', foto: btn.dataset.foto || '',
+      };
+      const key = item.id + '|' + item.tam;
+      if (!cart[key]) cart[key] = Object.assign({ qtd: 0 }, item);
+      cart[key].qtd++;
+      localStorage.setItem(KEY, JSON.stringify(cart));
+      localStorage.removeItem(KEY + '_frete');       // itens mudaram: refazer frete/cupom
+      localStorage.removeItem(KEY + '_cupomobj');
+      okMsg.classList.remove('d-none');
+      btn.classList.add('adicionado');
+      setTimeout(() => btn.classList.remove('adicionado'), 600);
+    });
+  })();
+  </script>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,21 @@
+/* ==========================================================================
+   Identidade visual — Sabrina Hansen Atelier
+   FONTE ÚNICA das variáveis (cores + fontes). Carregada por todas as páginas,
+   inclusive as standalone (login, recibo, etiqueta) que não usam estilo.css.
+   Não repita valores de cor/fonte na mão nos templates — use var(--...).
+   ========================================================================== */
+:root {
+  --mocha:      #b89a78;   /* fundo quente (como o da etiqueta) */
+  --mocha-dark: #a07f5e;
+  --cream:      #f7f1e6;   /* cartões / superfícies */
+  --cream-soft: #fbf7ef;
+  --gold:       #b08a4f;   /* detalhe principal */
+  --gold-soft:  #c9a96a;
+  --ink:        #2c2620;   /* texto principal (quase preto) */
+  --ink-soft:   #6b5f52;
+  --line:       #e5dcc9;
+  --aviso:      #a5624f;   /* terracota — alertas dentro da identidade */
+
+  --fonte-titulo: 'Cormorant Garamond', Georgia, serif;
+  --fonte-corpo:  'Jost', system-ui, sans-serif;
+}

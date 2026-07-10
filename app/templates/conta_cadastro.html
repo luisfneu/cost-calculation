@@ -6,7 +6,7 @@
     <div class="card-body">
       <h1 class="conta-tit h4 mb-1">Criar conta</h1>
       <p class="text-muted small mb-3">Salve seus dados e acompanhe seus pedidos. Já tem conta?
-        <a href="{{ url_for('publico.conta_entrar') }}">Entrar</a>.</p>
+        <a href="{{ url_for('publico.conta_entrar') }}" class="link-atelier">Entrar</a>.</p>
       <form method="post" action="{{ url_for('publico.conta_cadastro', next=request.args.get('next')) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-2">
@@ -45,7 +45,7 @@
           <input class="form-check-input" type="checkbox" name="aceita_novidades" id="nov" {{ 'checked' if dados.get('aceita_novidades') }}>
           <label class="form-check-label small" for="nov">Quero receber novidades e lançamentos</label>
         </div>
-        <button class="btn btn-dark w-100">Criar conta</button>
+        <button class="btn btn-primary w-100">Criar conta</button>
       </form>
     </div>
   </div>

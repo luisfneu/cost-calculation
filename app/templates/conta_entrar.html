@@ -15,11 +15,11 @@
           <label class="form-label small mb-1">Senha</label>
           <input type="password" name="senha" class="form-control" required autocomplete="current-password">
         </div>
-        <button class="btn btn-dark w-100">Entrar</button>
+        <button class="btn btn-primary w-100">Entrar</button>
       </form>
-      <p class="small mt-2 mb-0 text-center"><a href="{{ url_for('publico.conta_esqueci') }}">Esqueci a senha</a></p>
+      <p class="small mt-2 mb-0 text-center"><a href="{{ url_for('publico.conta_esqueci') }}" class="link-atelier">Esqueci a senha</a></p>
       <p class="text-muted small mt-2 mb-0 text-center">Ainda não tem conta?
-        <a href="{{ url_for('publico.conta_cadastro') }}">Criar conta</a>.</p>
+        <a href="{{ url_for('publico.conta_cadastro') }}" class="link-atelier">Criar conta</a>.</p>
     </div>
   </div>
 </div>
