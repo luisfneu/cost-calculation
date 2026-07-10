@@ -243,7 +243,9 @@ def conta_redefinir(token):
 def conta_sair():
     session.pop("cliente_id", None)
     session.pop("cliente_nome", None)
-    flash("Você saiu da sua conta.", "sucesso")
+    # Sem flash: o destino é a vitrine (cacheada, não renderiza flash), então a
+    # mensagem ficaria "presa" na sessão e apareceria empilhada na página seguinte.
+    # O próprio menu já mostra "Entrar/Criar conta" = logout evidente.
     return redirect(url_for("publico.vitrine_publica"))
 
 

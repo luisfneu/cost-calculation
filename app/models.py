@@ -218,6 +218,25 @@ class Peca(db.Model):
         """Custo de produção da peça."""
         return dinheiro(self.custo_insumos + self.custo_mao_de_obra + self.custos_extras)
 
+    def _rendimentos(self):
+        """(rendimento, item) para cada insumo da ficha que é consumido — quantas
+        peças o estoque atual daquele insumo rende. Ignora itens com quantidade 0."""
+        return [(max(0, int(item.insumo.estoque // item.quantidade)), item)
+                for item in self.insumos if item.quantidade and item.quantidade > 0]
+
+    @property
+    def producao_possivel(self):
+        """Quantas peças dá para produzir com o estoque atual de insumos (o insumo
+        que acaba primeiro limita). None se a ficha não tem insumos consumíveis."""
+        rends = self._rendimentos()
+        return min(r for r, _ in rends) if rends else None
+
+    @property
+    def insumo_limitante(self):
+        """O item da ficha que limita a produção (menor rendimento). None se não há."""
+        rends = self._rendimentos()
+        return min(rends, key=lambda x: x[0])[1] if rends else None
+
     @property
     def preco_venda(self) -> float:
         """Preço de venda aplicando a margem sobre o preço final.

@@ -171,6 +171,21 @@
       <div class="card-body">
         <h2 class="h5">Ficha técnica (insumos)</h2>
 
+        {% if peca.producao_possivel is not none %}
+        <div class="painel-producao {{ 'vazio' if peca.producao_possivel == 0 else '' }} d-flex align-items-center gap-2 mb-3">
+          <i class="bi bi-hammer"></i>
+          <div>
+            Com o estoque atual de insumos, dá para produzir
+            <strong>{{ peca.producao_possivel }} peça{{ '' if peca.producao_possivel == 1 else 's' }}</strong>.
+            {% if peca.insumo_limitante %}
+              <span class="text-muted small d-block">Limita: <strong>{{ peca.insumo_limitante.insumo.nome }}</strong>
+              (estoque {{ peca.insumo_limitante.insumo.estoque | num }} {{ peca.insumo_limitante.insumo.unidade }},
+              {{ peca.insumo_limitante.quantidade | num }} por peça).</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
         {% if peca.insumos %}
         <table class="table align-middle">
           <thead class="table-light">
@@ -184,6 +199,9 @@
                 {% if item.quantidade > item.insumo.estoque %}
                   <span class="badge text-bg-warning">estoque: {{ item.insumo.estoque | num }}</span>
                 {% endif %}
+                {% if peca.insumo_limitante and item.id == peca.insumo_limitante.id %}
+                  <span class="badge text-bg-secondary" title="Insumo que limita a produção">limita</span>
+                {% endif %}
               </td>
               <td>
                 <form method="post" action="{{ url_for('main.atualizar_qtd_ficha', item_id=item.id) }}" class="input-group input-group-sm" style="width:130px">
@@ -195,7 +213,8 @@
               <td>{{ item.insumo.custo_unitario | moeda }}</td>
               <td>{{ item.subtotal | moeda }}</td>
               <td class="text-end">
-                <form method="post" action="{{ url_for('main.remover_insumo_peca', item_id=item.id) }}">
+                <form method="post" action="{{ url_for('main.remover_insumo_peca', item_id=item.id) }}"
+                      data-confirm="Remover '{{ item.insumo.nome }}' da ficha técnica?">
                   <button class="btn btn-sm btn-outline-danger">remover</button>
                 </form>
               </td>

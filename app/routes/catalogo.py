@@ -13,8 +13,10 @@ from datetime import date, datetime
 from flask import (
     Blueprint,
     Response,
+    abort,
     current_app,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -557,10 +559,30 @@ def etiqueta_peca(peca_id):
     return render_template("etiqueta.html", peca=peca, tamanhos=TAMANHOS, tam_sel=tam_sel)
 
 
+@bp.route("/pecas/etiquetas")
+def etiquetas_lote():
+    """Impressão de várias etiquetas de uma vez (?ids=1,2,3)."""
+    ids = [int(x) for x in request.args.get("ids", "").split(",") if x.strip().isdigit()]
+    pecas = Peca.query.filter(Peca.id.in_(ids)).all() if ids else []
+    ordem = {pid: i for i, pid in enumerate(ids)}       # preserva a ordem pedida
+    pecas.sort(key=lambda p: ordem.get(p.id, 0))
+    return render_template("etiquetas_lote.html", pecas=pecas)
+
+
+def _cliente_esta_logado():
+    """True se há um cliente logado na vitrine. Usado para NÃO cachear a página
+    quando ela contém o menu/dados pessoais do cliente (senão o cache global
+    serviria o menu 'Sair' e os dados de um cliente para outros visitantes)."""
+    from .conta import _cliente_logado
+    return _cliente_logado() is not None
+
+
 @publico_bp.route("/")                 # raiz: www.sabrinahansen.com.br
 @publico_bp.route("/publico/vitrine")  # alias (mantém links antigos)
 @limiter.limit("60 per minute")
-@cache.cached(timeout=60, query_string=True)
+# unless: pula o cache para visitantes logados (a página tem menu/dados pessoais).
+# O cache guarda apenas a versão anônima, servida só a quem não está logado.
+@cache.cached(timeout=60, query_string=True, unless=_cliente_esta_logado)
 def vitrine_publica():
     q = request.args.get("q", "").strip().lower()
     tipo = request.args.get("tipo", "").strip()
@@ -592,11 +614,43 @@ def vitrine_publica():
     colecoes = sorted({p.colecao for p in publicas if p.colecao})
     colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
     whatsapp = Parametro.obter("whatsapp", "")
-    return render_template(
+    meta_desc = Parametro.obter("vitrine_descricao",
+                                "Peças exclusivas do ateliê Sabrina Hansen. Veja a coleção e faça seu pedido pelo WhatsApp.")
+    # Imagem para o preview de compartilhamento (WhatsApp/Instagram): a 1ª peça com foto.
+    og_peca = next((p for p in pecas if p.foto), None) or next((p for p in publicas if p.foto), None)
+    og_image = (url_for("static", filename="uploads/" + og_peca.foto, _external=True)
+                if og_peca else None)
+    resp = make_response(render_template(
         "vitrine_publica.html", pecas=pecas, tipos=tipos, colecoes=colecoes, tamanhos=TAMANHOS,
         q=request.args.get("q", ""), tipo=tipo, colecao=colecao, ordem=ordem,
         colecao_fotos=colecao_fotos, whatsapp=whatsapp,
-    )
+        meta_desc=meta_desc, og_image=og_image,
+    ))
+    # Página do cliente logado tem dados pessoais: o navegador não deve guardá-la
+    # (evita mostrar o estado antigo — ex.: ainda "logado" — após o logout).
+    if _cliente_esta_logado():
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@publico_bp.route("/peca/<int:peca_id>")
+@limiter.limit("60 per minute")
+def peca_publica(peca_id):
+    """Página individual da peça — URL própria e compartilhável (com OG por peça)."""
+    peca = Peca.query.get_or_404(peca_id)
+    if not peca.vitrine_publica:
+        abort(404)
+    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
+    whatsapp = Parametro.obter("whatsapp", "")
+    foto = peca.foto or colecao_fotos.get(peca.colecao)
+    og_image = url_for("static", filename="uploads/" + foto, _external=True) if foto else None
+    meta_desc = (peca.descricao or "").strip() or f"{peca.nome} — ateliê Sabrina Hansen."
+    resp = make_response(render_template(
+        "peca_publica.html", peca=peca, tamanhos=TAMANHOS, colecao_fotos=colecao_fotos,
+        whatsapp=whatsapp, og_image=og_image, meta_desc=meta_desc))
+    if _cliente_esta_logado():
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @publico_bp.route("/publico/frete", methods=["POST"])

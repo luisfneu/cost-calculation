@@ -1,18 +1,30 @@
 /* ==========================================================================
    Identidade visual — Sabrina Hansen Atelier
    Paleta: fundo mocha, cartões creme, detalhes em dourado, texto grafite.
+   As variáveis (cores + fontes) vivem em identidade.css — fonte única.
    ========================================================================== */
-:root {
-  --mocha:      #b89a78;   /* fundo quente (como o da etiqueta) */
-  --mocha-dark: #a07f5e;
-  --cream:      #f7f1e6;   /* cartões / superfícies */
-  --cream-soft: #fbf7ef;
-  --gold:       #b08a4f;
-  --gold-soft:  #c9a96a;
-  --ink:        #2c2620;   /* texto principal (quase preto) */
-  --ink-soft:   #6b5f52;
-  --line:       #e5dcc9;
+@import url("identidade.css");
+
+/* Padrão único de tamanho de campo: compacto (equivale ao -sm do Bootstrap).
+   Assim campos com e sem a classe -sm ficam iguais em todo o sistema. */
+.form-control, .form-select {
+  padding: .28rem .55rem;
+  font-size: .875rem;
 }
+
+/* Painel "dá para produzir N peças" na ficha técnica — dentro da identidade
+   (creme + acento dourado). Modificador .vazio quando não há insumo (terracota). */
+.painel-producao {
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--gold);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: .55rem .8rem;
+}
+.painel-producao .bi { color: var(--gold); font-size: 1.1rem; }
+.painel-producao.vazio { border-left-color: var(--aviso); background: #f6ece7; }
+.painel-producao.vazio .bi { color: var(--aviso); }
 
 body {
   background-color: var(--mocha);
@@ -104,6 +116,9 @@ main.container { max-width: 1100px; }
   --bs-btn-hover-bg: var(--mocha-dark);--bs-btn-hover-border-color: var(--mocha-dark);
   --bs-btn-active-bg: var(--mocha-dark);
   --bs-btn-color: var(--cream);        --bs-btn-hover-color: var(--cream);
+  /* desabilitado: dourado suave com texto creme (Bootstrap cairia no azul) */
+  --bs-btn-disabled-bg: var(--gold-soft);   --bs-btn-disabled-border-color: var(--gold-soft);
+  --bs-btn-disabled-color: var(--cream);
 }
 .btn-outline-primary {
   --bs-btn-color: var(--gold);          --bs-btn-border-color: var(--gold);
@@ -111,6 +126,10 @@ main.container { max-width: 1100px; }
   --bs-btn-hover-color: var(--cream);
   --bs-btn-active-bg: var(--gold);      --bs-btn-active-border-color: var(--gold);
   --bs-btn-active-color: var(--cream);
+  /* estado desabilitado: legível e claramente "off" (Bootstrap cairia no azul).
+     Texto em marrom suave (bom contraste), borda dourada clara. */
+  --bs-btn-disabled-color: var(--ink-soft);
+  --bs-btn-disabled-border-color: var(--gold-soft);
 }
 .btn-outline-secondary {
   --bs-btn-color: var(--ink-soft);      --bs-btn-border-color: var(--line);

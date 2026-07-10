@@ -32,6 +32,10 @@
       {% set g_fin = ['main.contabilidade','main.contas_a_receber','main.fluxo_caixa','main.listar_despesas','main.relatorio'] %}
       {% set g_sys = ['main.listar_usuarios','main.auditoria','main.configuracoes'] %}
       <div class="collapse navbar-collapse justify-content-end" id="navmenu">
+        <button type="button" class="nav-link btn btn-link px-2 me-lg-2" data-bs-toggle="modal" data-bs-target="#modal-busca"
+                aria-label="Buscar" title="Buscar peça, cliente ou pedido (Ctrl/⌘+K)">
+          <i class="bi bi-search"></i><span class="d-lg-none"> Buscar</span>
+        </button>
         <div class="navbar-nav align-items-lg-center">
           <a class="nav-link {{ 'ativo' if ep == 'main.index' }}" href="{{ url_for('main.index') }}"><i class="bi bi-house-door"></i> Painel</a>
           <div class="nav-item dropdown {{ 'ativo' if ep in g_cat }}">
@@ -137,6 +141,23 @@
     <a href="{{ url_for('main.contabilidade') }}" class="mn-item {{ 'ativo' if ep in g_fin }}"><i class="bi bi-wallet2"></i><span>Financeiro</span></a>
   </nav>
 
+  <!-- Modal de busca global (aberto pela lupa da navbar ou Ctrl/⌘+K) -->
+  <div class="modal fade" id="modal-busca" tabindex="-1" aria-labelledby="busca-input">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form method="get" action="{{ url_for('main.buscar') }}" role="search">
+          <div class="modal-body">
+            <div class="input-group input-group-lg">
+              <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+              <input type="search" name="q" id="busca-input" class="form-control" placeholder="Peça, cliente ou pedido…" aria-label="Buscar" autocomplete="off">
+            </div>
+            <div class="form-text mt-2">Pressione <kbd>Enter</kbd> para buscar.</div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de confirmação (usado por forms com data-confirm="mensagem") -->
   <div class="modal fade" id="modal-confirmar" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -195,6 +216,20 @@
         }
         return _fetch(url, opts);
       };
+    })();
+
+    // ---- Busca global: foco no input ao abrir + atalho Ctrl/⌘+K ----
+    (function () {
+      const mb = document.getElementById('modal-busca');
+      if (!mb) return;
+      const input = document.getElementById('busca-input');
+      const modal = bootstrap.Modal.getOrCreateInstance(mb);
+      mb.addEventListener('shown.bs.modal', () => { input.focus(); input.select(); });
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault(); modal.show();
+        }
+      });
     })();
 
     // ---- Confirmação bonita: forms com data-confirm abrem um modal ----

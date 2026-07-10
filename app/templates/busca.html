@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1 class="h4 mb-3">Busca{% if termo %}: <span class="text-muted">“{{ termo }}”</span>{% endif %}</h1>
+
+<form method="get" action="{{ url_for('main.buscar') }}" role="search" class="mb-4" style="max-width:520px">
+  <div class="input-group">
+    <input type="text" name="q" class="form-control" value="{{ termo }}" placeholder="Peça, cliente ou pedido…" autofocus aria-label="Buscar">
+    <button class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>
+  </div>
+</form>
+
+{% if termo and not pecas and not insumos and not clientes and not vendas %}
+  <p class="text-muted">Nada encontrado para “{{ termo }}”.</p>
+{% endif %}
+
+{% if pecas %}
+<div class="card bg-white mb-3"><div class="card-body">
+  <h2 class="h6 text-muted mb-2"><i class="bi bi-bag"></i> Peças ({{ pecas|length }})</h2>
+  <div class="list-group list-group-flush">
+    {% for p in pecas %}
+    <a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}">
+      <span>{{ p.nome }} {% if p.colecao %}<span class="text-muted small">· {{ p.colecao }}</span>{% endif %}</span>
+      <span class="text-muted small">{{ p.sku }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div></div>
+{% endif %}
+
+{% if insumos %}
+<div class="card bg-white mb-3"><div class="card-body">
+  <h2 class="h6 text-muted mb-2"><i class="bi bi-box-seam"></i> Insumos ({{ insumos|length }})</h2>
+  <div class="list-group list-group-flush">
+    {% for i in insumos %}
+    <a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ url_for('main.form_insumo', insumo_id=i.id) }}">
+      <span>{{ i.nome }} {% if i.tipo %}<span class="text-muted small">· {{ i.tipo_label }}</span>{% endif %}</span>
+      <span class="text-muted small">estoque: {{ i.estoque | num }} {{ i.unidade }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div></div>
+{% endif %}
+
+{% if clientes %}
+<div class="card bg-white mb-3"><div class="card-body">
+  <h2 class="h6 text-muted mb-2"><i class="bi bi-people"></i> Clientes ({{ clientes|length }})</h2>
+  <div class="list-group list-group-flush">
+    {% for c in clientes %}
+    <a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ url_for('main.detalhe_cliente', cliente_id=c.id) }}">
+      <span>{{ c.nome }}</span>
+      <span class="text-muted small">{{ c.telefone_formatado if c.telefone else c.email }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div></div>
+{% endif %}
+
+{% if vendas %}
+<div class="card bg-white mb-3"><div class="card-body">
+  <h2 class="h6 text-muted mb-2"><i class="bi bi-receipt"></i> Vendas ({{ vendas|length }})</h2>
+  <div class="list-group list-group-flush">
+    {% for v in vendas %}
+    <a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}">
+      <span>#{{ v.id }} · {{ v.comprador or (v.cliente.nome if v.cliente else 'Sem cliente') }}</span>
+      <span class="text-muted small">{{ v.criado_em | dt }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div></div>
+{% endif %}
+{% endblock %}

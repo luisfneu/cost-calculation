@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Etiquetas ({{ pecas|length }}) · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <style>
+    body { background: var(--cream); font-family: var(--fonte-corpo); margin: 0; padding: 20px; text-align: center; }
+    .barra { margin-bottom: 16px; }
+    .barra button { font-family: var(--fonte-corpo); padding: 8px 18px; border: 1px solid var(--gold); background: var(--gold); color: #fff; border-radius: 6px; cursor: pointer; }
+    .barra a { margin-left: 12px; color: var(--gold); }
+    .grade { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    .et { background: #fff; border: 1px solid var(--gold-soft); border-radius: 8px; padding: 4px; }
+    .et canvas { display: block; width: 150px; height: 250px; }  /* 3:5 (preview na tela) */
+    #qr-oculto { position: absolute; left: -9999px; top: -9999px; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .barra { display: none; }
+      .et { border: none; border-radius: 0; padding: 0; }
+      .grade { gap: 0; }
+      .et canvas { width: 30mm; height: 50mm; }   /* tamanho real da etiqueta 30×50mm */
+    }
+  </style>
+</head>
+<body>
+  <div class="barra">
+    {% if pecas %}<button onclick="window.print()">🖨️ Imprimir {{ pecas|length }} etiqueta(s)</button>{% endif %}
+    <a href="{{ url_for('main.listar_pecas') }}">voltar</a>
+  </div>
+
+  {% if pecas %}
+  <div class="grade">
+    {% for p in pecas %}
+    <div class="et">
+      <canvas class="et-canvas" width="900" height="1500"
+              data-sku="{{ p.sku or '' }}" data-nome="{{ p.nome }}"
+              data-colecao="{{ p.colecao or '' }}" data-preco="{{ p.preco_etiqueta_efetivo | moeda }}"></canvas>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Nenhuma peça selecionada. Volte à lista e marque as peças.</p>
+  {% endif %}
+
+  <div id="qr-oculto"></div>
+  <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/etiqueta-draw.js') }}"></script>
+  <script>
+    const MONO = {{ url_for('static', filename='monograma.svg') | tojson }};
+    const qrBox = document.getElementById('qr-oculto');
+    function carregarMono() {
+      return new Promise((res) => {
+        const i = new Image();
+        i.onload = () => res(i); i.onerror = () => res(null); i.src = MONO;
+      });
+    }
+    (async function () {
+      const mono = await carregarMono();
+      try { await document.fonts.ready; } catch (e) {}
+      document.querySelectorAll('.et-canvas').forEach((c) => {
+        desenharEtiqueta(c, {
+          sku: c.dataset.sku, nome: c.dataset.nome,
+          colecao: c.dataset.colecao, preco: c.dataset.preco,
+        }, mono, qrBox);
+      });
+    })();
+  </script>
+</body>
+</html>

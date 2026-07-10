@@ -96,9 +96,18 @@ def listar_encomendas():
 @bp.route("/encomendas/item/<int:item_id>/produzido", methods=["POST"])
 def marcar_item_produzido(item_id):
     item = VendaItem.query.get_or_404(item_id)
-    novo = not item.produzido
-    if novo and not item.insumo_baixado:
-        # Concluiu a produção: baixa os insumos da ficha técnica (uma vez só).
+    _aplicar_producao_item(item, not item.produzido)
+    db.session.commit()
+    estado = "produzido" if item.produzido else "reaberto"
+    _log("producao_encomenda", f"item #{item.id} ({item.peca.nome}) {estado}")
+    return redirect(request.referrer or url_for("main.listar_encomendas"))
+
+
+def _aplicar_producao_item(item, produzido):
+    """Marca/desmarca um item de encomenda como produzido, baixando (ou estornando)
+    os insumos da ficha uma única vez — idempotente via item.insumo_baixado.
+    Não faz commit (o chamador decide)."""
+    if produzido and not item.insumo_baixado:
         for pi in item.peca.insumos:
             _registrar_movimento(
                 pi.insumo, "saida", pi.quantidade * item.quantidade,
@@ -106,8 +115,7 @@ def marcar_item_produzido(item_id):
                            f"tam {item.tamanho} (venda #{item.venda_id})",
             )
         item.insumo_baixado = True
-    elif not novo and item.insumo_baixado:
-        # Reabriu a produção: estorna os insumos consumidos.
+    elif not produzido and item.insumo_baixado:
         for pi in item.peca.insumos:
             _registrar_movimento(
                 pi.insumo, "entrada", pi.quantidade * item.quantidade,
@@ -115,11 +123,26 @@ def marcar_item_produzido(item_id):
                            f"tam {item.tamanho} (venda #{item.venda_id})",
             )
         item.insumo_baixado = False
-    item.produzido = novo
-    db.session.commit()
-    estado = "produzido" if item.produzido else "reaberto"
-    _log("producao_encomenda", f"item #{item.id} ({item.peca.nome}) {estado}")
-    return redirect(request.referrer or url_for("main.listar_encomendas"))
+    item.produzido = produzido
+
+
+@bp.route("/encomendas/produzir-lote", methods=["POST"])
+def produzir_lote():
+    """Marca vários itens de encomenda como produzidos de uma vez."""
+    ids = request.form.getlist("item_ids", type=int)
+    itens = VendaItem.query.filter(VendaItem.id.in_(ids)).all() if ids else []
+    n = 0
+    for item in itens:
+        if not item.produzido:
+            _aplicar_producao_item(item, True)
+            n += 1
+    if n:
+        db.session.commit()
+        _log("producao_encomenda_lote", f"{n} item(ns) marcados como produzido")
+        flash(f"{n} item(ns) marcados como produzido.", "sucesso")
+    else:
+        flash("Nenhum item pendente selecionado.", "erro")
+    return redirect(url_for("main.listar_encomendas"))
 
 
 @bp.route("/encomendas/nova", methods=["GET", "POST"])

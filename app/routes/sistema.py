@@ -144,6 +144,33 @@ def logout():
     return redirect(url_for("main.login"))
 
 
+@bp.route("/buscar")
+def buscar():
+    """Busca global: peças, clientes e vendas em um só campo."""
+    termo = request.args.get("q", "").strip()
+    pecas, insumos, clientes, vendas = [], [], [], []
+    if termo:
+        like = f"%{termo}%"
+        pecas = (Peca.query.filter(db.or_(
+                    Peca.nome.ilike(like), Peca.sku.ilike(like),
+                    Peca.tags.ilike(like), Peca.colecao.ilike(like)))
+                 .order_by(Peca.nome).limit(25).all())
+        insumos = (Insumo.query.filter(db.or_(
+                    Insumo.nome.ilike(like), Insumo.tipo.ilike(like)))
+                   .order_by(Insumo.nome).limit(25).all())
+        clientes = (Cliente.query.filter(db.or_(
+                    Cliente.nome.ilike(like), Cliente.telefone.ilike(like),
+                    Cliente.email.ilike(like), Cliente.instagram.ilike(like)))
+                    .order_by(Cliente.nome).limit(25).all())
+        conds = [Venda.comprador.ilike(like)]
+        if termo.isdigit():                       # também casa pelo número do pedido
+            conds.append(Venda.id == int(termo))
+        vendas = (Venda.query.filter(Venda.status != "pre-pedido").filter(db.or_(*conds))
+                  .order_by(Venda.criado_em.desc()).limit(25).all())
+    return render_template("busca.html", termo=termo,
+                           pecas=pecas, insumos=insumos, clientes=clientes, vendas=vendas)
+
+
 @bp.route("/")
 def index():
     pecas = Peca.query.order_by(Peca.criado_em.desc()).all()

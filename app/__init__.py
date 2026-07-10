@@ -18,7 +18,7 @@ from .extensions import cache, limiter
 from .models import Parametro, db
 
 # Versão exibida em /health (útil para saber o que está no ar). Suba a cada release.
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.7.0"
 
 FUSO_PADRAO = "America/Sao_Paulo"
 
@@ -134,6 +134,20 @@ def create_app(config_class=Config):
             return valor.astimezone(_fuso_atual()).strftime("%d/%m/%Y %H:%M")
         except (TypeError, ValueError, AttributeError):
             return ""
+
+    @app.template_filter("thumb")
+    def thumb(nome):
+        """Caminho estático da miniatura (uploads/thumb_<base>.jpg) se existir;
+        senão a imagem cheia. Uso: url_for('static', filename=(foto | thumb))."""
+        if not nome:
+            return ""
+        thumb_nome = f"thumb_{nome.rsplit('.', 1)[0]}.jpg"
+        try:
+            if os.path.exists(os.path.join(app.config["UPLOAD_FOLDER"], thumb_nome)):
+                return "uploads/" + thumb_nome
+        except OSError:
+            pass
+        return "uploads/" + nome
 
     @app.template_filter("num")
     def num(valor):
