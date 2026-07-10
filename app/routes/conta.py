@@ -5,6 +5,7 @@ que são do console). Fica toda no `publico_bp` (raiz), fora da guarda de login 
 blueprint `main`.
 """
 import re
+from datetime import datetime
 from functools import wraps
 
 from flask import (
@@ -18,7 +19,7 @@ from flask import (
 
 from ..emails import enviar_email, gerar_token_reset, ler_token_reset
 from ..extensions import limiter
-from ..models import Cliente, Venda, db
+from ..models import Cliente, Endereco, Parametro, Venda, cpf_valido, db
 from . import publico_bp
 from .helpers import _log
 
@@ -54,11 +55,11 @@ def _exigir_cliente(f):
 
 @publico_bp.app_context_processor
 def _injetar_cliente_logado():
-    """Disponibiliza `cliente_logado` nos templates públicos (estado do menu)."""
+    """Disponibiliza `cliente_logado` e `whatsapp` nos templates públicos."""
     try:
-        return {"cliente_logado": _cliente_logado()}
+        return {"cliente_logado": _cliente_logado(), "whatsapp": Parametro.obter("whatsapp", "")}
     except Exception:  # noqa: BLE001 - nunca quebrar a vitrine por causa disto
-        return {"cliente_logado": None}
+        return {"cliente_logado": None, "whatsapp": ""}
 
 
 def _confere_identidade(existente, email, telefone):
@@ -258,6 +259,177 @@ def conta():
     return redirect(url_for("publico.conta_pedidos"))
 
 
+@publico_bp.route("/conta/painel")
+@_exigir_cliente
+def conta_painel():
+    """Painel 'Minha conta' (estilo marketplace) — atalhos para pedidos, favoritos,
+    dados e endereços. Aberto pelo 'Início' do menu da conta na Vitrine V2."""
+    return render_template("conta_painel.html", whatsapp=Parametro.obter("whatsapp", ""))
+
+
+@publico_bp.route("/conta/vales")
+@_exigir_cliente
+def conta_vales():
+    """Vales de crédito do cliente (gerados em devoluções/trocas)."""
+    from ..models import Vale
+    cliente = _cliente_logado()
+    vales = (Vale.query.filter_by(cliente_id=cliente.id)
+             .order_by(Vale.criado_em.desc()).all())
+    return render_template("conta_vales.html", cliente=cliente, vales=vales)
+
+
+@publico_bp.route("/conta/senha", methods=["POST"])
+@_exigir_cliente
+def conta_alterar_senha():
+    """Troca de senha: exige a senha atual + nova + confirmação."""
+    cliente = _cliente_logado()
+    atual = request.form.get("senha_atual", "")
+    nova = request.form.get("nova_senha", "")
+    conf = request.form.get("confirmar_senha", "")
+    if not cliente.conferir_senha(atual):
+        flash("Senha atual incorreta.", "erro")
+    elif len(nova) < 6:
+        flash("A nova senha precisa ter ao menos 6 caracteres.", "erro")
+    elif nova != conf:
+        flash("A confirmação não confere com a nova senha.", "erro")
+    else:
+        cliente.set_senha(nova)
+        db.session.commit()
+        _log("cliente_senha_trocada", f"#{cliente.id}")
+        flash("Senha alterada com sucesso.", "sucesso")
+    return redirect(url_for("publico.conta_preferencias"))
+
+
+@publico_bp.route("/conta/favoritos")
+@_exigir_cliente
+def conta_favoritos():
+    """Página 'Meus favoritos' (grade). Os itens vêm do localStorage e os dados
+    atuais das peças são buscados em /publico/pecas."""
+    return render_template("conta_favoritos.html", cliente=_cliente_logado())
+
+
+@publico_bp.route("/conta/cartoes")
+@_exigir_cliente
+def conta_cartoes():
+    """Meus cartões — reservado para quando houver pagamento online."""
+    return render_template("conta_cartoes.html", cliente=_cliente_logado())
+
+
+# --------------------------------------------------------------------------- #
+# Meus endereços (múltiplos, com um principal)
+# --------------------------------------------------------------------------- #
+def _definir_principal(cliente, end):
+    """Marca `end` como o único endereço principal (entrega) do cliente."""
+    for e in cliente.enderecos:
+        e.principal = (e.id == end.id)
+    end.principal = True
+
+
+def _definir_cobranca(cliente, end):
+    """Marca `end` como o único endereço de cobrança do cliente."""
+    for e in cliente.enderecos:
+        e.cobranca = (e.id == end.id)
+    end.cobranca = True
+
+
+def _sincronizar_principal(cliente):
+    """Copia o endereço principal para os campos de endereço do Cliente — o
+    checkout e as preferências continuam usando esses campos."""
+    princ = next((e for e in cliente.enderecos if e.principal), None)
+    if not princ:
+        return
+    for campo in ("cep", "logradouro", "numero", "complemento", "bairro", "cidade", "uf"):
+        setattr(cliente, campo, getattr(princ, campo))
+
+
+@publico_bp.route("/conta/enderecos")
+@_exigir_cliente
+def conta_enderecos():
+    cliente = _cliente_logado()
+    editar = request.args.get("editar", type=int)
+    em_edicao = Endereco.query.filter_by(id=editar, cliente_id=cliente.id).first() if editar else None
+    return render_template("conta_enderecos.html", cliente=cliente,
+                           enderecos=cliente.enderecos, em_edicao=em_edicao)
+
+
+@publico_bp.route("/conta/enderecos/salvar", methods=["POST"])
+@_exigir_cliente
+def conta_endereco_salvar():
+    cliente = _cliente_logado()
+    form = request.form
+    eid = form.get("id", type=int)
+    if eid:
+        end = Endereco.query.filter_by(id=eid, cliente_id=cliente.id).first_or_404()
+    else:
+        end = Endereco(cliente_id=cliente.id)
+        db.session.add(end)
+    end.apelido = form.get("apelido", "").strip()
+    end.destinatario = form.get("destinatario", "").strip() or cliente.nome
+    end.cep = form.get("cep", "").strip()
+    end.logradouro = form.get("logradouro", "").strip()
+    end.numero = form.get("numero", "").strip()
+    end.complemento = form.get("complemento", "").strip()
+    end.bairro = form.get("bairro", "").strip()
+    end.cidade = form.get("cidade", "").strip()
+    end.uf = form.get("uf", "").strip().upper()[:2]
+    db.session.flush()
+    # Primeiro endereço → vira principal e cobrança. Senão respeita os checkboxes.
+    primeiro = Endereco.query.filter_by(cliente_id=cliente.id).count() == 1
+    if form.get("principal") == "on" or primeiro:
+        _definir_principal(cliente, end)
+    if form.get("cobranca") == "on" or primeiro:
+        _definir_cobranca(cliente, end)
+    _sincronizar_principal(cliente)
+    db.session.commit()
+    _log("cliente_endereco", f"#{cliente.id}: endereço salvo (#{end.id})")
+    flash("Endereço salvo.", "sucesso")
+    return redirect(url_for("publico.conta_enderecos"))
+
+
+@publico_bp.route("/conta/enderecos/<int:end_id>/principal", methods=["POST"])
+@_exigir_cliente
+def conta_endereco_principal(end_id):
+    cliente = _cliente_logado()
+    end = Endereco.query.filter_by(id=end_id, cliente_id=cliente.id).first_or_404()
+    _definir_principal(cliente, end)
+    _sincronizar_principal(cliente)
+    db.session.commit()
+    flash("Endereço principal atualizado.", "sucesso")
+    return redirect(url_for("publico.conta_enderecos"))
+
+
+@publico_bp.route("/conta/enderecos/<int:end_id>/cobranca", methods=["POST"])
+@_exigir_cliente
+def conta_endereco_cobranca(end_id):
+    cliente = _cliente_logado()
+    end = Endereco.query.filter_by(id=end_id, cliente_id=cliente.id).first_or_404()
+    _definir_cobranca(cliente, end)
+    db.session.commit()
+    flash("Endereço de cobrança atualizado.", "sucesso")
+    return redirect(url_for("publico.conta_enderecos"))
+
+
+@publico_bp.route("/conta/enderecos/<int:end_id>/excluir", methods=["POST"])
+@_exigir_cliente
+def conta_endereco_excluir(end_id):
+    cliente = _cliente_logado()
+    end = Endereco.query.filter_by(id=end_id, cliente_id=cliente.id).first_or_404()
+    era_principal, era_cobranca = end.principal, end.cobranca
+    db.session.delete(end)
+    db.session.flush()
+    # Se apagou um papel, promove o primeiro restante para não ficar sem.
+    resto = Endereco.query.filter_by(cliente_id=cliente.id).order_by(Endereco.id).first()
+    if resto:
+        if era_principal:
+            _definir_principal(cliente, resto)
+        if era_cobranca:
+            _definir_cobranca(cliente, resto)
+    _sincronizar_principal(cliente)
+    db.session.commit()
+    flash("Endereço excluído.", "sucesso")
+    return redirect(url_for("publico.conta_enderecos"))
+
+
 @publico_bp.route("/conta/pedidos")
 @_exigir_cliente
 def conta_pedidos():
@@ -265,6 +437,23 @@ def conta_pedidos():
     pedidos = (Venda.query.filter_by(cliente_id=cliente.id)
                .order_by(Venda.criado_em.desc()).all())
     return render_template("conta_pedidos.html", cliente=cliente, pedidos=pedidos)
+
+
+@publico_bp.route("/conta/pedidos/<int:venda_id>")
+@_exigir_cliente
+def conta_pedido_detalhe(venda_id):
+    cliente = _cliente_logado()
+    venda = Venda.query.filter_by(id=venda_id, cliente_id=cliente.id).first_or_404()
+    return render_template("conta_pedido_detalhe.html", cliente=cliente, venda=venda)
+
+
+@publico_bp.route("/conta/pedidos/<int:venda_id>/recibo")
+@_exigir_cliente
+def conta_pedido_recibo(venda_id):
+    """Recibo do próprio pedido do cliente (mesmo template do ERP)."""
+    cliente = _cliente_logado()
+    venda = Venda.query.filter_by(id=venda_id, cliente_id=cliente.id).first_or_404()
+    return render_template("recibo.html", venda=venda)
 
 
 @publico_bp.route("/conta/preferencias", methods=["GET", "POST"])
@@ -287,29 +476,40 @@ def conta_preferencias():
             outro = Cliente.por_email(email)
             if outro and outro.id != cliente.id:
                 erro = "Esse e-mail já está em uso por outra conta."
+        cpf = re.sub(r"\D", "", form.get("cpf", ""))
+        if not erro and not cpf_valido(cpf):
+            erro = "CPF inválido."
         if erro:
             flash(erro, "erro")
-            return render_template("conta_preferencias.html", cliente=cliente)
+            return render_template("conta_preferencias.html", cliente=cliente, editar=True)
 
         cliente.nome = nome
         cliente.email = email
         cliente.telefone = telefone
+        cliente.genero = form.get("genero", "").strip()
+        cliente.cpf = cpf
+        nasc = form.get("nascimento", "").strip()
+        try:
+            cliente.nascimento = datetime.strptime(nasc, "%Y-%m-%d").date() if nasc else None
+        except ValueError:
+            pass   # data inválida: mantém a atual
         cliente.tamanho_habitual = form.get("tamanho_habitual", "").strip().upper()
         cliente.aceita_novidades = form.get("aceita_novidades") == "on"
-        _ler_endereco(form, cliente)
+        # Endereço agora é gerido em "Meus endereços" — não é mexido aqui.
 
         # Troca de senha (opcional): só se preencher a nova.
         nova = form.get("nova_senha", "")
         if nova:
             if len(nova) < 6:
                 flash("A nova senha precisa ter ao menos 6 caracteres.", "erro")
-                return render_template("conta_preferencias.html", cliente=cliente)
+                return render_template("conta_preferencias.html", cliente=cliente, editar=True)
             cliente.set_senha(nova)
 
         session["cliente_nome"] = cliente.nome
         db.session.commit()
         _log("cliente_preferencias", f"{cliente.nome} <{cliente.email}>")
-        flash("Preferências salvas.", "sucesso")
+        flash("Informações salvas.", "sucesso")
         return redirect(url_for("publico.conta_preferencias"))
 
-    return render_template("conta_preferencias.html", cliente=cliente)
+    return render_template("conta_preferencias.html", cliente=cliente,
+                           editar=bool(request.args.get("editar")))

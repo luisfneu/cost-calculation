@@ -60,6 +60,18 @@
         {% for t in ['PP','P','M','G','GG'] %}<option value="{{ t }}" {{ 'selected' if cliente and cliente.tamanho_habitual == t }}>{{ t }}</option>{% endfor %}
       </select>
     </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Gênero</label>
+      <select name="genero" class="form-select">
+        <option value="">—</option>
+        {% for g in ['Feminino','Masculino','Outro'] %}<option value="{{ g }}" {{ 'selected' if cliente and cliente.genero == g }}>{{ g }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label">CPF</label>
+      <input type="text" name="cpf" class="form-control" inputmode="numeric" data-cpf placeholder="000.000.000-00" value="{{ cliente.cpf if cliente else '' }}">
+      <div class="invalid-feedback">CPF inválido.</div>
+    </div>
   </div>
 
   <div class="section-titulo">Endereço <span class="text-muted small" style="letter-spacing:normal;text-transform:none">(opcional — para envio via Correios)</span></div>
@@ -153,4 +165,5 @@
   });
 })();
 </script>
+<script src="{{ url_for('static', filename='js/cpf.js') }}"></script>
 {% endblock %}

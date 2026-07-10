@@ -1,13 +1,39 @@
-{% extends "base.html" %}
-{% block titulo %}Erro {{ codigo }}{% endblock %}
-{% block conteudo %}
-<div class="estado-vazio" style="padding:60px 20px;">
-  <i class="bi {{ icone or 'bi-exclamation-triangle' }} ic"></i>
-  <div class="frase">{{ titulo }} <span class="text-muted">({{ codigo }})</span></div>
-  <div class="dica">{{ msg }}</div>
-  <div class="acao mt-3">
-    <a href="{{ url_for('main.index') }}" class="btn btn-primary btn-sm"><i class="bi bi-house-door"></i> Voltar ao painel</a>
-    <a href="javascript:history.back()" class="btn btn-link btn-sm">voltar</a>
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Erro {{ codigo }} · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <style>
+    body { background: var(--cream); font-family: var(--fonte-corpo); color: var(--ink);
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .erro-card { max-width: 440px; width: 100%; text-align: center; padding: 36px 28px; }
+    .erro-card .logo { width: 200px; max-width: 70%; margin-bottom: 8px; }
+    .erro-card .ic { font-size: 2.4rem; color: var(--gold); }
+    .erro-tit { font-family: var(--fonte-titulo); font-size: 1.5rem; margin: 10px 0 4px; color: var(--ink); }
+    .erro-msg { color: var(--ink-soft); font-size: .95rem; }
+  </style>
+</head>
+<body>
+  <div class="erro-card">
+    <img class="logo" src="{{ url_for('static', filename='logo.svg') }}" alt="Sabrina Hansen Atelier">
+    <div><i class="bi {{ icone or 'bi-exclamation-triangle' }} ic"></i></div>
+    <div class="erro-tit">{{ titulo }} <span class="text-muted">({{ codigo }})</span></div>
+    <p class="erro-msg mt-1 mb-0">{{ msg }}</p>
+    <div class="mt-4">
+      {% if session.get('logado') %}
+        <a href="{{ url_for('main.index') }}" class="btn btn-primary btn-sm"><i class="bi bi-house-door"></i> Voltar ao painel</a>
+      {% else %}
+        <a href="{{ url_for('publico.vitrine_publica') }}" class="btn btn-primary btn-sm"><i class="bi bi-shop"></i> Ir para a loja</a>
+      {% endif %}
+      <a href="javascript:history.back()" class="btn btn-link btn-sm">voltar</a>
+    </div>
   </div>
-</div>
-{% endblock %}
+</body>
+</html>

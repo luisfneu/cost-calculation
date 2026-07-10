@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-br">
+{% import "_macros.html" as ui %}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loja · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vitrine2.css') }}">
+</head>
+<body>
+  <!-- Formulário único (compartilhado por atributo form=) para header + sidebar filtrarem juntos -->
+  <form id="filtros" method="get" action="{{ url_for('publico.vitrine_v2') }}"></form>
+
+  <div class="v2-loja">
+  <div class="v2-preview-flag">PRÉVIA — Vitrine V2 (em avaliação). A loja atual continua em <a href="{{ url_for('publico.vitrine_publica') }}" style="color:#fff;text-decoration:underline">/</a></div>
+  {% include "_v2_header.html" %}
+
+  <div class="v2-wrap">
+    <div class="v2-corpo">
+      <!-- Sidebar de filtros -->
+      <aside class="v2-filtros">
+        <h3>Categoria</h3>
+        <a class="f-item {{ 'on' if not tipo }}" href="{{ url_for('publico.vitrine_v2', colecao=colecao, ordem=ordem) }}">Todas</a>
+        {% for t in tipos %}
+          <a class="f-item {{ 'on' if tipo == t }}" href="{{ url_for('publico.vitrine_v2', tipo=t, colecao=colecao, ordem=ordem) }}">{{ t }}</a>
+        {% endfor %}
+
+        {% if colecoes %}
+        <h3>Coleção</h3>
+        <a class="f-item {{ 'on' if not colecao }}" href="{{ url_for('publico.vitrine_v2', tipo=tipo, ordem=ordem) }}">Todas</a>
+        {% for c in colecoes %}
+          <a class="f-item {{ 'on' if colecao == c }}" href="{{ url_for('publico.vitrine_v2', tipo=tipo, colecao=c, ordem=ordem) }}">{{ c }}</a>
+        {% endfor %}
+        {% endif %}
+
+        <h3>Tamanho</h3>
+        {% for t in tamanhos %}
+          <label class="f-item"><input type="checkbox" name="tamanho" value="{{ t }}" form="filtros"
+                 {{ 'checked' if t in tam_sel }} onchange="document.getElementById('filtros').submit()"> {{ t }}</label>
+        {% endfor %}
+        {# preserva os demais filtros ao submeter os checkboxes #}
+        <input type="hidden" name="q" value="{{ q }}" form="filtros">
+        <input type="hidden" name="tipo" value="{{ tipo }}" form="filtros">
+        <input type="hidden" name="colecao" value="{{ colecao }}" form="filtros">
+        <input type="hidden" name="ordem" value="{{ ordem }}" form="filtros">
+      </aside>
+
+      <!-- Grade -->
+      <main class="v2-main">
+        <div class="v2-barra">
+          <div class="text-muted small"><strong>{{ total }}</strong> peça{{ '' if total == 1 else 's' }}</div>
+          <div class="d-flex align-items-center gap-3">
+            <div class="v2-colsel d-none d-md-inline-flex" role="group" aria-label="Número de colunas">
+              <button type="button" data-cols="2" title="2 colunas" aria-label="2 colunas"><i class="bi bi-grid"></i></button>
+              <button type="button" data-cols="3" title="3 colunas" aria-label="3 colunas"><i class="bi bi-grid-3x2-gap"></i></button>
+              <button type="button" data-cols="4" title="4 colunas" aria-label="4 colunas"><i class="bi bi-grid-3x3-gap"></i></button>
+            </div>
+          <select class="form-select form-select-sm" style="width:auto" onchange="location.href=this.value">
+            {% set base = url_for('publico.vitrine_v2', q=q, tipo=tipo, colecao=colecao) %}
+            <option value="{{ base }}" {{ 'selected' if not ordem }}>Ordenar por…</option>
+            <option value="{{ base }}&ordem=nome" {{ 'selected' if ordem == 'nome' }}>Nome</option>
+            <option value="{{ base }}&ordem=preco_asc" {{ 'selected' if ordem == 'preco_asc' }}>Menor preço</option>
+            <option value="{{ base }}&ordem=preco_desc" {{ 'selected' if ordem == 'preco_desc' }}>Maior preço</option>
+          </select>
+          </div>
+        </div>
+
+        {% if pecas %}
+        <div class="v2-grid cols-4" id="v2-grid">
+          {% for p in pecas %}
+          {% set foto = p.foto or colecao_fotos.get(p.colecao) %}
+          <div class="v2-card">
+            <div class="v2-thumb">
+              <a class="v2-thumb-link" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}" aria-label="{{ p.nome }}">
+                {% if foto %}
+                  <img src="{{ url_for('static', filename=(foto | thumb)) }}" alt="{{ p.nome }}" loading="lazy" decoding="async">
+                {% else %}
+                  <div class="d-flex align-items-center justify-content-center h-100 text-muted small">sem foto</div>
+                {% endif %}
+              </a>
+              {% if p.em_promocao and p.preco_base %}
+                {% set pct = ((p.preco_base - p.preco_etiqueta_efetivo) / p.preco_base * 100) | round(0, 'floor') | int %}
+                <span class="v2-badge v2-desc">-{{ pct }}%</span>
+              {% endif %}
+              {% if p.sob_encomenda %}<span class="v2-badge v2-enc">sob encomenda</span>
+              {% elif p.id in novos %}<span class="v2-badge v2-novo">Novo</span>{% endif %}
+              <button type="button" class="v2-fav js-fav" aria-label="Favoritar {{ p.nome }}"
+                      data-id="{{ p.id }}" data-nome="{{ p.nome }}" data-preco="{{ p.preco_vitrine }}"
+                      data-foto="{{ url_for('static', filename=(foto | thumb)) if foto else '' }}"
+                      data-url="{{ url_for('publico.peca_publica', peca_id=p.id) }}">
+                <i class="bi bi-heart"></i> <span class="js-fav-txt">Favoritos</span>
+              </button>
+            </div>
+            <div class="v2-info">
+              {% if p.colecao or p.tipo %}<div class="v2-cat">{{ p.colecao or p.tipo }}</div>{% endif %}
+              <a class="v2-nome-link text-reset text-decoration-none" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}"><div class="v2-nome">{{ p.nome }}</div></a>
+              <div class="mt-1">
+                {% if p.sob_encomenda %}
+                  <span class="v2-preco-atual">{{ p.preco_vitrine | moeda }}</span>
+                {% elif p.em_promocao %}
+                  <span class="v2-preco-de">{{ p.preco_base | moeda }}</span>
+                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+                {% else %}
+                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted py-5 text-center">Nenhuma peça encontrada com esses filtros.</p>
+        {% endif %}
+      </main>
+    </div>
+  </div>
+  </div><!-- /v2-loja -->
+
+  {% include "_v2_scripts.html" %}
+
+  <script>
+    // Seletor de colunas da grade (lembra a escolha).
+    (function () {
+      const grid = document.getElementById('v2-grid');
+      const botoes = document.querySelectorAll('.v2-colsel button');
+      if (!grid || !botoes.length) return;
+      const KEY = 'v2_cols';
+      function aplicar(n) {
+        grid.className = 'v2-grid cols-' + n;
+        botoes.forEach(b => b.classList.toggle('ativo', b.dataset.cols === String(n)));
+        localStorage.setItem(KEY, n);
+      }
+      botoes.forEach(b => b.addEventListener('click', () => aplicar(b.dataset.cols)));
+      aplicar(localStorage.getItem(KEY) || '4');
+    })();
+  </script>
+</body>
+</html>

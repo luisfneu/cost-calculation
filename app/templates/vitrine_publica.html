@@ -268,6 +268,7 @@
     let frete = null;    // { nome, preco, prazo, retirar? }
     let cupom = null;    // { codigo, tipo, valor }
     let opcoesFrete = [];  // últimas opções calculadas (sem contar "Retirar em mãos")
+    let retiradaLiberada = false;   // "Retirar em mãos" só após calcular e se o CEP for RS
     try { frete = JSON.parse(localStorage.getItem(KEY + '_frete')) || null; } catch (e) { frete = null; }
     try { cupom = JSON.parse(localStorage.getItem(KEY + '_cupomobj')) || null; } catch (e) { cupom = null; }
 
@@ -365,17 +366,23 @@
       return Math.round(Math.min(limite, freteAtual) * 100) / 100;
     };
     function limparFrete() {   // carrinho mudou: frete e cupom precisam ser refeitos/recalculados
-      frete = null; opcoesFrete = [];
+      frete = null; opcoesFrete = []; retiradaLiberada = false;
       salvarFreteCupom();
       renderFreteOpcoes();
       freteMsg.textContent = '';
     }
 
-    // Opções de frete: "Retirar em mãos" (grátis, sempre) + as calculadas pelo CEP.
+    // Opções de frete: só aparecem após calcular. "Retirar em mãos" apenas se o CEP for RS.
     function renderFreteOpcoes() {
       opcoesEl.innerHTML = '';
-      const lista = [{ nome: 'Retirar em mãos', preco: 0, prazo: null, retirar: true }].concat(opcoesFrete);
-      lista.forEach(o => {
+      const opts = (retiradaLiberada ? [{ nome: 'Retirar em mãos', preco: 0, prazo: null, retirar: true }] : []).concat(opcoesFrete);
+      if (!opts.length) {
+        opcoesEl.innerHTML = '<div class="small text-muted">Informe seu CEP e clique em <strong>Calcular</strong>.</div>';
+        return;
+      }
+      // Depois de escolher, mostra só a opção selecionada (+ "trocar frete").
+      const mostrar = frete ? opts.filter(o => o.nome === frete.nome) : opts;
+      mostrar.forEach(o => {
         const preco = parseFloat(o.preco) || 0;
         const b = document.createElement('button');
         b.type = 'button';
@@ -385,13 +392,18 @@
                     + `<strong>${preco ? fmt(preco) : 'Grátis'}</strong>`;
         b.addEventListener('click', () => {
           frete = { nome: o.nome, preco: preco, prazo: o.prazo || null, retirar: !!o.retirar };
-          salvarFreteCupom();
-          opcoesEl.querySelectorAll('.frete-opcao').forEach(x => x.classList.remove('sel'));
-          b.classList.add('sel');
-          render();
+          salvarFreteCupom(); renderFreteOpcoes(); render();
         });
         opcoesEl.appendChild(b);
       });
+      if (frete && opts.length > 1) {
+        const trocar = document.createElement('button');
+        trocar.type = 'button';
+        trocar.className = 'btn btn-link btn-sm p-0 mt-1 text-muted';
+        trocar.innerHTML = '<i class="bi bi-arrow-repeat"></i> trocar frete';
+        trocar.addEventListener('click', () => { frete = null; salvarFreteCupom(); renderFreteOpcoes(); render(); });
+        opcoesEl.appendChild(trocar);
+      }
     }
 
     function render() {
@@ -473,12 +485,18 @@
     function itensParaFrete() {
       return Object.values(cart).map(it => ({ id: it.id, qtd: it.qtd }));
     }
-    calcBtn.addEventListener('click', () => {
+    calcBtn.addEventListener('click', async () => {
       const cep = (cepEl.value || '').replace(/\D/g, '');
       if (cep.length !== 8) { freteMsg.textContent = 'Informe um CEP válido (8 dígitos).'; return; }
       if (!Object.keys(cart).length) { freteMsg.textContent = 'Seu pedido está vazio.'; return; }
       calcBtn.disabled = true;
       freteMsg.textContent = 'Calculando…';
+      // Libera "Retirar em mãos" apenas se o CEP for de RS (ateliê é em RS).
+      retiradaLiberada = false;
+      try {
+        const vc = await (await fetch(`https://viacep.com.br/ws/${cep}/json/`)).json();
+        retiradaLiberada = ((vc.uf || '').toUpperCase() === 'RS');
+      } catch (e) { /* sem UF: mantém retirada bloqueada */ }
       fetch('{{ url_for("publico.frete_publico") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -732,8 +750,11 @@
     });
 
     // Se havia um frete calculado salvo, recria a opção para aparecer selecionada.
-    if (frete && !frete.retirar) opcoesFrete = [{ nome: frete.nome, preco: frete.preco, prazo: frete.prazo }];
-    renderFreteOpcoes();   // mostra "Retirar em mãos" desde o início
+    if (frete) {
+      if (frete.retirar) retiradaLiberada = true;                 // retirada já escolhida antes
+      else opcoesFrete = [{ nome: frete.nome, preco: frete.preco, prazo: frete.prazo }];
+    }
+    renderFreteOpcoes();   // sem cálculo prévio: só mostra a dica "informe o CEP"
     render();
   })();
   </script>

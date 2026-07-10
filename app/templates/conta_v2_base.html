@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Minha conta{% endblock %} · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vitrine2.css') }}">
+</head>
+<body>
+  <div class="v2-loja">
+  {% include "_v2_header.html" %}
+
+  <div class="v2-wrap">
+    <div class="cp-ola">Olá, <strong>{{ cliente_logado.nome if cliente_logado else '' }}</strong></div>
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'danger' if categoria == 'erro' else 'success' }} py-2">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    <div class="cp">
+      <nav class="cp-side">
+        <a href="{{ url_for('publico.conta_painel') }}" class="{{ 'on' if secao == 'inicio' }}">Início</a>
+        <a href="{{ url_for('publico.conta_pedidos') }}" class="{{ 'on' if secao == 'pedidos' }}">Meus pedidos</a>
+        <a href="{{ url_for('publico.conta_favoritos') }}" class="{{ 'on' if secao == 'favoritos' }}">Meus favoritos</a>
+        <a href="{{ url_for('publico.conta_vales') }}" class="{{ 'on' if secao == 'vales' }}">Meus vales</a>
+        <a href="{{ url_for('publico.conta_preferencias') }}" class="{{ 'on' if secao == 'info' }}">Informações de conta</a>
+        <a href="{{ url_for('publico.conta_enderecos') }}" class="{{ 'on' if secao == 'enderecos' }}">Meus endereços</a>
+        <a href="{{ url_for('publico.conta_cartoes') }}" class="{{ 'on' if secao == 'cartoes' }}">Meus cartões</a>
+        <a href="{{ url_for('publico.vitrine_v2') }}">Ir para a loja</a>
+        <a href="{{ url_for('publico.conta_sair') }}">Sair</a>
+      </nav>
+      <div class="flex-grow-1" style="min-width:0">
+        {% block conta %}{% endblock %}
+      </div>
+    </div>
+  </div>
+  </div><!-- /v2-loja -->
+
+  {% include "_v2_scripts.html" %}
+  {% block conta_scripts %}{% endblock %}
+</body>
+</html>

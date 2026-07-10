@@ -1,0 +1,48 @@
+{# Modais + carrinho + scripts compartilhados da Vitrine V2. Requer: whatsapp, cliente_logado. #}
+<!-- Condições de frete -->
+<div class="modal fade" id="modal-frete" tabindex="-1" aria-labelledby="modal-frete-tit" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background:var(--cream)">
+      <div class="modal-header border-0">
+        <h5 class="modal-title" id="modal-frete-tit" style="font-family:var(--fonte-titulo)"><i class="bi bi-truck"></i> Condições de frete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body pt-0">
+        <div class="frete-regra"><i class="bi bi-calculator"></i>
+          <div><h6>Frete calculado pelo seu CEP</h6><p>Correios e transportadoras. O valor e o prazo aparecem no carrinho ao clicar em <strong>Calcular</strong>.</p></div></div>
+        <div class="frete-regra"><i class="bi bi-bag-heart"></i>
+          <div><h6>Retirar em mãos — grátis</h6><p>Disponível para <strong>Porto Alegre e região (RS)</strong>. Combinamos o ponto de retirada pelo WhatsApp.</p></div></div>
+        <div class="frete-regra"><i class="bi bi-gift"></i>
+          <div><h6>Frete grátis*</h6><p>Em campanhas e promoções especiais. Avisamos no Instagram e no WhatsApp — fique de olho!</p></div></div>
+        <div class="frete-regra"><i class="bi bi-chat-dots"></i>
+          <div><h6>Prazo e pagamento</h6><p>Confirmamos tudo pelo WhatsApp. Pagamento via <strong>Pix</strong>.</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vitrine-favs.js') }}"></script>
+
+{% include "_carrinho.html" %}
+{% if whatsapp %}
+<script>
+  window.SH_CART = {
+    whats: {{ whatsapp | tojson }},
+    cliente: {% if cliente_logado %}{{ {
+      'nome': cliente_logado.nome, 'telefone': cliente_logado.telefone,
+      'instagram': cliente_logado.instagram, 'cep': cliente_logado.cep,
+      'logradouro': cliente_logado.logradouro, 'numero': cliente_logado.numero,
+      'complemento': cliente_logado.complemento, 'bairro': cliente_logado.bairro,
+      'cidade': cliente_logado.cidade, 'uf': cliente_logado.uf,
+    } | tojson }}{% else %}null{% endif %},
+    urls: {
+      frete: {{ url_for('publico.frete_publico') | tojson }},
+      cupom: {{ url_for('publico.cupom_publico') | tojson }},
+      pedido: {{ url_for('publico.pedido_publico') | tojson }},
+    },
+    contaSair: {{ url_for('publico.conta_sair') | tojson }},
+  };
+</script>
+<script src="{{ url_for('static', filename='js/vitrine-cart.js') }}"></script>
+{% endif %}

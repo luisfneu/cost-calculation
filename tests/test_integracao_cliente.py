@@ -112,3 +112,100 @@ def test_mesclar_clientes_move_pedidos_e_apaga_duplicado(client, app):
         principal = Cliente.query.get(pid)
         assert principal.instagram == "luisfneu"              # herdou dado do dup
         assert Venda.query.filter_by(cliente_id=pid).count() == 1  # pedido migrou
+
+
+def _login_cliente(app):
+    from app.models import Cliente, db
+    with app.app_context():
+        c = Cliente(nome="End Teste", email="end@ex.com", telefone="51900000000")
+        c.set_senha("segredo1"); db.session.add(c); db.session.commit()
+        cid = c.id
+    cli = app.test_client()
+    with cli.session_transaction() as s:
+        s["cliente_id"] = cid
+    return cli, cid
+
+
+def test_enderecos_crud_e_principal(app):
+    from app.models import Cliente, Endereco
+    cli, cid = _login_cliente(app)
+    # 1º endereço → vira principal automaticamente
+    cli.post("/conta/enderecos/salvar", data={
+        "apelido": "Casa", "cep": "90000-000", "logradouro": "Rua A", "numero": "10",
+        "bairro": "Centro", "cidade": "Porto Alegre", "uf": "RS"})
+    # 2º endereço marcado principal
+    cli.post("/conta/enderecos/salvar", data={
+        "apelido": "Trabalho", "logradouro": "Rua B", "numero": "20",
+        "cidade": "Canoas", "uf": "RS", "principal": "on"})
+    with app.app_context():
+        ends = Endereco.query.filter_by(cliente_id=cid).all()
+        assert len(ends) == 2
+        princ = [e for e in ends if e.principal]
+        assert len(princ) == 1 and princ[0].apelido == "Trabalho"
+        # principal sincronizado no Cliente (checkout usa isso)
+        c = Cliente.query.get(cid)
+        assert c.logradouro == "Rua B" and c.cidade == "Canoas"
+        casa_id = next(e.id for e in ends if e.apelido == "Casa")
+
+    # tornar "Casa" principal
+    cli.post(f"/conta/enderecos/{casa_id}/principal")
+    with app.app_context():
+        c = Cliente.query.get(cid)
+        assert c.logradouro == "Rua A"
+        assert Endereco.query.filter_by(cliente_id=cid, principal=True).count() == 1
+
+    # excluir o principal → promove o outro
+    cli.post(f"/conta/enderecos/{casa_id}/excluir")
+    with app.app_context():
+        ends = Endereco.query.filter_by(cliente_id=cid).all()
+        assert len(ends) == 1 and ends[0].principal
+
+
+def test_endereco_nao_vaza_entre_clientes(app):
+    from app.models import Cliente, Endereco, db
+    cli, cid = _login_cliente(app)
+    cli.post("/conta/enderecos/salvar", data={"logradouro": "Minha Rua", "cidade": "POA", "uf": "RS"})
+    with app.app_context():
+        outro = Cliente(nome="Outro", email="o@ex.com", telefone="51911112222")
+        outro.set_senha("segredo1"); db.session.add(outro); db.session.commit()
+        eid = Endereco.query.filter_by(cliente_id=cid).first().id
+        oid = outro.id
+    # outro cliente tenta excluir/editar endereço alheio → 404
+    c2 = app.test_client()
+    with c2.session_transaction() as s:
+        s["cliente_id"] = oid
+    assert c2.post(f"/conta/enderecos/{eid}/excluir").status_code == 404
+    assert c2.get(f"/conta/enderecos?editar={eid}").status_code == 200  # não mostra o alheio
+
+
+def test_cpf_invalido_rejeitado_erp(client, app):
+    from app.models import Cliente
+    r = client.post("/console/erp/clientes/novo",
+                    data={"nome": "CPF Ruim", "cpf": "123.456.789-00"})
+    assert "inválido" in r.get_data(as_text=True).lower()
+    with app.app_context():
+        assert Cliente.query.filter_by(nome="CPF Ruim").first() is None  # não salvou
+
+
+def test_cpf_valido_salvo_normalizado(client, app):
+    from app.models import Cliente
+    client.post("/console/erp/clientes/novo",
+                data={"nome": "CPF Bom", "cpf": "529.982.247-25"}, follow_redirects=True)
+    with app.app_context():
+        c = Cliente.query.filter_by(nome="CPF Bom").first()
+        assert c is not None and c.cpf == "52998224725"   # guardado só dígitos
+
+
+def test_cpf_invalido_rejeitado_vitrine(app):
+    from app.models import Cliente, db
+    with app.app_context():
+        c = Cliente(nome="Vit", email="vit@ex.com", telefone="51900001111")
+        c.set_senha("segredo1"); db.session.add(c); db.session.commit()
+        cid = c.id
+    cli = app.test_client()
+    with cli.session_transaction() as s:
+        s["cliente_id"] = cid
+    r = cli.post("/conta/preferencias", data={"nome": "Vit", "email": "vit@ex.com", "cpf": "11111111111"})
+    assert "inválido" in r.get_data(as_text=True).lower()
+    with app.app_context():
+        assert (Cliente.query.get(cid).cpf or "") == ""   # não salvou

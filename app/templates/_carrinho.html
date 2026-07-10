@@ -1,0 +1,99 @@
+{% if whatsapp %}
+<!-- Mini-pedido: carrinho client-side (localStorage). Depende de js/vitrine-cart.js
+     e de window.SH_CART (whats, cliente, urls). Estilos em estilo.css. -->
+<button type="button" class="vitrine-cart-fab" data-bs-toggle="offcanvas" data-bs-target="#sh-cart" aria-label="Ver meu pedido">
+  <i class="bi bi-bag"></i>
+  <span class="vitrine-cart-badge" id="cart-badge" hidden>0</span>
+</button>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="sh-cart" aria-labelledby="cart-titulo">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="cart-titulo"><i class="bi bi-bag"></i> Meu pedido</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+  </div>
+  <div class="offcanvas-body d-flex flex-column">
+    <div id="cart-vazio" class="text-center text-muted my-auto">
+      <i class="bi bi-bag" style="font-size:2rem"></i>
+      <p class="mt-2 mb-0">Seu pedido está vazio.<br>Adicione peças na loja.</p>
+    </div>
+    <div id="cart-itens" class="flex-grow-1"></div>
+    <div id="cart-rodape" hidden>
+      <!-- Frete -->
+      <div class="border-top pt-2 mt-2">
+        <label class="form-label small mb-1" for="cart-cep"><i class="bi bi-truck"></i> Frete — informe seu CEP <span id="cart-cep-status" class="small"></span></label>
+        <div class="input-group input-group-sm mb-1">
+          <input type="text" id="cart-cep" class="form-control" placeholder="00000-000" inputmode="numeric" autocomplete="postal-code" maxlength="9">
+          <button type="button" class="btn btn-outline-secondary" id="cart-calc-frete">Calcular</button>
+        </div>
+        <div id="cart-frete-opcoes" class="mb-1"></div>
+        <div id="cart-frete-msg" class="small text-muted"></div>
+      </div>
+      <!-- Cupom -->
+      <label class="form-label small mb-1 mt-2" for="cart-cupom">Cupom (opcional)</label>
+      <div class="input-group input-group-sm mb-1">
+        <input type="text" id="cart-cupom" class="form-control" placeholder="ex.: SEUCUPOM" autocomplete="off" autocapitalize="characters" aria-label="Código do cupom">
+        <button type="button" class="btn btn-outline-secondary" id="cart-aplicar-cupom">Aplicar</button>
+      </div>
+      <div id="cart-cupom-msg" class="small mb-2"></div>
+      <!-- Totais -->
+      <div class="d-flex justify-content-between small mt-2"><span>Subtotal</span><span id="cart-subtotal">R$ 0,00</span></div>
+      <div class="d-flex justify-content-between small" id="cart-desconto-linha" hidden>
+        <span>Desconto <span id="cart-desconto-nome" class="text-muted"></span></span><span id="cart-desconto-valor" class="text-success">−R$ 0,00</span>
+      </div>
+      <div class="d-flex justify-content-between small" id="cart-frete-linha" hidden>
+        <span>Frete <span id="cart-frete-nome" class="text-muted"></span></span><span id="cart-frete-valor">R$ 0,00</span>
+      </div>
+      <div class="d-flex justify-content-between align-items-center fw-bold border-top pt-2 mt-1">
+        <span>Total</span><span id="cart-total">R$ 0,00</span>
+      </div>
+      <button type="button" class="btn btn-primary w-100 mt-3" id="cart-abrir-form">
+        <i class="bi bi-bag-check"></i> Fazer pedido
+      </button>
+      <button type="button" class="btn btn-outline-success w-100 mt-2" id="cart-enviar">
+        <i class="bi bi-whatsapp"></i> Só chamar no WhatsApp
+      </button>
+      <button type="button" class="btn btn-link btn-sm w-100 text-muted mt-1" id="cart-limpar">limpar pedido</button>
+
+      <!-- Pré-cadastro + envio do pedido -->
+      <div id="cart-form" hidden class="mt-3 border-top pt-3">
+        <div id="pc-conta-banner" hidden class="alert alert-light border py-1 px-2 small mb-2"></div>
+        <div id="pc-conta-cta" hidden class="small text-muted mb-2">
+          Já é cliente? <a href="{{ url_for('publico.conta_entrar') }}">Entrar</a> para preencher automático — ou continue como convidado.
+        </div>
+        <h6 class="mb-2"><i class="bi bi-person-lines-fill"></i> Seus dados</h6>
+        <input type="text" id="pc-nome" class="form-control form-control-sm mb-2" placeholder="Nome completo *" autocomplete="name" aria-label="Nome completo">
+        <input type="text" id="pc-whats" class="form-control form-control-sm mb-2" placeholder="WhatsApp com DDD *" inputmode="tel" autocomplete="tel" aria-label="WhatsApp com DDD">
+        <input type="text" id="pc-insta" class="form-control form-control-sm mb-2" placeholder="Instagram (opcional)" aria-label="Instagram">
+        <div class="row g-2">
+          <div class="col-8"><input type="text" id="pc-logradouro" class="form-control form-control-sm mb-2" placeholder="Rua / Av." aria-label="Rua ou avenida"></div>
+          <div class="col-4"><input type="text" id="pc-numero" class="form-control form-control-sm mb-2" placeholder="Nº" aria-label="Número"></div>
+        </div>
+        <input type="text" id="pc-complemento" class="form-control form-control-sm mb-2" placeholder="Complemento (opcional)" aria-label="Complemento">
+        <input type="text" id="pc-bairro" class="form-control form-control-sm mb-2" placeholder="Bairro" aria-label="Bairro">
+        <div class="row g-2">
+          <div class="col-8"><input type="text" id="pc-cidade" class="form-control form-control-sm mb-2" placeholder="Cidade" aria-label="Cidade"></div>
+          <div class="col-4"><input type="text" id="pc-uf" class="form-control form-control-sm mb-2" placeholder="UF" maxlength="2" style="text-transform:uppercase" aria-label="Estado (UF)"></div>
+        </div>
+        <div id="pc-msg" class="small mb-2"></div>
+        <button type="button" class="btn btn-primary w-100" id="cart-enviar-pedido"><i class="bi bi-send"></i> Enviar pedido</button>
+        <p class="small text-muted mt-2 mb-0">O endereço é opcional se for retirar em mãos. Confirmamos tudo pelo WhatsApp.</p>
+      </div>
+
+      <!-- Pedido enviado: Pix + WhatsApp -->
+      <div id="cart-sucesso" hidden class="mt-3 text-center">
+        <i class="bi bi-check-circle-fill text-success" style="font-size:2rem"></i>
+        <p class="mb-2 mt-1">Pedido enviado! Vamos confirmar pelo WhatsApp.</p>
+        <div id="pc-pix-wrap" hidden>
+          <label class="form-label small mb-1">Pix copia e cola (total do pedido):</label>
+          <textarea id="pc-pix" class="form-control form-control-sm mb-1" rows="3" readonly style="font-family:monospace;font-size:.7rem"></textarea>
+          <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="pc-pix-copiar"><i class="bi bi-clipboard"></i> Copiar Pix</button>
+        </div>
+        <button type="button" class="btn btn-success w-100" id="pc-abrir-whats"><i class="bi bi-whatsapp"></i> Abrir WhatsApp</button>
+        <button type="button" class="btn btn-link btn-sm w-100 text-muted mt-1" id="pc-novo">fazer outro pedido</button>
+      </div>
+
+      <p class="small text-muted text-center mt-2 mb-0" id="cart-rodape-obs">O tamanho e o pagamento são combinados no WhatsApp.</p>
+    </div>
+  </div>
+</div>
+{% endif %}

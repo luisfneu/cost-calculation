@@ -1,0 +1,13 @@
+{% extends "conta_v2_base.html" %}
+{% set secao = 'inicio' %}
+{% block titulo %}Minha conta{% endblock %}
+{% block conta %}
+<div class="cp-cards">
+  <a class="cp-card" href="{{ url_for('publico.conta_pedidos') }}"><i class="bi bi-bag"></i><span>Meus pedidos</span></a>
+  <a class="cp-card" href="{{ url_for('publico.conta_favoritos') }}"><i class="bi bi-heart"></i><span>Meus favoritos</span></a>
+  <a class="cp-card" href="{{ url_for('publico.conta_vales') }}"><i class="bi bi-ticket-perforated"></i><span>Meus vales</span></a>
+  <a class="cp-card" href="{{ url_for('publico.conta_preferencias') }}"><i class="bi bi-person"></i><span>Informações de conta</span></a>
+  <a class="cp-card" href="{{ url_for('publico.conta_enderecos') }}"><i class="bi bi-geo-alt"></i><span>Meus endereços</span></a>
+  <a class="cp-card" href="{{ url_for('publico.conta_cartoes') }}"><i class="bi bi-credit-card"></i><span>Meus cartões</span></a>
+</div>
+{% endblock %}

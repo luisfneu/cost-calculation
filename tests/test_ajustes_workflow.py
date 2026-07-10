@@ -133,7 +133,7 @@ def test_peca_publica_e_og(app, seed):
     r = app.test_client().get(f"/peca/{seed['peca']}")
     assert r.status_code == 200
     b = r.get_data(as_text=True)
-    assert 'property="og:title"' in b and "btn-add-peca" in b
+    assert 'property="og:title"' in b and "pdp-comprar" in b
 
 
 def test_peca_oculta_da_vitrine_404(app):
@@ -143,3 +143,22 @@ def test_peca_oculta_da_vitrine_404(app):
         db.session.add(p); db.session.commit()
         pid = p.id
     assert app.test_client().get(f"/peca/{pid}").status_code == 404
+
+
+def test_etapa_sincroniza_com_status_da_venda(client, app):
+    from app.models import Venda, db
+    with app.app_context():
+        v = Venda(status="pre-pedido", tipo="venda", comprador="X", estoque_baixado=False)
+        db.session.add(v); db.session.commit(); vid = v.id
+    client.post(f"/console/erp/vendas/{vid}/confirmar-pedido", follow_redirects=True)
+    with app.app_context():
+        assert Venda.query.get(vid).etapa_pedido == "aguard_pgto"
+    client.post(f"/console/erp/vendas/{vid}/status/pago", follow_redirects=True)
+    with app.app_context():
+        assert Venda.query.get(vid).etapa_pedido == "pgto_aprovado"
+    client.post(f"/console/erp/vendas/{vid}/status/enviado", follow_redirects=True)
+    with app.app_context():
+        assert Venda.query.get(vid).etapa_pedido == "preparando"   # entra no grupo Envio
+    client.post(f"/console/erp/vendas/{vid}/status/entregue", follow_redirects=True)
+    with app.app_context():
+        assert Venda.query.get(vid).etapa_pedido == "entregue"

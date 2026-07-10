@@ -8,7 +8,7 @@ import os
 import re
 import unicodedata
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -650,6 +650,86 @@ def peca_publica(peca_id):
         whatsapp=whatsapp, og_image=og_image, meta_desc=meta_desc))
     if _cliente_esta_logado():
         resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _foto_thumb_url(nome):
+    """URL da miniatura da foto (ou da cheia), para JSON/JS."""
+    if not nome:
+        return ""
+    thumb = f"thumb_{nome.rsplit('.', 1)[0]}.jpg"
+    if os.path.exists(os.path.join(current_app.config["UPLOAD_FOLDER"], thumb)):
+        return url_for("static", filename="uploads/" + thumb)
+    return url_for("static", filename="uploads/" + nome)
+
+
+@publico_bp.route("/publico/pecas")
+@limiter.limit("60 per minute")
+def pecas_info():
+    """Info pública de peças por id (?ids=1,2,3) — usado pela página de favoritos."""
+    ids = [int(x) for x in request.args.get("ids", "").split(",") if x.strip().isdigit()]
+    out = []
+    if ids:
+        pecas = Peca.query.filter(Peca.id.in_(ids), Peca.vitrine_publica.is_(True)).all()
+        ordem = {pid: i for i, pid in enumerate(ids)}
+        pecas.sort(key=lambda p: ordem.get(p.id, 0))
+        for p in pecas:
+            out.append({
+                "id": p.id, "nome": p.nome,
+                "url": url_for("publico.peca_publica", peca_id=p.id),
+                "foto": _foto_thumb_url(p.foto),
+                "sob_encomenda": bool(p.sob_encomenda),
+                "preco": float(p.preco_vitrine if p.sob_encomenda else p.preco_etiqueta_efetivo),
+                "preco_de": (float(p.preco_base) if (not p.sob_encomenda and p.em_promocao) else None),
+                "tamanhos": [{"t": t, "disp": p.disponivel_por_tamanho.get(t, 0) > 0} for t in TAMANHOS],
+            })
+    return {"pecas": out}
+
+
+@publico_bp.route("/vitrine2")
+@limiter.limit("60 per minute")
+def vitrine_v2():
+    """Vitrine V2 (layout estilo marketplace) — paralela à vitrine atual, para
+    avaliação em /vitrine2. Mesmos dados; nada é cacheado enquanto é preview."""
+    q = request.args.get("q", "").strip().lower()
+    tipo = request.args.get("tipo", "").strip()
+    colecao = request.args.get("colecao", "").strip()
+    ordem = request.args.get("ordem", "").strip()
+    tam_sel = [t for t in request.args.getlist("tamanho") if t in TAMANHOS]
+
+    publicas = Peca.query.filter_by(vitrine_publica=True).all()
+    pecas = publicas
+    if q:
+        pecas = [p for p in pecas
+                 if q in p.nome.lower() or q in (p.colecao or "").lower() or q in (p.tags or "").lower()]
+    if tipo:
+        pecas = [p for p in pecas if p.tipo == tipo]
+    if colecao:
+        pecas = [p for p in pecas if (p.colecao or "") == colecao]
+    if tam_sel:
+        # Filtro de tamanho: só peças com estoque real no(s) tamanho(s) escolhido(s)
+        # (peças sem estoque / sob encomenda não aparecem).
+        pecas = [p for p in pecas
+                 if any(p.disponivel_por_tamanho.get(t, 0) > 0 for t in tam_sel)]
+
+    chaves = {"preco_asc": lambda p: p.preco_vitrine,
+              "preco_desc": lambda p: -p.preco_vitrine,
+              "nome": lambda p: p.nome.lower()}
+    pecas = sorted(pecas, key=chaves.get(ordem, lambda p: p.nome.lower()))
+
+    tipos = sorted({p.tipo for p in publicas if p.tipo})
+    colecoes = sorted({p.colecao for p in publicas if p.colecao})
+    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
+    whatsapp = Parametro.obter("whatsapp", "")
+    limite_novo = datetime.utcnow() - timedelta(days=21)
+    novos = {p.id for p in publicas if p.criado_em and p.criado_em >= limite_novo}
+
+    resp = make_response(render_template(
+        "vitrine2.html", pecas=pecas, tipos=tipos, colecoes=colecoes, tamanhos=TAMANHOS,
+        q=request.args.get("q", ""), tipo=tipo, colecao=colecao, ordem=ordem,
+        tam_sel=tam_sel, colecao_fotos=colecao_fotos, whatsapp=whatsapp, novos=novos,
+        total=len(pecas)))
+    resp.headers["Cache-Control"] = "no-store"      # preview: sempre fresco
     return resp
 
 

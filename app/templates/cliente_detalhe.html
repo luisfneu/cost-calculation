@@ -66,6 +66,13 @@
           <button class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-key"></i> Redefinir senha</button>
         </form>
       {% endif %}
+      {% if cliente.genero %}
+        <span class="badge text-bg-light"><i class="bi bi-person"></i> {{ cliente.genero }}</span>
+      {% endif %}
+      {% if cliente.cpf %}
+        {% set d = cliente.cpf | replace('.', '') | replace('-', '') %}
+        <span class="badge text-bg-light"><i class="bi bi-card-text"></i> CPF {% if d|length == 11 %}{{ d[:3] }}.***.**-{{ d[-2:] }}{% else %}{{ cliente.cpf }}{% endif %}</span>
+      {% endif %}
       {% if cliente.aceita_novidades %}
         <span class="badge text-bg-info"><i class="bi bi-megaphone"></i> Aceita novidades</span>
       {% endif %}

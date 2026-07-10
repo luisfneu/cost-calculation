@@ -18,7 +18,7 @@ from .extensions import cache, limiter
 from .models import Parametro, db
 
 # Versão exibida em /health (útil para saber o que está no ar). Suba a cada release.
-APP_VERSION = "1.7.0"
+APP_VERSION = "2.0.0"
 
 FUSO_PADRAO = "America/Sao_Paulo"
 

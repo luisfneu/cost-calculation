@@ -63,6 +63,23 @@ def arredondar_cima(valor, base=5) -> int:
     return int(math.ceil(v / Decimal(base))) * base
 
 
+def cpf_valido(cpf) -> bool:
+    """Valida CPF pelos dígitos verificadores. Vazio é considerado válido
+    (campo opcional). Retorna False se preenchido e inválido."""
+    d = re.sub(r"\D", "", cpf or "")
+    if not d:
+        return True
+    if len(d) != 11 or d == d[0] * 11:
+        return False
+    for i in (9, 10):
+        soma = sum(int(d[n]) * ((i + 1) - n) for n in range(i))
+        dv = (soma * 10) % 11
+        dv = 0 if dv == 10 else dv
+        if dv != int(d[i]):
+            return False
+    return True
+
+
 class Insumo(db.Model):
     __tablename__ = "insumos"
 
@@ -462,6 +479,8 @@ class Cliente(db.Model):
     aceita_novidades = db.Column(db.Boolean, nullable=False, default=False)
     # Data de nascimento (para lembrete de aniversário).
     nascimento = db.Column(db.Date)
+    genero = db.Column(db.String(20), default="")   # Feminino | Masculino | Outro
+    cpf = db.Column(db.String(14), default="")      # só dígitos ou formatado
     # Tamanho habitual informado manualmente (sobrepõe o calculado).
     tamanho_habitual = db.Column(db.String(5), default="")
 
@@ -654,6 +673,42 @@ class Cliente(db.Model):
         return self.tamanho_habitual or self.tamanho_frequente
 
 
+class Endereco(db.Model):
+    """Endereço de entrega do cliente. Um cliente pode ter vários; um é o
+    `principal` (usado como padrão no checkout)."""
+    __tablename__ = "enderecos"
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"), nullable=False)
+    apelido = db.Column(db.String(60), default="")        # "Casa", "Trabalho"...
+    destinatario = db.Column(db.String(160), default="")  # quem recebe
+    cep = db.Column(db.String(12), default="")
+    logradouro = db.Column(db.String(160), default="")
+    numero = db.Column(db.String(20), default="")
+    complemento = db.Column(db.String(80), default="")
+    bairro = db.Column(db.String(80), default="")
+    cidade = db.Column(db.String(80), default="")
+    uf = db.Column(db.String(2), default="")
+    principal = db.Column(db.Boolean, nullable=False, default=False)  # entrega
+    cobranca = db.Column(db.Boolean, nullable=False, default=False)   # cobrança
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    cliente = db.relationship("Cliente", backref=db.backref(
+        "enderecos", order_by="Endereco.principal.desc(), Endereco.id.desc()",
+        cascade="all, delete-orphan"))
+
+    @property
+    def endereco_completo(self) -> str:
+        linha1 = self.logradouro
+        if self.numero:
+            linha1 += f", {self.numero}"
+        if self.complemento:
+            linha1 += f" - {self.complemento}"
+        partes = [p for p in [linha1, self.bairro,
+                              " ".join(x for x in [self.cidade, self.uf] if x),
+                              f"CEP {self.cep}" if self.cep else ""] if p]
+        return " · ".join(partes)
+
+
 class Lead(db.Model):
     """Pré-cadastro de cliente vindo da vitrine pública.
 
@@ -750,10 +805,74 @@ class Venda(db.Model):
     estoque_baixado = db.Column(db.Boolean, nullable=False, default=True)
     # Origem do pedido pela vitrine pública (link ao lead que o gerou).
     lead_id = db.Column(db.Integer, db.ForeignKey("leads.id"))
+    # Etapa da jornada do pedido para o cliente (independente do `status` do ERP).
+    etapa_pedido = db.Column(db.String(20), nullable=False, default="recebido")
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
     lead = db.relationship("Lead", backref="vendas")
+
+    # Jornada do pedido: etapas granulares (chave, rótulo, grupo). Cada grupo é uma
+    # "bolinha" do stepper que o cliente vê; dentro dela o sub-status vai mudando.
+    ETAPAS = [
+        ("recebido", "Pedido recebido", 0),
+        ("aguard_pgto", "Aguardando pagamento", 1),
+        ("pgto_aprovado", "Pagamento aprovado", 1),
+        ("recibo", "Emissão de recibo", 2),
+        ("preparando", "Preparando envio", 3),
+        ("enviado", "Pedido enviado", 3),
+        ("na_transportadora", "Entregue à transportadora", 3),
+        ("em_transporte", "Em transporte", 4),
+        ("saiu_entrega", "Saiu para entrega", 4),
+        ("entregue", "Entregue", 5),
+    ]
+    GRUPOS = ["Pedido recebido", "Pagamento", "Emissão de recibo", "Envio", "Em transporte", "Entregue"]
+
+    @property
+    def etapa_idx(self) -> int:
+        chaves = [k for k, _, _ in self.ETAPAS]
+        return chaves.index(self.etapa_pedido) if self.etapa_pedido in chaves else 0
+
+    @property
+    def etapa_label(self) -> str:
+        return self.ETAPAS[self.etapa_idx][1]
+
+    @property
+    def grupo_atual(self) -> int:
+        return self.ETAPAS[self.etapa_idx][2]
+
+    @property
+    def proxima_etapa(self):
+        i = self.etapa_idx
+        return self.ETAPAS[i + 1][0] if i < len(self.ETAPAS) - 1 else None
+
+    @property
+    def proxima_etapa_label(self):
+        i = self.etapa_idx
+        return self.ETAPAS[i + 1][1] if i < len(self.ETAPAS) - 1 else None
+
+    @property
+    def etapa_anterior(self):
+        i = self.etapa_idx
+        return self.ETAPAS[i - 1][0] if i > 0 else None
+
+    # Status da venda (ERP) → etapa mínima da jornada do cliente.
+    _STATUS_MIN_ETAPA = {
+        "pre-pedido": "recebido", "realizado": "aguard_pgto",
+        "pago": "pgto_aprovado", "crediario": "pgto_aprovado",
+        "enviado": "preparando", "entregue": "entregue",
+    }
+
+    def sincronizar_etapa(self):
+        """Alinha a etapa (stepper do cliente) ao status/pagamento da venda. Só
+        AVANÇA — nunca retrocede — para preservar sub-passos de envio definidos
+        manualmente no ERP (ex.: 'Saiu para entrega')."""
+        alvo = self._STATUS_MIN_ETAPA.get(self.status, "recebido")
+        if self.status in ("realizado", "pago", "crediario") and self.pago:
+            alvo = "pgto_aprovado"
+        ordem = [k for k, _, _ in self.ETAPAS]
+        if ordem.index(alvo) > self.etapa_idx:
+            self.etapa_pedido = alvo
     cliente = db.relationship("Cliente", back_populates="vendas")
     itens = db.relationship(
         "VendaItem", back_populates="venda", cascade="all, delete-orphan"

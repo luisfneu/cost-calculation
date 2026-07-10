@@ -1,0 +1,18 @@
+{% extends "conta_v2_base.html" %}
+{% set secao = 'favoritos' %}
+{% block titulo %}Meus favoritos{% endblock %}
+{% block conta %}
+<div class="conta-sec-tit">Meus favoritos</div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="small text-muted">Resultado: <strong id="favg-count">0</strong> item(ns)</div>
+</div>
+<div id="favg-vazio" class="text-center text-muted my-5" hidden>
+  <i class="bi bi-heart" style="font-size:2rem"></i>
+  <p class="mt-2 mb-0">Você ainda não favoritou nenhuma peça.<br>
+    <a href="{{ url_for('publico.vitrine_v2') }}">Ver a loja</a>.</p>
+</div>
+<div class="favg" id="favg"></div>
+{% endblock %}
+{% block conta_scripts %}
+<script src="{{ url_for('static', filename='js/vitrine-favoritos-page.js') }}"></script>
+{% endblock %}

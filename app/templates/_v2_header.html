@@ -1,0 +1,50 @@
+{# Topo compartilhado da Vitrine V2 (barra + header). Requer: whatsapp, cliente_logado. #}
+<div class="v2-topbar">
+  <div class="v2-wrap">
+    <div>
+      <button type="button" class="v2-frete-link" data-bs-toggle="modal" data-bs-target="#modal-frete"><strong>Frete grátis*</strong></button>
+      &nbsp; Parcelamento em até 10x
+    </div>
+    <div>{% if whatsapp %}<a href="https://wa.me/{{ whatsapp }}" style="color:inherit;text-decoration:none">Canais de atendimento</a>{% else %}Canais de atendimento{% endif %}</div>
+  </div>
+</div>
+
+<header class="v2-header">
+  <div class="v2-wrap">
+    <a class="v2-logo d-flex align-items-center gap-2 text-decoration-none" href="{{ url_for('publico.vitrine_v2') }}">
+      <img src="{{ url_for('static', filename='monograma.svg') }}" class="brand-monograma" alt="sh">
+      <span class="brand-name">
+        <span class="brand-title">Sabrina Hansen</span>
+        <span class="brand-sub">Atelier</span>
+      </span>
+    </a>
+    <form class="v2-busca" method="get" action="{{ url_for('publico.vitrine_v2') }}" role="search">
+      <div class="input-group">
+        <input type="search" name="q" class="form-control" placeholder="Buscar peça, coleção…" value="{{ q if q is defined else '' }}" aria-label="Buscar">
+        <button class="btn btn-primary" type="submit" aria-label="Buscar"><i class="bi bi-search"></i></button>
+      </div>
+    </form>
+    <div class="v2-conta">
+      <a href="{{ url_for('publico.conta_favoritos') }}" class="v2-favs-btn" aria-label="Meus favoritos" title="Meus favoritos">
+        <i class="bi bi-heart"></i><span class="v2-favs-badge" id="favs-badge" hidden>0</span>
+      </a>
+      {% if cliente_logado %}
+        <div class="dropdown">
+          <a href="#" class="dropdown-toggle fw-bold" data-bs-toggle="dropdown">Olá, {{ cliente_logado.nome.split(' ')[0] }}</a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('publico.conta_painel') }}">Início</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('publico.conta_pedidos') }}">Meus pedidos</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('publico.conta_favoritos') }}">Meus favoritos</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('publico.conta_preferencias') }}">Informações de conta</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('publico.conta_preferencias') }}">Meus endereços</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('publico.conta_sair') }}">Sair</a></li>
+          </ul>
+        </div>
+      {% else %}
+        <a href="{{ url_for('publico.conta_entrar') }}"><i class="bi bi-person"></i> Entrar</a>
+        <a href="{{ url_for('publico.conta_cadastro') }}">Criar conta</a>
+      {% endif %}
+    </div>
+  </div>
+</header>

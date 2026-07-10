@@ -192,6 +192,7 @@ def confirmar_pedido(venda_id):
         baixou = True
     venda.estoque_baixado = baixou
     venda.status = "realizado"
+    venda.sincronizar_etapa()
     db.session.commit()
     _log("pedido_confirmado", f"pré-pedido #{venda.id} confirmado")
     n_prod = len(venda.itens_a_produzir)
@@ -221,8 +222,22 @@ def alterar_status_venda(venda_id, novo):
     # Crediário: o 'pago' fica a cargo do pagamento das parcelas (não força aqui).
     if not venda.eh_crediario:
         venda.pago = novo in ("pago", "enviado", "entregue")
+    venda.sincronizar_etapa()
     db.session.commit()
     flash(f"Pedido #{venda.id}: {venda.status_label}.", "sucesso")
+    return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+
+
+@bp.route("/vendas/<int:venda_id>/etapa/<direcao>", methods=["POST"])
+def avancar_etapa_pedido(venda_id, direcao):
+    """Avança/volta a etapa da jornada do pedido (stepper que o cliente vê)."""
+    venda = Venda.query.get_or_404(venda_id)
+    if direcao == "avancar" and venda.proxima_etapa:
+        venda.etapa_pedido = venda.proxima_etapa
+    elif direcao == "voltar" and venda.etapa_anterior:
+        venda.etapa_pedido = venda.etapa_anterior
+    db.session.commit()
+    _log("pedido_etapa", f"venda #{venda.id} → {venda.etapa_label}")
     return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
 
 
@@ -316,6 +331,7 @@ def editar_venda(venda_id):
     venda.pago = venda.total_pago >= venda.receita - 0.01
     if not venda.pago and venda.status == "pago":
         venda.status = "realizado"
+    venda.sincronizar_etapa()
 
     db.session.commit()
     _log("venda", f"pedido #{venda.id} editado")

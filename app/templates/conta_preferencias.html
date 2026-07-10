@@ -1,70 +1,147 @@
-{% extends "conta_base.html" %}
-{% set largo = true %}
-{% block titulo %}Preferências{% endblock %}
-{% block conteudo %}
-<div class="conta-card wide">
-  <div class="card">
-    <div class="card-body">
-      <h1 class="conta-tit h4 mb-3">Minhas preferências</h1>
-      <form method="post" action="{{ url_for('publico.conta_preferencias') }}">
+{% extends "conta_v2_base.html" %}
+{% set secao = 'info' %}
+{% block titulo %}Informações de conta{% endblock %}
+{% block conta %}
+<div class="conta-sec-tit">Informações de conta</div>
+
+{% if not editar %}
+  {# ---- Visualização ---- #}
+  {% macro linha(rot, val) %}
+    <div class="info-linha"><div class="rot">{{ rot }}</div><div class="val">{{ val if val else '—' }}</div></div>
+  {% endmacro %}
+  <div style="max-width:640px">
+    {{ linha('Nome', cliente.nome) }}
+    {{ linha('E-mail', cliente.email) }}
+    {% set d = (cliente.cpf or '') | replace('.', '') | replace('-', '') %}
+    {{ linha('Gênero', cliente.genero) }}
+    <div class="info-linha"><div class="rot">CPF</div><div class="val">
+      {% if d|length == 11 %}{{ d[:3] }}.***.**-{{ d[-2:] }}{% else %}{{ cliente.cpf or '—' }}{% endif %}
+    </div></div>
+    {{ linha('Data de nascimento', cliente.nascimento.strftime('%d/%m/%Y') if cliente.nascimento else '') }}
+    {{ linha('Telefone', cliente.telefone) }}
+    {{ linha('Tamanho habitual', cliente.tamanho_habitual) }}
+    {{ linha('Ofertas por e-mail', 'Sim' if cliente.aceita_novidades else 'Não') }}
+    <div class="mt-3 d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('publico.conta_preferencias', editar=1) }}" class="btn btn-primary"><i class="bi bi-pencil"></i> Editar informações</a>
+      <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-senha"><i class="bi bi-key"></i> Alterar senha</button>
+    </div>
+  </div>
+
+{% else %}
+  {# ---- Edição ---- #}
+  <form method="post" action="{{ url_for('publico.conta_preferencias') }}" style="max-width:640px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small mb-1">Nome*</label>
+        <input type="text" name="nome" class="form-control" required value="{{ cliente.nome }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">E-mail*</label>
+        <input type="email" name="email" class="form-control" required value="{{ cliente.email or '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">Gênero</label>
+        <select name="genero" class="form-select">
+          <option value="">—</option>
+          {% for g in ['Feminino', 'Masculino', 'Outro'] %}
+            <option value="{{ g }}" {{ 'selected' if cliente.genero == g }}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">CPF</label>
+        <input type="text" name="cpf" class="form-control" inputmode="numeric" data-cpf placeholder="000.000.000-00" value="{{ cliente.cpf or '' }}">
+        <div class="invalid-feedback">CPF inválido.</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">Data de nascimento</label>
+        <input type="date" name="nascimento" class="form-control" value="{{ cliente.nascimento.strftime('%Y-%m-%d') if cliente.nascimento else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">Telefone</label>
+        <input type="tel" name="telefone" class="form-control" value="{{ cliente.telefone or '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">Tamanho habitual</label>
+        <select name="tamanho_habitual" class="form-select">
+          <option value="">—</option>
+          {% for t in ['PP', 'P', 'M', 'G', 'GG'] %}
+            <option value="{{ t }}" {{ 'selected' if cliente.tamanho_habitual == t }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-check mt-3">
+      <input class="form-check-input" type="checkbox" name="aceita_novidades" id="nov" {{ 'checked' if cliente.aceita_novidades }}>
+      <label class="form-check-label small" for="nov">Quero receber novidades e ofertas por e-mail</label>
+    </div>
+
+    <div class="mt-3">
+      <button class="btn btn-primary">Salvar</button>
+      <a href="{{ url_for('publico.conta_preferencias') }}" class="btn btn-link">cancelar</a>
+      <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-senha"><i class="bi bi-key"></i> Alterar senha</button>
+    </div>
+  </form>
+{% endif %}
+
+<!-- Modal: alterar senha -->
+<div class="modal fade" id="modal-senha" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background:var(--cream)">
+      <form method="post" action="{{ url_for('publico.conta_alterar_senha') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label small mb-1">Nome*</label>
-            <input type="text" name="nome" class="form-control" required value="{{ cliente.nome }}">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">E-mail*</label>
-            <input type="email" name="email" class="form-control" required value="{{ cliente.email or '' }}">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">WhatsApp</label>
-            <input type="tel" name="telefone" class="form-control" value="{{ cliente.telefone or '' }}">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">Tamanho habitual</label>
-            <select name="tamanho_habitual" class="form-select">
-              <option value="">—</option>
-              {% for t in ['PP', 'P', 'M', 'G', 'GG'] %}
-                <option value="{{ t }}" {{ 'selected' if cliente.tamanho_habitual == t }}>{{ t }}</option>
-              {% endfor %}
-            </select>
-          </div>
+        <div class="modal-header border-0">
+          <h5 class="modal-title" style="font-family:var(--fonte-titulo)"><i class="bi bi-key"></i> Alterar senha</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
         </div>
-
-        <hr class="my-3">
-        <div class="text-muted small mb-2"><i class="bi bi-truck"></i> Endereço para entrega</div>
-        <div class="row g-2">
-          <div class="col-4 col-md-3">
-            <input type="text" name="cep" class="form-control" placeholder="CEP" inputmode="numeric" maxlength="9"
-                   autocomplete="postal-code" data-cep-autofill value="{{ cliente.cep or '' }}">
-            <span data-cep-status class="small"></span>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small mb-1">Senha atual</label>
+            <input type="password" name="senha_atual" id="s-atual" class="form-control" required autocomplete="current-password">
           </div>
-          <div class="col-8 col-md-6"><input type="text" name="logradouro" class="form-control" placeholder="Rua" value="{{ cliente.logradouro or '' }}"></div>
-          <div class="col-4 col-md-3"><input type="text" name="numero" class="form-control" placeholder="Nº" value="{{ cliente.numero or '' }}"></div>
-          <div class="col-12 col-md-6"><input type="text" name="complemento" class="form-control" placeholder="Complemento" value="{{ cliente.complemento or '' }}"></div>
-          <div class="col-12 col-md-6"><input type="text" name="bairro" class="form-control" placeholder="Bairro" value="{{ cliente.bairro or '' }}"></div>
-          <div class="col-9 col-md-9"><input type="text" name="cidade" class="form-control" placeholder="Cidade" value="{{ cliente.cidade or '' }}"></div>
-          <div class="col-3 col-md-3"><input type="text" name="uf" class="form-control" placeholder="UF" maxlength="2" style="text-transform:uppercase" value="{{ cliente.uf or '' }}"></div>
-        </div>
-
-        <hr class="my-3">
-        <div class="form-check mb-3">
-          <input class="form-check-input" type="checkbox" name="aceita_novidades" id="nov" {{ 'checked' if cliente.aceita_novidades }}>
-          <label class="form-check-label small" for="nov">Quero receber novidades e lançamentos</label>
-        </div>
-
-        <details class="mb-3">
-          <summary class="small text-muted">Trocar senha</summary>
-          <div class="mt-2" style="max-width:320px">
-            <input type="password" name="nova_senha" class="form-control form-control-sm" placeholder="Nova senha (mín. 6)" autocomplete="new-password">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Nova senha</label>
+            <input type="password" name="nova_senha" id="s-nova" class="form-control" required minlength="6" autocomplete="new-password">
           </div>
-        </details>
-
-        <button class="btn btn-dark">Salvar preferências</button>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Confirmar nova senha</label>
+            <input type="password" name="confirmar_senha" id="s-conf" class="form-control" required autocomplete="new-password">
+          </div>
+          <ul class="list-unstyled small mb-0">
+            <li id="chk-len" class="text-muted"><i class="bi bi-circle"></i> pelo menos 6 caracteres</li>
+            <li id="chk-match" class="text-muted"><i class="bi bi-circle"></i> as senhas conferem</li>
+          </ul>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-link text-muted" data-bs-dismiss="modal">cancelar</button>
+          <button type="submit" class="btn btn-primary" id="s-salvar" disabled>Salvar senha</button>
+        </div>
       </form>
     </div>
   </div>
 </div>
-<script src="{{ url_for('static', filename='js/cep-autofill.js') }}"></script>
+{% endblock %}
+{% block conta_scripts %}
+<script src="{{ url_for('static', filename='js/cpf.js') }}"></script>
+<script>
+  (function () {
+    const nova = document.getElementById('s-nova'), conf = document.getElementById('s-conf'),
+          atual = document.getElementById('s-atual'), salvar = document.getElementById('s-salvar'),
+          chkLen = document.getElementById('chk-len'), chkMatch = document.getElementById('chk-match');
+    if (!nova) return;
+    function marca(el, ok) {
+      el.className = 'small ' + (ok ? 'text-success' : 'text-muted');
+      el.querySelector('.bi').className = 'bi ' + (ok ? 'bi-check-circle-fill' : 'bi-circle');
+    }
+    function checar() {
+      const okLen = nova.value.length >= 6;
+      const okMatch = conf.value.length > 0 && nova.value === conf.value;
+      marca(chkLen, okLen); marca(chkMatch, okMatch);
+      salvar.disabled = !(okLen && okMatch && atual.value.length > 0);
+    }
+    [nova, conf, atual].forEach(el => el.addEventListener('input', checar));
+  })();
+</script>
 {% endblock %}
