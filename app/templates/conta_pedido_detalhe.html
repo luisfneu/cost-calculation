@@ -38,6 +38,13 @@
     </div>
     {% endfor %}
   </div>
+  {% if venda.rastreio %}
+  <div class="text-center mt-2 small">
+    <i class="bi bi-truck"></i> Rastreio: <strong>{{ venda.rastreio }}</strong>
+    · <a class="link-atelier" target="_blank" rel="noopener"
+         href="https://www.melhorrastreio.com.br/rastreio/{{ venda.rastreio | urlencode }}">acompanhar entrega</a>
+  </div>
+  {% endif %}
   {% if venda.grupo_atual >= 2 %}
   <div class="text-center mt-2">
     <a href="{{ url_for('publico.conta_pedido_recibo', venda_id=venda.id) }}" target="_blank" class="link-atelier small">
@@ -62,8 +69,30 @@
     <div class="text-end">
       <div class="small text-muted">{{ it.preco_unitario | moeda }}</div>
       <div class="fw-bold">{{ it.subtotal_bruto | moeda }}</div>
+      {% if venda.etapa_pedido == 'entregue' and it.peca %}
+      <button type="button" class="btn btn-sm btn-outline-secondary mt-1" data-bs-toggle="collapse"
+              data-bs-target="#avaliar-{{ it.id }}"><i class="bi bi-star"></i> Avaliar</button>
+      {% endif %}
     </div>
   </div>
+  {% if venda.etapa_pedido == 'entregue' and it.peca %}
+  <div class="collapse" id="avaliar-{{ it.id }}">
+    <form method="post" action="{{ url_for('publico.conta_avaliar_peca', venda_id=venda.id) }}" class="border rounded p-2 mb-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="peca_id" value="{{ it.peca_id }}">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <label class="small mb-0">Nota:</label>
+        <select name="nota" class="form-select form-select-sm" style="width:auto">
+          {% for n in [5,4,3,2,1] %}<option value="{{ n }}">{{ '★' * n }}</option>{% endfor %}
+        </select>
+      </div>
+      <textarea name="texto" class="form-control form-control-sm mb-2" rows="2" maxlength="1000"
+                placeholder="Conte como foi (opcional)"></textarea>
+      <button class="btn btn-sm btn-primary">Enviar avaliação</button>
+      <span class="small text-muted ms-2">Aparece na loja após aprovação do ateliê.</span>
+    </form>
+  </div>
+  {% endif %}
   {% endfor %}
 </div>
 

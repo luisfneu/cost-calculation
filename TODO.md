@@ -1,5 +1,16 @@
 # TODO / Backlog
 
+## Login social (Google / Facebook / Apple)
+Entrar/cadastrar com rede social. **Complexidade média** + setup externo:
+- Registrar um app em cada provedor (client id/secret), configurar a **URL de
+  callback** no domínio (`/conta/entrar/<provedor>/callback`).
+- Fluxo OAuth 2.0 (lib: Authlib ou Flask-Dance). Google é o mais simples;
+  Facebook exige revisão do app p/ liberar e-mail; **Apple exige conta de
+  desenvolvedor paga** e é o mais chato.
+- Criar/associar Cliente pelo e-mail retornado (evitar duplicar cadastro).
+Fazer quando tiver as contas de provedor. Por ora, login é por e-mail/CPF + senha.
+
+
 ## Emissão de nota fiscal (NF-e)
 Etapa "Emissão de recibo" do pedido → futuramente emitir **nota fiscal**.
 Precisa de integração fiscal (ex.: Focus NFe, NFE.io, PlugNotas) + dados fiscais

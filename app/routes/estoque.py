@@ -301,6 +301,10 @@ def concluir_ordem(ordem_id):
     if not ordem.itens:
         flash("Ordem sem itens.", "erro")
         return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))
+    # Disponibilidade antes, por peça (para o aviso "voltou ao estoque").
+    disp_antes = {}
+    for it in ordem.itens:
+        disp_antes.setdefault(it.peca_id, it.peca.disponivel_total)
     # Valida os insumos pela necessidade agregada.
     if not ordem.insumos_suficientes:
         faltam = ", ".join(f"{c['insumo'].nome} (faltam {c['comprar']:g})" for c in ordem.lista_compras)
@@ -322,6 +326,11 @@ def concluir_ordem(ordem_id):
     ordem.status = "concluida"
     ordem.concluido_em = datetime.now()
     db.session.commit()
+    vistas = set()
+    for it in ordem.itens:
+        if it.peca_id not in vistas:
+            vistas.add(it.peca_id)
+            _avisar_favoritos_voltou(it.peca, disp_antes.get(it.peca_id, 0.0))
     _log("estoque", f"produção concluída ordem #{ordem.id}: {ordem.total_unidades:g} peça(s)")
     flash(f"Ordem #{ordem.id} concluída: {ordem.total_unidades:g} peça(s) produzida(s).", "sucesso")
     return redirect(url_for("main.detalhe_ordem", ordem_id=ordem.id))

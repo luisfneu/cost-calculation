@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ peca.nome }} · Sabrina Hansen Atelier</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-title" content="Sabrina Hansen">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#b89a78">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
 
   <meta name="description" content="{{ meta_desc }}">
   <link rel="canonical" href="{{ url_for('publico.peca_publica', peca_id=peca.id, _external=True) }}">
@@ -15,6 +20,7 @@
   <meta property="og:url" content="{{ url_for('publico.peca_publica', peca_id=peca.id, _external=True) }}">
   {% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
   <meta name="twitter:card" content="{{ 'summary_large_image' if og_image else 'summary' }}">
+  <script type="application/ld+json">{{ jsonld | tojson }}</script>
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
@@ -65,9 +71,18 @@
         <div class="pdp-sub">{{ peca.tipo or 'Sabrina Hansen Atelier' }}{% if peca.colecao %} · {{ peca.colecao }}{% endif %}</div>
 
         <div class="pdp-precos">
-          {% if peca.sob_encomenda %}
-            <div class="pdp-preco">{{ peca.preco_vitrine | moeda }}</div>
-            <div class="pdp-parc"><span class="badge text-bg-warning">sob encomenda</span></div>
+          {% if peca.esgotado %}
+            <div class="pdp-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+            <div class="pdp-parc"><span class="badge text-bg-secondary">Esgotado</span></div>
+          {% elif peca.sob_encomenda %}
+            <div class="pdp-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
+            <div class="pdp-parc">
+              <span class="badge text-bg-warning">sob encomenda</span>
+              <span class="pdp-sinal" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="Sinal de {{ peca.preco_encomenda | moeda }} para iniciar a encomenda. O valor cheio da peça é cobrado antes da entrega.">
+                sinal {{ peca.preco_encomenda | moeda }} <i class="bi bi-question-circle"></i>
+              </span>
+            </div>
           {% elif peca.em_promocao %}
             {% set pct = ((peca.preco_base - peca.preco_etiqueta_efetivo) / peca.preco_base * 100) | round(0, 'floor') | int %}
             <div><span class="pdp-de">{{ peca.preco_base | moeda }}</span> <span class="pdp-desc">-{{ pct }}%</span></div>
@@ -75,18 +90,44 @@
           {% else %}
             <div class="pdp-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
           {% endif %}
+          {% if not peca.esgotado and not peca.sob_encomenda and peca.disponivel_total <= 2 %}
+            <div class="mt-1"><span class="badge text-bg-danger">Últimas unidades</span></div>
+          {% endif %}
+          {% if avaliacoes %}
+            <div class="small text-muted mt-1">
+              ★ {{ '%.1f' | format(avaliacoes | map(attribute='nota') | sum / avaliacoes | length) }}
+              · {{ avaliacoes | length }} avaliação{{ '' if avaliacoes | length == 1 else 'ões' }}
+            </div>
+          {% endif %}
         </div>
 
-        {% if whatsapp %}
+        {% if not whatsapp %}
+        <p class="text-muted">Loja indisponível no momento.</p>
+        {% elif peca.esgotado %}
+        <div class="pdp-acao">
+          <button type="button" class="btn btn-secondary btn-lg" disabled><i class="bi bi-x-circle"></i> Esgotado</button>
+          <p class="small text-muted mt-2 mb-0">Sem materiais em estoque para produzir agora. Adicione aos favoritos para acompanhar — ou chame no WhatsApp para saber quando volta.</p>
+          <button type="button" class="btn btn-outline-secondary pdp-fav js-fav mt-2" id="pdp-fav"
+                  data-id="{{ peca.id }}" data-nome="{{ peca.nome }}" data-preco="{{ peca.preco_vitrine }}"
+                  data-foto="{{ url_for('static', filename=(foto1 | thumb)) if foto1 else '' }}"
+                  data-url="{{ url_for('publico.peca_publica', peca_id=peca.id) }}">
+            <i class="bi bi-heart"></i> Adicionar aos Favoritos
+          </button>
+        </div>
+        {% else %}
         <div class="pdp-tam-tit">Tamanho</div>
         <div class="vitrine-tamanhos" id="pdp-tamanhos" role="group" aria-label="Tamanhos">
           {% for t in tamanhos %}
             {%- set sem_estoque = (not peca.sob_encomenda) and peca.disponivel_por_tamanho[t] <= 0 -%}
-            <button type="button" class="tam-chip{{ ' sem-estoque' if sem_estoque }}" data-tam="{{ t }}"
-                    data-sem-estoque="{{ '1' if sem_estoque else '0' }}" title="Tamanho {{ t }}{{ ' — sob encomenda' if sem_estoque }}">{{ t }}</button>
+            <button type="button" class="tam-chip{{ ' sem-estoque' if sem_estoque }}" data-tam="{{ t }}" data-sem-estoque="{{ '1' if sem_estoque else '0' }}" title="Tamanho {{ t }}{{ ' — sob encomenda' if sem_estoque }}">{{ t }}</button>
           {% endfor %}
         </div>
         <div id="pdp-banda" class="small mt-1 text-muted d-none"><i class="bi bi-clock"></i> Tamanho sob encomenda — combinamos o prazo no WhatsApp.</div>
+        {% if guia_medidas %}
+        <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-bs-toggle="modal" data-bs-target="#modal-medidas">
+          <i class="bi bi-rulers"></i> Guia de medidas
+        </button>
+        {% endif %}
 
         <div class="pdp-acao">
           <button type="button" class="btn btn-primary btn-lg pdp-comprar" id="pdp-comprar"><i class="bi bi-bag-plus"></i> Comprar</button>
@@ -98,8 +139,6 @@
           </button>
           <div id="pdp-msg" class="small text-success mt-2"></div>
         </div>
-        {% else %}
-        <p class="text-muted">Loja indisponível no momento.</p>
         {% endif %}
       </div>
     </div>
@@ -118,14 +157,74 @@
           <div class="pdp-desc-txt">
             {% if peca.tipo %}<div><strong>Tipo:</strong> {{ peca.tipo }}</div>{% endif %}
             {% if peca.colecao %}<div><strong>Coleção:</strong> {{ peca.colecao }}</div>{% endif %}
+            {% if peca.composicao %}<div><strong>Composição:</strong> {{ peca.composicao }}</div>{% endif %}
             <div><strong>Disponibilidade:</strong> {{ 'Sob encomenda' if peca.sob_encomenda else 'Pronta entrega' }}</div>
+
+            <div class="mt-3"><strong>Medidas</strong></div>
+            {% if peca.medidas %}
+              <div style="white-space:pre-wrap">{{ peca.medidas }}</div>
+            {% else %}
+              <div class="text-muted small mb-1">Tabela de medida feminina (cm)</div>
+              <div class="table-responsive">
+                <table style="width:100%; max-width:420px; border-collapse:collapse; color:inherit">
+                  <thead>
+                    <tr style="font-size:.85rem; text-transform:uppercase; letter-spacing:.03em">
+                      <th style="text-align:left; font-weight:600; padding:4px 12px 4px 0">Tamanho</th>
+                      <th style="text-align:left; font-weight:600; padding:4px 12px">Busto</th>
+                      <th style="text-align:left; font-weight:600; padding:4px 12px">Cintura</th>
+                      <th style="text-align:left; font-weight:600; padding:4px 12px">Quadril</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for m in medidas_padrao %}
+                      <tr style="border-top:1px solid var(--line)">
+                        <td style="padding:5px 12px 5px 0; color:var(--ink); font-weight:600">{{ m.tam }}</td>
+                        <td style="padding:5px 12px">{{ m.busto }}</td>
+                        <td style="padding:5px 12px">{{ m.cintura }}</td>
+                        <td style="padding:5px 12px">{{ m.quadril }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
           </div>
         </div>
       </div>
     </div>
+    {% if avaliacoes %}
+    <!-- Avaliações aprovadas -->
+    <div class="pdp-tabs mt-3">
+      <h2 class="h6 mb-2"><i class="bi bi-star-fill text-warning"></i> Avaliações de clientes</h2>
+      {% for a in avaliacoes %}
+      <div class="border-bottom py-2">
+        <div class="small">
+          <strong>{{ a.cliente_primeiro_nome }}</strong>
+          <span class="text-warning">{% for _ in range(a.nota) %}★{% endfor %}</span><span class="text-muted">{% for _ in range(5 - a.nota) %}★{% endfor %}</span>
+          <span class="text-muted"> · {{ a.criado_em | dt }}</span>
+        </div>
+        {% if a.texto %}<div class="small mt-1">{{ a.texto }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     </div><!-- /pdp-container -->
   </div>
   </div><!-- /v2-loja -->
+
+  {% if guia_medidas %}
+  <div class="modal fade" id="modal-medidas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="background:var(--cream)">
+        <div class="modal-header border-0">
+          <h5 class="modal-title" style="font-family:var(--fonte-titulo)"><i class="bi bi-rulers"></i> Guia de medidas</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body pt-0" style="white-space:pre-wrap">{{ guia_medidas }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {% include "_v2_scripts.html" %}
 

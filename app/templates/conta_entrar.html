@@ -1,26 +1,62 @@
-{% extends "conta_base.html" %}
-{% block titulo %}Entrar{% endblock %}
-{% block conteudo %}
-<div class="conta-card">
-  <div class="card">
-    <div class="card-body">
-      <h1 class="conta-tit h4 mb-3">Entrar na minha conta</h1>
-      <form method="post" action="{{ url_for('publico.conta_entrar', next=request.args.get('next')) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-2">
-          <label class="form-label small mb-1">E-mail</label>
-          <input type="email" name="email" class="form-control" required autocomplete="email" value="{{ email }}">
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <style>
+    body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--ink);
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .auth-card { background: var(--cream); max-width: 420px; width: 100%; border-radius: 14px;
+                 padding: 32px 28px; box-shadow: 0 14px 40px rgba(0,0,0,.15); text-align: center; }
+    .auth-card .logo { width: 200px; max-width: 70%; margin-bottom: 4px; }
+    .auth-tit { font-family: var(--fonte-titulo); font-size: 1.5rem; margin: 6px 0 16px; }
+    .auth-card form { text-align: left; }
+    .pw-wrap { position: relative; }
+    .pw-wrap .toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+                       border: 0; background: none; color: var(--ink-soft); cursor: pointer; padding: 4px 8px; }
+  </style>
+</head>
+<body>
+  {% set prox = request.args.get('next') %}
+  <div class="auth-card">
+    <a href="{{ url_for('publico.vitrine_v2') }}"><img class="logo" src="{{ url_for('static', filename='logo.svg') }}" alt="Sabrina Hansen Atelier"></a>
+    <div class="auth-tit">Entrar na sua conta</div>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}<div class="alert alert-{{ 'danger' if cat=='erro' else 'success' }} py-2">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('publico.conta_entrar', next=prox) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-2">
+        <label class="form-label small mb-1">E-mail ou CPF</label>
+        <input type="text" name="email" class="form-control" required autofocus autocomplete="username" value="{{ email }}">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">Senha</label>
+        <div class="pw-wrap">
+          <input type="password" name="senha" id="senha" class="form-control" required autocomplete="current-password">
+          <button type="button" class="toggle" onclick="verSenha()" aria-label="Mostrar senha"><i class="bi bi-eye" id="olho"></i></button>
         </div>
-        <div class="mb-3">
-          <label class="form-label small mb-1">Senha</label>
-          <input type="password" name="senha" class="form-control" required autocomplete="current-password">
-        </div>
-        <button class="btn btn-primary w-100">Entrar</button>
-      </form>
-      <p class="small mt-2 mb-0 text-center"><a href="{{ url_for('publico.conta_esqueci') }}" class="link-atelier">Esqueci a senha</a></p>
-      <p class="text-muted small mt-2 mb-0 text-center">Ainda não tem conta?
-        <a href="{{ url_for('publico.conta_cadastro') }}" class="link-atelier">Criar conta</a>.</p>
-    </div>
+      </div>
+      <button class="btn btn-primary w-100 mt-2">Entrar</button>
+    </form>
+    <p class="small mt-3 mb-2"><a href="{{ url_for('publico.conta_esqueci') }}" class="link-atelier">Esqueceu a senha?</a></p>
+    <a href="{{ url_for('publico.conta_cadastro', next=prox) }}" class="btn btn-outline-primary w-100">Criar conta</a>
+    <p class="small mt-3 mb-0"><a href="{{ url_for('publico.vitrine_v2') }}" class="link-atelier"><i class="bi bi-arrow-left"></i> Voltar à loja</a></p>
   </div>
-</div>
-{% endblock %}
+  <script>
+    function verSenha() {
+      var i = document.getElementById('senha'), o = document.getElementById('olho');
+      var mostra = i.type === 'password';
+      i.type = mostra ? 'text' : 'password';
+      o.className = mostra ? 'bi bi-eye-slash' : 'bi bi-eye';
+    }
+  </script>
+</body>
+</html>

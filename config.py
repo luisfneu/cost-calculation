@@ -33,4 +33,6 @@ class Config:
     # Upload de fotos
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "app", "static", "uploads")
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
-    MAX_CONTENT_LENGTH = 8 * 1024 * 1024  # 8 MB por upload
+    # Fotos de celular passam fácil de 8 MB. O uploader já reduz no navegador
+    # (fotos-uploader.js) antes de enviar; este é o teto de segurança do servidor.
+    MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25 MB por upload

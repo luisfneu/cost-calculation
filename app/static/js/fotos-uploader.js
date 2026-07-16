@@ -56,8 +56,39 @@
     sync();
   }
 
-  function addFiles(fileList) {
-    for (const f of fileList) { if (f && f.type.indexOf('image') === 0) dt.items.add(f); }
+  // Reduz a foto no navegador antes de enviar: no máx. LADO_MAX px, JPEG ~0.85.
+  // Fotos de celular (vários MB) chegam leves ao servidor e não estouram o limite
+  // nem travam no túnel. Falhou (ex.: HEIC fora do Safari)? envia o original.
+  const LADO_MAX = 1600;
+  async function redimensionar(file) {
+    if (!file.type || file.type.indexOf('image') !== 0) return null;
+    if (file.type === 'image/gif') return file;         // preserva animação
+    // Arquivo já pequeno: não mexe.
+    if (file.size <= 1024 * 1024) return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const escala = Math.min(1, LADO_MAX / Math.max(bmp.width, bmp.height));
+      if (escala >= 1 && file.size <= 3 * 1024 * 1024) { bmp.close && bmp.close(); return file; }
+      const w = Math.round(bmp.width * escala), h = Math.round(bmp.height * escala);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      bmp.close && bmp.close();
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85));
+      if (!blob) return file;
+      const base = (file.name || 'foto').replace(/\.[^.]+$/, '');
+      return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+    } catch (e) {
+      return file;   // não conseguiu decodificar: manda o original (servidor tem folga)
+    }
+  }
+
+  async function addFiles(fileList) {
+    const arquivos = Array.from(fileList);
+    for (const f of arquivos) {
+      const r = await redimensionar(f);
+      if (r) dt.items.add(r);
+    }
     render();
   }
 

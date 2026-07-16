@@ -1,0 +1,15 @@
+{
+  "name": "Sabrina Hansen Atelier",
+  "short_name": "Sabrina Hansen",
+  "description": "Loja do ateliê Sabrina Hansen.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#b89a78",
+  "theme_color": "#b89a78",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

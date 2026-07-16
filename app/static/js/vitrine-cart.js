@@ -90,7 +90,33 @@
   cupomEl.value = localStorage.getItem(KEY + '_cupom') || '';
   cupomEl.addEventListener('input', () => localStorage.setItem(KEY + '_cupom', cupomEl.value));
 
-  const salvar = () => localStorage.setItem(KEY, JSON.stringify(cart));
+  const salvar = () => { localStorage.setItem(KEY, JSON.stringify(cart)); sincronizarCarrinho(); };
+
+  // ---- Carrinho persistido na conta (logado): CRM de carrinhos abandonados
+  // + continuidade entre aparelhos. Debounce para agrupar mudanças rápidas.
+  let cartSyncTimer = null;
+  function sincronizarCarrinho() {
+    if (window.SH_LOGGED !== true || !URLS.carrinho) return;
+    if (cartSyncTimer) clearTimeout(cartSyncTimer);
+    cartSyncTimer = setTimeout(() => {
+      cartSyncTimer = null;
+      fetch(URLS.carrinho, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itens: Object.values(cart) }) }).catch(() => {});
+    }, 1200);
+  }
+  async function restaurarCarrinhoDaConta() {
+    if (window.SH_LOGGED !== true || !URLS.carrinho) return;
+    if (Object.keys(cart).length) return;   // aparelho já tem carrinho: ele manda
+    try {
+      const d = await (await fetch(URLS.carrinho)).json();
+      if (!d.ok || !(d.itens || []).length) return;
+      d.itens.forEach(it => { cart[it.id + '|' + (it.tam || '')] = {
+        id: it.id, tam: it.tam || '', qtd: it.qtd || 1, nome: it.nome || '',
+        preco: it.preco || 0, encomenda: !!it.encomenda, foto: it.foto || '' }; });
+      localStorage.setItem(KEY, JSON.stringify(cart));
+      render();
+    } catch (e) { /* offline: segue local */ }
+  }
   const salvarFreteCupom = () => {
     localStorage.setItem(KEY + '_frete', JSON.stringify(frete));
     localStorage.setItem(KEY + '_cupomobj', JSON.stringify(cupom));
@@ -109,7 +135,21 @@
     const limite = cupom.valor > 0 ? cupom.valor : freteAtual;
     return Math.round(Math.min(limite, freteAtual) * 100) / 100;
   };
-  function limparFrete() { frete = null; opcoesFrete = []; retiradaLiberada = false; salvarFreteCupom(); renderFreteOpcoes(); freteMsg.textContent = ''; }
+  function limparFrete() {
+    frete = null; opcoesFrete = []; retiradaLiberada = false;
+    salvarFreteCupom(); renderFreteOpcoes(); freteMsg.textContent = '';
+    agendarRecalculoFrete();   // CEP já preenchido: recalcula sozinho
+  }
+
+  // Recalcula o frete automaticamente (com debounce) quando o carrinho muda e
+  // o CEP já está preenchido — antes exigia clicar em "Calcular" de novo.
+  let recalcTimer = null;
+  function agendarRecalculoFrete() {
+    if (recalcTimer) clearTimeout(recalcTimer);
+    const cep = (cepEl.value || '').replace(/\D/g, '');
+    if (cep.length !== 8 || !Object.keys(cart).length) return;
+    recalcTimer = setTimeout(() => { recalcTimer = null; calcularFrete(); }, 800);
+  }
 
   function renderFreteOpcoes() {
     opcoesEl.innerHTML = '';
@@ -201,7 +241,7 @@
   window.SHCart = { add };   // exposto para páginas que adicionam ao pedido
 
   function itensParaFrete() { return Object.values(cart).map(it => ({ id: it.id, qtd: it.qtd })); }
-  calcBtn.addEventListener('click', async () => {
+  async function calcularFrete() {
     const cep = (cepEl.value || '').replace(/\D/g, '');
     if (cep.length !== 8) { freteMsg.textContent = 'Informe um CEP válido (8 dígitos).'; return; }
     if (!Object.keys(cart).length) { freteMsg.textContent = 'Seu pedido está vazio.'; return; }
@@ -222,7 +262,8 @@
       })
       .catch(() => { freteMsg.textContent = 'Falha de conexão ao calcular o frete.'; })
       .finally(() => { calcBtn.disabled = false; });
-  });
+  }
+  calcBtn.addEventListener('click', calcularFrete);
 
   cupomBtn.addEventListener('click', () => {
     const cod = (cupomEl.value || '').trim().toUpperCase();
@@ -287,7 +328,7 @@
   // ---- Pré-cadastro + envio do pedido (cria um Lead no ateliê) ----
   const formEl = document.getElementById('cart-form');
   const sucessoEl = document.getElementById('cart-sucesso');
-  const pcCampos = ['nome', 'whats', 'insta', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'];
+  const pcCampos = ['nome', 'whats', 'email', 'insta', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'];
   const pcEl = id => document.getElementById('pc-' + id);
   const pcMsg = document.getElementById('pc-msg');
   let ultimoEnvio = null;
@@ -326,6 +367,7 @@
   function dadosCliente() {
     return {
       nome: pcEl('nome').value.trim(), telefone: pcEl('whats').value.trim(),
+      email: pcEl('email') ? pcEl('email').value.trim() : '',
       instagram: pcEl('insta').value.trim(), cep: cepEl.value.trim(),
       logradouro: pcEl('logradouro').value.trim(), numero: pcEl('numero').value.trim(),
       complemento: pcEl('complemento').value.trim(), bairro: pcEl('bairro').value.trim(),
@@ -386,4 +428,5 @@
   }
   renderFreteOpcoes();   // sem cálculo prévio: só mostra a dica "informe o CEP"
   render();
+  restaurarCarrinhoDaConta();   // logado sem carrinho local: puxa o da conta
 })();

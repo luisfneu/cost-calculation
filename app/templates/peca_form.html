@@ -70,6 +70,17 @@
     <textarea name="descricao" class="form-control" rows="2">{{ peca.descricao if peca else '' }}</textarea>
   </div>
   <div class="row">
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Composição {{ ajuda('Ex.: 95% algodão, 5% elastano. Aparece nos detalhes da peça na vitrine.') }}</label>
+      <input type="text" name="composicao" class="form-control" placeholder="Ex.: 95% algodão, 5% elastano"
+             value="{{ peca.composicao if peca else '' }}">
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label">Medidas {{ ajuda('Medidas específicas desta peça (texto livre). Em branco, a vitrine mostra a tabela de medidas padrão feminina.') }}</label>
+      <textarea name="medidas" class="form-control" rows="2" placeholder="Deixe em branco para usar a tabela padrão">{{ peca.medidas if peca else '' }}</textarea>
+    </div>
+  </div>
+  <div class="row">
     <div class="col-md-4 mb-3">
       <label class="form-label">Mão de obra (R$) {{ ajuda('Custo da sua mão de obra por peça. Entra no custo total (base do preço calculado).') }}</label>
       <input type="text" name="custo_mao_de_obra" class="form-control"

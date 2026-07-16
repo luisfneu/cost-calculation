@@ -18,7 +18,7 @@ from .extensions import cache, limiter
 from .models import Parametro, db
 
 # Versão exibida em /health (útil para saber o que está no ar). Suba a cada release.
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 FUSO_PADRAO = "America/Sao_Paulo"
 
@@ -38,19 +38,48 @@ def _fuso_atual():
 migrate = Migrate()
 csrf = CSRFProtect()
 
-# Invalida o cache da vitrine sempre que algo é gravado (visibilidade, preço,
-# estoque, foto, coleção). A vitrine é o único endpoint cacheado e as leituras
-# públicas não commitam — então o cache continua protegendo os picos de acesso.
+# Invalida o cache da vitrine quando um commit toca algo que ela exibe
+# (visibilidade, preço, estoque, foto, coleção, parâmetros como WhatsApp).
+# Seletivo: commits que só gravam venda/lead/auditoria/cliente — os mais
+# frequentes num dia movimentado — NÃO derrubam o cache. A marcação é feita no
+# after_flush (onde new/dirty/deleted são visíveis) e consumida no after_commit.
 # Registrado no nível do módulo (1×) porque db.session é global; registrar dentro
 # de create_app acumularia um listener por app criado (ex.: a cada teste).
 from sqlalchemy import event as _sa_event  # noqa: E402
 
+from .models import Colecao as _Colecao  # noqa: E402
+from .models import EstoquePeca as _EstoquePeca  # noqa: E402
+from .models import FotoPeca as _FotoPeca  # noqa: E402
+from .models import Insumo as _Insumo  # noqa: E402
+from .models import Peca as _Peca  # noqa: E402
+from .models import PecaInsumo as _PecaInsumo  # noqa: E402
+
+# Insumo/PecaInsumo entram porque o preço sob encomenda (custo) e o "esgotado"
+# derivam da ficha técnica e do estoque de insumos.
+_MODELOS_VITRINE = (_Peca, _EstoquePeca, _FotoPeca, _Colecao, Parametro, _Insumo, _PecaInsumo)
+
+
+@_sa_event.listens_for(db.session, "after_flush")
+def _marca_vitrine_suja(sessao, _ctx):
+    if sessao.info.get("vitrine_suja"):
+        return
+    for obj in list(sessao.new) + list(sessao.dirty) + list(sessao.deleted):
+        if isinstance(obj, _MODELOS_VITRINE):
+            sessao.info["vitrine_suja"] = True
+            return
+
 
 @_sa_event.listens_for(db.session, "after_commit")
-def _invalida_cache_vitrine(sessao):  # noqa: ARG001
-    # Import lazy: evita puxar o pacote de rotas no import do app (risco de ciclo).
-    from .routes.helpers import _limpar_cache_vitrine
-    _limpar_cache_vitrine()
+def _invalida_cache_vitrine(sessao):
+    if sessao.info.pop("vitrine_suja", False):
+        # Import lazy: evita puxar o pacote de rotas no import do app (risco de ciclo).
+        from .routes.helpers import _limpar_cache_vitrine
+        _limpar_cache_vitrine()
+
+
+@_sa_event.listens_for(db.session, "after_rollback")
+def _descarta_flag_vitrine(sessao):
+    sessao.info.pop("vitrine_suja", None)
 
 # Diretório das migrações Alembic (raiz do projeto/migrations).
 _MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations")
@@ -156,6 +185,21 @@ def create_app(config_class=Config):
             return f"{float(valor):g}"
         except (TypeError, ValueError):
             return valor
+
+    # ----- Security headers -----
+    # CSP completa fica de fora por ora: os templates usam <script> inline em
+    # toda parte — exigiria refatorar para nonces. Estes já cobrem clickjacking,
+    # MIME-sniffing e vazamento de referrer; HSTS só quando a resposta é HTTPS
+    # (atrás do Cloudflare Tunnel, via ProxyFix).
+    @app.after_request
+    def _security_headers(resp):
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault("Permissions-Policy", "camera=(self), geolocation=(), microphone=()")
+        if request.is_secure:
+            resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return resp
 
     # ----- Páginas de erro amigáveis -----
     @app.errorhandler(404)

@@ -71,18 +71,34 @@
 {% endif %}
 
 {% if venda.tipo == 'venda' and not venda.eh_pre_pedido %}
-<!-- Fluxo do pedido (stepper) -->
+<!-- Status do pedido: a MESMA jornada que o cliente vê. Controle único. -->
 <div class="card bg-white mb-4 no-print" style="max-width:820px; margin:0 auto;">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="small text-muted text-uppercase text-center" style="letter-spacing:1px">Status do pedido — o cliente vê o mesmo</div>
+    <div class="stepper mt-3">
+      {% for g in venda.GRUPOS %}
+        <div class="step {{ 'concluido' if loop.index0 < venda.grupo_atual }} {{ 'atual' if loop.index0 == venda.grupo_atual }}">
+          <div class="step-circulo">{% if loop.index0 < venda.grupo_atual %}✓{% else %}{{ loop.index }}{% endif %}</div>
+          <div class="step-label">{{ g }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3 pt-3 border-top">
       <div>
-        <div class="small text-muted text-uppercase" style="letter-spacing:1px">Etapa do pedido (o cliente vê)</div>
         <div class="h6 mb-0">{{ venda.etapa_label }}
           <span class="text-muted small">· {{ venda.GRUPOS[venda.grupo_atual] }} ({{ venda.grupo_atual + 1 }}/{{ venda.GRUPOS|length }})</span></div>
+        {% if venda.saldo_receber > 0.01 and not venda.eh_crediario %}
+          <div class="small text-danger"><i class="bi bi-exclamation-circle"></i> Registre o pagamento abaixo para liberar o envio.</div>
+        {% elif venda.eh_crediario and venda.saldo_receber > 0.01 %}
+          <div class="small text-muted">Crediário: {{ venda.crediario_pendente | moeda }} a receber em <a href="{{ url_for('main.contas_a_receber') }}">Contas a receber</a>.</div>
+        {% elif not venda.proxima_etapa %}
+          <div class="small text-success">Pedido concluído 🎉</div>
+        {% endif %}
       </div>
       <div class="d-flex gap-2 align-items-center">
         <form method="post" action="{{ url_for('main.avancar_etapa_pedido', venda_id=venda.id, direcao='voltar') }}">
-          <button class="btn btn-sm btn-outline-secondary" {{ 'disabled' if not venda.etapa_anterior }} title="Voltar etapa"><i class="bi bi-chevron-left"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" {{ 'disabled' if not venda.etapa_anterior }} title="Voltar status"><i class="bi bi-chevron-left"></i></button>
         </form>
         <form method="post" action="{{ url_for('main.avancar_etapa_pedido', venda_id=venda.id, direcao='avancar') }}">
           <button class="btn btn-sm btn-primary" {{ 'disabled' if not venda.proxima_etapa }}>
@@ -91,41 +107,17 @@
         </form>
       </div>
     </div>
-  </div>
-</div>
 
-<div class="card bg-white mb-4 no-print" style="max-width:820px; margin:0 auto;">
-  <div class="card-body">
-    <div class="text-center h5 mb-3">{{ venda.estado_label }}</div>
-    <div class="stepper">
-      {% for et in venda.fluxo_etapas %}
-        <div class="step {{ 'concluido' if et.concluido }} {{ 'atual' if et.atual }}">
-          <div class="step-circulo">{% if et.concluido %}✓{% else %}{{ loop.index }}{% endif %}</div>
-          <div class="step-label">{{ et.label }}</div>
-        </div>
-      {% endfor %}
-    </div>
-
-    <!-- Ações do fluxo -->
-    <div class="text-center mt-4">
-      {% if venda.eh_crediario and venda.saldo_receber > 0.01 %}
-        <div class="small text-muted mb-2">Crediário: {{ venda.crediario_pendente | moeda }} a receber em <a href="{{ url_for('main.contas_a_receber') }}">Contas a receber</a>.</div>
-      {% endif %}
-      {% if venda.saldo_receber > 0.01 and not venda.eh_crediario %}
-        <span class="text-muted small">Registre o pagamento abaixo para liberar o envio.</span>
-      {% elif venda.status in ['pago', 'crediario'] %}
-        <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='enviado') }}" class="d-inline">
-          <button class="btn btn-primary">📦 Marcar como enviado</button>
-        </form>
-        <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='entregue') }}" class="d-inline">
-          <button class="btn btn-outline-primary">🤝 Entregar em mãos</button>
-        </form>
-      {% elif venda.status == 'enviado' %}
-        <form method="post" action="{{ url_for('main.alterar_status_venda', venda_id=venda.id, novo='entregue') }}" class="d-inline">
-          <button class="btn btn-primary">✅ Marcar como entregue</button>
-        </form>
-      {% elif venda.status == 'entregue' %}
-        <span class="text-success">Pedido concluído 🎉</span>
+    <!-- Código de rastreio (o cliente vê no pedido) -->
+    <div class="d-flex align-items-center gap-2 mt-3 flex-wrap">
+      <form method="post" action="{{ url_for('main.salvar_rastreio', venda_id=venda.id) }}" class="d-flex gap-2">
+        <input type="text" name="rastreio" class="form-control form-control-sm" style="width:240px"
+               placeholder="Código de rastreio (ex.: AA123456789BR)" value="{{ venda.rastreio }}" aria-label="Código de rastreio">
+        <button class="btn btn-sm btn-outline-primary">Salvar</button>
+      </form>
+      {% if venda.rastreio %}
+        <a href="https://www.melhorrastreio.com.br/rastreio/{{ venda.rastreio | urlencode }}" target="_blank" rel="noopener"
+           class="btn btn-sm btn-outline-secondary"><i class="bi bi-truck"></i> Rastrear</a>
       {% endif %}
     </div>
   </div>

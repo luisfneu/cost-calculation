@@ -47,6 +47,7 @@
               <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_colecoes','main.form_colecao'] }}" href="{{ url_for('main.listar_colecoes') }}">Coleções</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.vitrine' }}" href="{{ url_for('main.vitrine') }}">Vitrine</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_avaliacoes' }}" href="{{ url_for('main.listar_avaliacoes') }}">Avaliações</a></li>
             </ul>
           </div>
           <div class="nav-item dropdown {{ 'ativo' if ep in g_est }}">
@@ -60,9 +61,9 @@
             </ul>
           </div>
           <div class="nav-item dropdown {{ 'ativo' if ep in g_ven }}">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-receipt"></i> Vendas</a>
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-receipt"></i> Vendas{% if pre_pedidos_pendentes %} <span class="badge text-bg-danger">{{ pre_pedidos_pendentes }}</span>{% endif %}</a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_vendas','main.registrar_venda'] }}" href="{{ url_for('main.listar_vendas') }}">Vendas</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_vendas','main.registrar_venda'] }}" href="{{ url_for('main.listar_vendas') }}">Vendas{% if pre_pedidos_pendentes %} <span class="badge text-bg-danger">{{ pre_pedidos_pendentes }} pré-pedido{{ '' if pre_pedidos_pendentes == 1 else 's' }}</span>{% endif %}</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_encomendas','main.registrar_encomenda'] }}" href="{{ url_for('main.listar_encomendas') }}">Encomendas</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_cupons' }}" href="{{ url_for('main.listar_cupons') }}">Cupons</a></li>
@@ -101,7 +102,10 @@
               <li><a class="dropdown-item" href="{{ url_for('main.configuracoes') }}"><i class="bi bi-gear"></i> Configurações</a></li>
               <li><a class="dropdown-item" href="{{ url_for('main.backup') }}"><i class="bi bi-download"></i> Backup do banco</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('main.logout') }}"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
+              <li><form method="post" action="{{ url_for('main.logout') }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Sair</button>
+              </form></li>
             </ul>
           </div>
         </div>

@@ -30,7 +30,13 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .v2-conta .dropdown-menu a { text-transform: none; letter-spacing: 0; }
 /* Layout listagem */
 .v2-corpo { display: flex; gap: 24px; padding: 20px 12px 48px; }
-.v2-filtros { width: 230px; flex-shrink: 0; }
+.v2-filtros { flex-shrink: 0; }
+/* No desktop o Bootstrap deixa .offcanvas-body como flex (linha) — força coluna. */
+@media (min-width: 768px) {
+  .v2-filtros { width: 230px; }
+  .v2-filtros .offcanvas-body { display: block; padding: 0; }
+}
+.v2-filtros.offcanvas-md { --bs-offcanvas-width: 300px; }
 .v2-filtros h3 { font-size: .8rem; letter-spacing: 1px; text-transform: uppercase; color: var(--ink);
                  border-bottom: 1px solid var(--line); padding-bottom: 6px; margin: 18px 0 10px; }
 .v2-filtros .f-item { display: block; padding: 3px 0; color: var(--ink-soft); text-decoration: none; font-size: .9rem; }
@@ -42,8 +48,19 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .v2-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .v2-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 992px) { .v2-grid, .v2-grid.cols-3, .v2-grid.cols-4 { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 768px) { .v2-corpo { flex-direction: column; } .v2-filtros { width: 100%; }
+@media (max-width: 768px) { .v2-corpo { flex-direction: column; }
                             .v2-grid, .v2-grid.cols-2, .v2-grid.cols-3, .v2-grid.cols-4 { grid-template-columns: repeat(2, 1fr); } }
+/* Header no celular: logo + conta na 1ª linha, busca em linha própria */
+@media (max-width: 640px) {
+  .v2-header .v2-wrap { flex-wrap: wrap; gap: 10px 14px; }
+  .v2-busca { order: 3; flex: 1 0 100%; max-width: 100%; }
+  .v2-conta { order: 2; margin-left: auto; gap: 12px; }
+  .v2-logo .brand-name { display: none; }        /* só o monograma no celular */
+  .v2-logo .brand-monograma { height: 38px; }
+  .v2-corpo { padding: 14px 0 40px; }
+  .v2-topbar { font-size: .64rem; }
+  .v2-topbar .v2-wrap { padding: 7px 14px; }
+}
 /* Seletor de colunas */
 .v2-colsel { display: inline-flex; gap: 2px; }
 .v2-colsel button { border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
@@ -58,11 +75,18 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .v2-desc { right: 8px; background: var(--ink); color: #fff; }
 .v2-novo { left: 8px; background: var(--gold); color: #fff; }
 .v2-enc  { left: 8px; background: var(--gold-soft); color: #fff; text-transform: lowercase; font-weight: 500; }
+.v2-esgot { left: 8px; background: var(--ink-soft); color: #fff; text-transform: uppercase; letter-spacing: .04em; }
+/* Peça esgotada: apagada na vitrine, mas ainda navegável/favoritável. */
+.v2-esgotado .v2-thumb-link img { filter: grayscale(.5); opacity: .6; }
+.v2-esgotado .v2-info { opacity: .6; }
 .v2-info { padding: 8px 2px; }
 .v2-nome { font-weight: 600; font-size: .9rem; line-height: 1.2; }
 .v2-cat { font-size: .78rem; color: var(--ink-soft); margin-bottom: 4px; }
 .v2-preco-de { text-decoration: line-through; color: var(--ink-soft); font-size: .8rem; margin-right: 6px; }
 .v2-preco-atual { font-weight: 700; color: var(--ink); }
+.v2-preco-enc { display: block; margin-top: 2px; font-size: .72rem; color: var(--ink-soft);
+                opacity: .7; }
+.v2-preco-enc .bi { font-size: .72rem; }
 .v2-thumb-link { display: block; width: 100%; height: 100%; }
 /* Coração de favoritar (overlay no card) */
 .v2-fav { position: absolute; left: 0; right: 0; bottom: 0; border: 0;
@@ -131,6 +155,8 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .pdp-desc { color: #c0392b; font-weight: 700; }
 .pdp-preco { font-size: 1.7rem; font-weight: 700; margin-top: 2px; }
 .pdp-parc { color: var(--ink-soft); font-size: .9rem; }
+.pdp-sinal { display: inline-block; margin-left: 8px; font-size: .82rem; color: var(--ink-soft);
+             opacity: .7; }
 .pdp-tam-tit { font-size: .8rem; letter-spacing: 1px; text-transform: uppercase; color: var(--ink); margin-bottom: 8px; }
 .pdp-acao { margin-top: 18px; }
 .pdp-comprar { width: 100%; }
@@ -190,3 +216,31 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .favg-nome { font-weight: 600; font-size: .9rem; margin-top: 8px; line-height: 1.2; }
 .favg-de { text-decoration: line-through; color: var(--ink-soft); font-size: .8rem; margin-right: 6px; }
 .favg-preco { font-weight: 700; }
+
+/* ---- Modal login/cadastro: senha ---- */
+.pw-wrap { position: relative; }
+.pw-wrap .pw-eye {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: none; color: var(--ink-soft); cursor: pointer; padding: 4px 8px;
+}
+.senha-checks .s-chk {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .85rem; color: var(--ink-soft); padding: 1px 0;
+}
+.senha-checks .s-chk .bi { font-size: .95rem; }
+.senha-checks .s-chk.ok { color: #1a7f37; font-weight: 600; }
+.senha-checks .s-chk.ok .bi { color: #1a7f37; }
+
+/* ---- Modal login/cadastro: campos maiores (mais legíveis) ---- */
+#modal-login .form-control,
+#modal-login .form-select {
+  font-size: 1.02rem;
+  padding: .6rem .85rem;
+  min-height: 46px;
+}
+#modal-login .modal-title { font-size: 1.35rem; }
+
+/* Favorito esgotado */
+.favg-card.favg-esgotado img { filter: grayscale(.5); opacity: .6; }
+.favg-card.favg-esgotado .favg-nome, .favg-card.favg-esgotado .favg-preco { opacity: .6; }
+.favg-badge-esgot { position: absolute; top: 8px; left: 8px; z-index: 2; }

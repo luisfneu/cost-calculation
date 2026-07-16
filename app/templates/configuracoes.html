@@ -48,6 +48,21 @@
     <small class="text-muted">Se você publicar a vitrine na internet, cole o link fixo aqui. Ele será usado nas mensagens de WhatsApp (aniversário) em vez do endereço local da rede.</small>
   </div>
 
+  <h2 class="h5 mb-3 mt-2"><i class="bi bi-envelope"></i> Avisos por e-mail</h2>
+  <div class="mb-3" style="max-width:420px">
+    <label class="form-label">E-mail que recebe aviso de pedido novo na vitrine</label>
+    <input type="email" name="aviso_email" class="form-control" value="{{ cfg.aviso_email }}" placeholder="Ex.: contato@sabrinahansen.com.br">
+    <small class="text-muted">Requer RESEND_API_KEY/MAIL_FROM configurados no .env. Em branco = sem aviso. O mesmo canal envia o "voltou ao estoque" para clientes que favoritaram.</small>
+  </div>
+
+  <h2 class="h5 mb-3 mt-2"><i class="bi bi-rulers"></i> Guia de medidas (vitrine)</h2>
+  <div class="mb-3" style="max-width:520px">
+    <label class="form-label">Texto do guia (aparece num botão nas páginas das peças)</label>
+    <textarea name="guia_medidas" class="form-control" rows="6"
+              placeholder="Ex.:&#10;PP — busto 82 · cintura 64&#10;P — busto 86 · cintura 68&#10;M — busto 92 · cintura 74&#10;...">{{ cfg.guia_medidas }}</textarea>
+    <small class="text-muted">Em branco = o botão não aparece. Quebras de linha são preservadas.</small>
+  </div>
+
   <h2 class="h5 mb-3 mt-2"><i class="bi bi-clock"></i> Fuso horário</h2>
   <div class="mb-3" style="max-width:320px">
     <label class="form-label">Fuso para exibir datas e horas</label>

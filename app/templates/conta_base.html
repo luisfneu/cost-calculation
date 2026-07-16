@@ -23,12 +23,12 @@
 </head>
 <body>
   <div class="topo">
-    <a href="{{ url_for('publico.vitrine_publica') }}">
+    <a href="{{ url_for('publico.vitrine_v2') }}">
       <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier" style="width:240px; max-width:70%;">
     </a>
   </div>
   <nav class="conta-nav">
-    <a href="{{ url_for('publico.vitrine_publica') }}"><i class="bi bi-shop"></i> Vitrine</a>
+    <a href="{{ url_for('publico.vitrine_v2') }}"><i class="bi bi-shop"></i> Vitrine</a>
     {% if cliente_logado %}
       <a href="{{ url_for('publico.conta_pedidos') }}"><i class="bi bi-bag"></i> Meus pedidos</a>
       <a href="{{ url_for('publico.conta_preferencias') }}"><i class="bi bi-gear"></i> Preferências</a>

@@ -168,6 +168,44 @@
   </div></div></div>
 </div>
 
+<!-- Sinais da vitrine: desejo (favoritos/views) × venda + tamanhos das clientes -->
+<div class="row g-4 mt-1">
+  <div class="col-lg-4"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-heart"></i> Mais favoritadas</h2>
+    {% if mais_favoritadas %}
+    <table class="table table-sm align-middle"><tbody>
+      {% for f in mais_favoritadas %}
+      <tr><td><a href="{{ url_for('main.detalhe_peca', peca_id=f.peca.id) }}" class="link-atelier">{{ f.peca.nome }}</a></td>
+          <td class="text-end fw-bold">{{ f.n }} ❤</td></tr>
+      {% endfor %}
+    </tbody></table>
+    {% else %}<p class="text-muted small">Nenhum favorito de cliente logado ainda.</p>{% endif %}
+  </div></div></div>
+  <div class="col-lg-4"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-eye"></i> Mais vistas na loja</h2>
+    <p class="small text-muted">Muita view e pouca venda = repensar preço ou foto.</p>
+    {% if mais_vistas %}
+    <table class="table table-sm align-middle"><tbody>
+      {% for p in mais_vistas %}
+      <tr><td><a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="link-atelier">{{ p.nome }}</a></td>
+          <td class="text-end fw-bold">{{ p.views }} views</td></tr>
+      {% endfor %}
+    </tbody></table>
+    {% else %}<p class="text-muted small">Sem visualizações registradas ainda.</p>{% endif %}
+  </div></div></div>
+  <div class="col-lg-4"><div class="card bg-white h-100"><div class="card-body">
+    <h2 class="secao-titulo mb-3"><i class="bi bi-rulers"></i> Tamanhos das clientes</h2>
+    <p class="small text-muted">Distribuição do tamanho habitual/histórico — orienta a grade de produção.</p>
+    {% if tam_dist %}
+    <table class="table table-sm align-middle"><tbody>
+      {% for t, n in tam_dist %}
+      <tr><td><span class="badge text-bg-light">{{ t }}</span></td><td class="text-end fw-bold">{{ n }} cliente{{ '' if n == 1 else 's' }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+    {% else %}<p class="text-muted small">Sem tamanhos registrados.</p>{% endif %}
+  </div></div></div>
+</div>
+
 <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
 <script>
   const OURO='#b08a4f', TERRA='#a5624f', VERDE='#6d7a5c', SOFT='#c9a96a', LINHA='#e5dcc9';

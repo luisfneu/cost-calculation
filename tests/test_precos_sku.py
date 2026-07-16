@@ -98,7 +98,9 @@ def test_vitrine_tamanhos_indisponiveis(client, app):
         db.session.flush()
         db.session.add(EstoquePeca(peca_id=p.id, tamanho="M", quantidade=3.0))  # só M em estoque
         db.session.commit()
-    body = client.get("/publico/vitrine").get_data(as_text=True)
+        pid = p.id
+    # Os chips de tamanho ficam na página da peça (PDP).
+    body = client.get(f"/peca/{pid}").get_data(as_text=True)
     assert 'data-tam="M"' in body
     # M com estoque (chip normal); PP sem estoque (amarelo/sob encomenda, ainda selecionável).
     assert 'class="tam-chip" data-tam="M" data-sem-estoque="0"' in body

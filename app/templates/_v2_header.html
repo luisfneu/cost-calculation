@@ -20,12 +20,41 @@
     </a>
     <form class="v2-busca" method="get" action="{{ url_for('publico.vitrine_v2') }}" role="search">
       <div class="input-group">
-        <input type="search" name="q" class="form-control" placeholder="Buscar peça, coleção…" value="{{ q if q is defined else '' }}" aria-label="Buscar">
+        <input type="search" name="q" class="form-control" placeholder="Buscar peça, coleção…"
+               value="{{ q if q is defined else '' }}" aria-label="Buscar"
+               list="busca-sugestoes" id="v2-busca-input" autocomplete="off">
+        <datalist id="busca-sugestoes"></datalist>
         <button class="btn btn-primary" type="submit" aria-label="Buscar"><i class="bi bi-search"></i></button>
       </div>
     </form>
+    <script>
+      // Autocomplete da busca (datalist alimentado por /publico/sugestoes).
+      (function () {
+        const inp = document.getElementById('v2-busca-input');
+        const dl = document.getElementById('busca-sugestoes');
+        if (!inp || !dl) return;
+        let timer = null;
+        inp.addEventListener('input', () => {
+          if (timer) clearTimeout(timer);
+          const q = inp.value.trim();
+          if (q.length < 2) { dl.innerHTML = ''; return; }
+          timer = setTimeout(async () => {
+            try {
+              const d = await (await fetch('{{ url_for("publico.sugestoes_busca") }}?q=' + encodeURIComponent(q))).json();
+              dl.innerHTML = '';
+              (d.sugestoes || []).forEach(s => {
+                const o = document.createElement('option');
+                o.value = s.nome;
+                dl.appendChild(o);
+              });
+            } catch (e) { /* sem sugestões */ }
+          }, 250);
+        });
+      })();
+    </script>
     <div class="v2-conta">
-      <a href="{{ url_for('publico.conta_favoritos') }}" class="v2-favs-btn" aria-label="Meus favoritos" title="Meus favoritos">
+      <a href="{{ url_for('publico.conta_favoritos') }}" class="v2-favs-btn" aria-label="Meus favoritos" title="Meus favoritos"
+         {% if not cliente_logado %}data-bs-toggle="modal" data-bs-target="#modal-login"{% endif %}>
         <i class="bi bi-heart"></i><span class="v2-favs-badge" id="favs-badge" hidden>0</span>
       </a>
       {% if cliente_logado %}
@@ -42,8 +71,8 @@
           </ul>
         </div>
       {% else %}
-        <a href="{{ url_for('publico.conta_entrar') }}"><i class="bi bi-person"></i> Entrar</a>
-        <a href="{{ url_for('publico.conta_cadastro') }}">Criar conta</a>
+        <a href="{{ url_for('publico.conta_entrar') }}" data-bs-toggle="modal" data-bs-target="#modal-login"><i class="bi bi-person"></i> Entrar</a>
+        <a href="{{ url_for('publico.conta_cadastro') }}" data-bs-toggle="modal" data-bs-target="#modal-login" data-auth-open="signup">Criar conta</a>
       {% endif %}
     </div>
   </div>
