@@ -53,16 +53,26 @@ from ..models import (
 from . import bp
 from .helpers import *  # noqa: F401,F403
 
+# Entradas de estoque que NÃO são compra (nenhum dinheiro saiu do caixa):
+# correção de inventário e estorno de produção reaberta. Identificadas pela
+# observação gravada nos fluxos correspondentes (sem coluna nova/migração).
+_ENTRADAS_SEM_CAIXA = ("Inventário", "Reabertura produção")
+
+
+def _eh_compra(mov):
+    return not (mov.observacao or "").strip().startswith(_ENTRADAS_SEM_CAIXA)
+
 
 @bp.route("/contabilidade")
 def contabilidade():
     mes = request.args.get("mes", "").strip()
 
     vendas = Venda.query.filter(Venda.status != "pre-pedido").order_by(Venda.criado_em).all()
-    compras = (
-        MovimentoEstoque.query.filter_by(tipo="entrada")
+    compras = [
+        c for c in MovimentoEstoque.query.filter_by(tipo="entrada")
         .order_by(MovimentoEstoque.criado_em).all()
-    )
+        if _eh_compra(c)
+    ]
     despesas = Despesa.query.order_by(Despesa.criado_em).all()
 
     def _compra_valor(c):
@@ -261,12 +271,14 @@ def pagar_parcela(parcela_id):
     p.pago = True
     p.pago_em = datetime.now()
     venda = p.venda
+    etapa_antes = venda.etapa_pedido
     db.session.add(Pagamento(venda=venda, forma=f"Crediário {p.rotulo}", valor=p.valor))
     venda.pago = venda.total_pago >= venda.receita - 0.01
     if venda.crediario_quitado and venda.status == "crediario":
         venda.status = "pago"
     venda.sincronizar_etapa()
     db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
     _log("pagamento", f"parcela {p.rotulo} pedido #{venda.id}: {_brl(p.valor)}")
     flash(f"Parcela {p.rotulo} do pedido #{venda.id} recebida.", "sucesso")
     return redirect(request.referrer or url_for("main.contas_a_receber"))
@@ -302,6 +314,9 @@ def pagar_despesa(despesa_id):
 
 @bp.route("/despesas/<int:despesa_id>/excluir", methods=["POST"])
 def excluir_despesa(despesa_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     d = Despesa.query.get_or_404(despesa_id)
     db.session.delete(d)
     db.session.commit()
@@ -400,10 +415,31 @@ def relatorio():
             formas[nome] = formas.get(nome, 0.0) + p.valor
     formas = sorted(formas.items(), key=lambda x: x[1], reverse=True)
 
+    # Sinais da vitrine: peças mais favoritadas, mais vistas e a distribuição
+    # de tamanhos das clientes (orienta a grade de produção).
+    fav_contagem = {}
+    tam_dist = {}
+    for c in Cliente.query.all():
+        for pid in c.favoritos_ids:
+            fav_contagem[pid] = fav_contagem.get(pid, 0) + 1
+        t = c.tamanho_preferido
+        if t:
+            tam_dist[t] = tam_dist.get(t, 0) + 1
+    pecas_por_id = {p.id: p for p in Peca.query.all()}
+    mais_favoritadas = sorted(
+        [{"peca": pecas_por_id[pid], "n": n} for pid, n in fav_contagem.items()
+         if pid in pecas_por_id],
+        key=lambda x: x["n"], reverse=True)[:10]
+    mais_vistas = (Peca.query.filter(Peca.views > 0)
+                   .order_by(Peca.views.desc()).limit(10).all())
+    tam_dist = sorted(tam_dist.items(),
+                      key=lambda x: TAMANHOS.index(x[0]) if x[0] in TAMANHOS else 99)
+
     return render_template(
         "relatorio.html", serie=serie, mais_vendidas=mais_vendidas, colecoes=colecoes,
         kpis=kpis, anos=anos, ano_sel=ano_sel, curva=curva, abc=abc, formas=formas,
         comparativo=comparativo, hoje=date.today(),
+        mais_favoritadas=mais_favoritadas, mais_vistas=mais_vistas, tam_dist=tam_dist,
     )
 
 

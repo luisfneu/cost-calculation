@@ -46,17 +46,9 @@
     {% if cliente.tem_endereco %}
       <div class="text-muted mt-1"><i class="bi bi-geo-alt"></i> {{ cliente.endereco_completo }}</div>
     {% endif %}
-    <div class="d-flex flex-wrap gap-2 mt-2">
-      {% if cliente.nascimento %}
-        <span class="badge {{ 'text-bg-warning' if cliente.aniversario_hoje else 'text-bg-light' }}">
-          <i class="bi bi-gift"></i> {{ cliente.nascimento.strftime('%d/%m') }}
-          {% if cliente.idade is not none %}({{ cliente.idade }} anos){% endif %}
-          {% if cliente.aniversario_hoje %} — é hoje! 🎉
-          {% elif cliente.dias_para_aniversario is not none %} · em {{ cliente.dias_para_aniversario }} dia(s){% endif %}
-        </span>
-      {% endif %}
-      {% if cliente.tamanho_preferido %}
-        <span class="badge text-bg-light">Tamanho habitual: <strong>{{ cliente.tamanho_preferido }}</strong>{% if not cliente.tamanho_habitual %} <span class="text-muted">(do histórico)</span>{% endif %}</span>
+    <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+      {% if cliente.aniversario_hoje %}
+        <span class="badge text-bg-warning"><i class="bi bi-gift"></i> Aniversário hoje! 🎉</span>
       {% endif %}
       {% if cliente.tem_conta %}
         <span class="badge text-bg-success"><i class="bi bi-shield-check"></i> Conta na vitrine</span>
@@ -65,16 +57,6 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-outline-secondary py-0"><i class="bi bi-key"></i> Redefinir senha</button>
         </form>
-      {% endif %}
-      {% if cliente.genero %}
-        <span class="badge text-bg-light"><i class="bi bi-person"></i> {{ cliente.genero }}</span>
-      {% endif %}
-      {% if cliente.cpf %}
-        {% set d = cliente.cpf | replace('.', '') | replace('-', '') %}
-        <span class="badge text-bg-light"><i class="bi bi-card-text"></i> CPF {% if d|length == 11 %}{{ d[:3] }}.***.**-{{ d[-2:] }}{% else %}{{ cliente.cpf }}{% endif %}</span>
-      {% endif %}
-      {% if cliente.aceita_novidades %}
-        <span class="badge text-bg-info"><i class="bi bi-megaphone"></i> Aceita novidades</span>
       {% endif %}
       {% if cliente.ultima_compra %}
         <span class="badge {{ 'text-bg-danger' if cliente.inativo() else 'text-bg-light' }}">
@@ -90,9 +72,187 @@
           data-confirm="Excluir este cliente?">
       <button class="btn btn-sm btn-outline-danger">Excluir</button>
     </form>
+    {% elif session.admin %}
+    <form method="post" action="{{ url_for('main.anonimizar_cliente', cliente_id=cliente.id) }}" class="d-inline"
+          data-confirm="Remover TODOS os dados pessoais deste cliente (LGPD)? O histórico de vendas é mantido, mas nome, CPF, contatos, endereços e a conta na vitrine são apagados. Isto é IRREVERSÍVEL.">
+      <button class="btn btn-sm btn-outline-danger" title="LGPD: remove dados pessoais, mantém o histórico financeiro">Anonimizar (LGPD)</button>
+    </form>
     {% endif %}
   </div>
 </div>
+
+<!-- Informações do cliente (mesma exibição da conta no site) -->
+{% macro cli_linha(rot, val) %}
+  <div class="col-12 col-md-6">
+    <div class="d-flex justify-content-between align-items-baseline gap-3 border-bottom py-2">
+      <span class="text-muted text-nowrap">{{ rot }}</span>
+      <span class="text-end fw-medium">{{ val if val else '—' }}</span>
+    </div>
+  </div>
+{% endmacro %}
+<div class="card bg-white mb-4"><div class="card-body">
+  <h2 class="h5 mb-3"><i class="bi bi-person-vcard"></i> Informações do cliente</h2>
+  <div class="row gx-5 gy-0">
+    {{ cli_linha('Nome', cliente.nome) }}
+    {{ cli_linha('E-mail', cliente.email) }}
+    {{ cli_linha('Gênero', cliente.genero) }}
+    {% set d = (cliente.cpf or '') | replace('.', '') | replace('-', '') %}
+    {{ cli_linha('CPF', (d[:3] ~ '.***.**-' ~ d[-2:]) if d|length == 11 else cliente.cpf) }}
+    {{ cli_linha('Data de nascimento', (cliente.nascimento.strftime('%d/%m/%Y') ~ (' · ' ~ cliente.idade ~ ' anos' if cliente.idade is not none else '')) if cliente.nascimento else '') }}
+    {{ cli_linha('Telefone / WhatsApp', cliente.telefone_formatado if cliente.whatsapp_numero else cliente.telefone) }}
+    {{ cli_linha('Tamanho habitual', (cliente.tamanho_preferido ~ (' (do histórico)' if cliente.tamanho_preferido and not cliente.tamanho_habitual else '')) if cliente.tamanho_preferido else '') }}
+    {{ cli_linha('Aceita novidades', 'Sim' if cliente.aceita_novidades else 'Não') }}
+  </div>
+</div></div>
+
+<!-- Endereços (múltiplos, com principal — igual ao site) -->
+<div class="card bg-white mb-4"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+    <h2 class="h5 mb-0"><i class="bi bi-geo-alt"></i> Endereços</h2>
+    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modal-endereco"
+            data-novo="1"><i class="bi bi-plus-lg"></i> Adicionar endereço</button>
+  </div>
+
+  {% if enderecos %}
+    <div class="d-flex flex-column gap-2">
+    {% for e in enderecos %}
+      <div class="d-flex justify-content-between align-items-start gap-2 border rounded p-2">
+        <div>
+          <div class="fw-medium">
+            {{ e.apelido or 'Endereço' }}
+            {% if e.principal %}<span class="badge text-bg-success">Principal (entrega)</span>{% endif %}
+            {% if e.cobranca %}<span class="badge text-bg-info">Cobrança</span>{% endif %}
+          </div>
+          {% if e.destinatario and e.destinatario != cliente.nome %}<div class="small text-muted">{{ e.destinatario }}</div>{% endif %}
+          <div class="small text-muted">{{ e.endereco_completo or '—' }}</div>
+        </div>
+        <div class="text-nowrap d-flex gap-1">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-endereco"
+                  data-id="{{ e.id }}" data-apelido="{{ e.apelido }}" data-destinatario="{{ e.destinatario }}"
+                  data-cep="{{ e.cep }}" data-logradouro="{{ e.logradouro }}" data-numero="{{ e.numero }}"
+                  data-complemento="{{ e.complemento }}" data-bairro="{{ e.bairro }}" data-cidade="{{ e.cidade }}"
+                  data-uf="{{ e.uf }}" data-principal="{{ 1 if e.principal else 0 }}" data-cobranca="{{ 1 if e.cobranca else 0 }}"
+                  title="Editar"><i class="bi bi-pencil"></i></button>
+          {% if not e.principal %}
+          <form method="post" action="{{ url_for('main.cliente_endereco_principal', cliente_id=cliente.id, end_id=e.id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-success" title="Tornar principal (entrega)"><i class="bi bi-truck"></i></button>
+          </form>
+          {% endif %}
+          {% if not e.cobranca %}
+          <form method="post" action="{{ url_for('main.cliente_endereco_cobranca', cliente_id=cliente.id, end_id=e.id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-info" title="Tornar cobrança"><i class="bi bi-receipt"></i></button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('main.cliente_endereco_excluir', cliente_id=cliente.id, end_id=e.id) }}" class="d-inline"
+                data-confirm="Excluir este endereço?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+    </div>
+  {% elif cliente.tem_endereco %}
+    <div class="alert alert-light border d-flex justify-content-between align-items-center flex-wrap gap-2 mb-0">
+      <span><i class="bi bi-info-circle"></i> Endereço atual (formato antigo): {{ cliente.endereco_completo }}</span>
+      <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal-endereco"
+              data-novo="1" data-apelido="Principal" data-cep="{{ cliente.cep }}" data-logradouro="{{ cliente.logradouro }}"
+              data-numero="{{ cliente.numero }}" data-complemento="{{ cliente.complemento }}" data-bairro="{{ cliente.bairro }}"
+              data-cidade="{{ cliente.cidade }}" data-uf="{{ cliente.uf }}">Salvar nos endereços</button>
+    </div>
+  {% else %}
+    {{ ui.vazio('bi-geo-alt', 'Sem endereço', 'Adicione um endereço de entrega para este cliente.') }}
+  {% endif %}
+</div></div>
+
+<!-- Modal: adicionar/editar endereço -->
+<div class="modal fade" id="modal-endereco" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <form class="modal-content" method="post" action="{{ url_for('main.cliente_endereco_salvar', cliente_id=cliente.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="id" id="end-id">
+      <div class="modal-header">
+        <h5 class="modal-title" id="end-titulo">Novo endereço</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Apelido</label>
+            <input type="text" name="apelido" id="end-apelido" class="form-control" placeholder="Casa, Trabalho…"></div>
+          <div class="col-md-6"><label class="form-label">Destinatário</label>
+            <input type="text" name="destinatario" id="end-destinatario" class="form-control" placeholder="{{ cliente.nome }}"></div>
+          <div class="col-md-3"><label class="form-label">CEP <span class="small" id="end-cep-status"></span></label>
+            <input type="text" name="cep" id="end-cep" class="form-control" maxlength="9" placeholder="00000-000"></div>
+          <div class="col-md-7"><label class="form-label">Logradouro</label>
+            <input type="text" name="logradouro" id="end-logradouro" class="form-control"></div>
+          <div class="col-md-2"><label class="form-label">Número</label>
+            <input type="text" name="numero" id="end-numero" class="form-control"></div>
+          <div class="col-md-5"><label class="form-label">Complemento</label>
+            <input type="text" name="complemento" id="end-complemento" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label">Bairro</label>
+            <input type="text" name="bairro" id="end-bairro" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label">Cidade</label>
+            <input type="text" name="cidade" id="end-cidade" class="form-control"></div>
+          <div class="col-md-2"><label class="form-label">UF</label>
+            <input type="text" name="uf" id="end-uf" class="form-control" maxlength="2"></div>
+          <div class="col-md-6"><div class="form-check">
+            <input class="form-check-input" type="checkbox" name="principal" id="end-principal">
+            <label class="form-check-label" for="end-principal">Endereço principal (entrega)</label></div></div>
+          <div class="col-md-6"><div class="form-check">
+            <input class="form-check-input" type="checkbox" name="cobranca" id="end-cobranca">
+            <label class="form-check-label" for="end-cobranca">Endereço de cobrança</label></div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link text-muted" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary">Salvar endereço</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  const modal = document.getElementById('modal-endereco');
+  if (!modal) return;
+  const campos = ['id','apelido','destinatario','cep','logradouro','numero','complemento','bairro','cidade','uf'];
+  modal.addEventListener('show.bs.modal', function (ev) {
+    const b = ev.relatedTarget; if (!b) return;
+    const novo = b.dataset.novo === '1';
+    document.getElementById('end-titulo').textContent = novo ? 'Novo endereço' : 'Editar endereço';
+    document.getElementById('end-id').value = novo ? '' : (b.dataset.id || '');
+    campos.filter(c => c !== 'id').forEach(function (c) {
+      const el = document.getElementById('end-' + c);
+      if (el) el.value = b.dataset[c] || '';
+    });
+    document.getElementById('end-principal').checked = b.dataset.principal === '1';
+    document.getElementById('end-cobranca').checked = b.dataset.cobranca === '1';
+  });
+  // CEP: máscara + autofill via ViaCEP.
+  const cep = document.getElementById('end-cep'), status = document.getElementById('end-cep-status');
+  async function buscar() {
+    const d = (cep.value || '').replace(/\D/g, '');
+    if (d.length !== 8) { status.textContent = ''; return; }
+    status.textContent = '…'; status.className = 'small text-muted';
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${d}/json/`); const j = await r.json();
+      if (j.erro) { status.textContent = '✗'; status.className = 'small text-danger'; return; }
+      if (j.logradouro) document.getElementById('end-logradouro').value = j.logradouro;
+      if (j.bairro) document.getElementById('end-bairro').value = j.bairro;
+      if (j.localidade) document.getElementById('end-cidade').value = j.localidade;
+      if (j.uf) document.getElementById('end-uf').value = j.uf;
+      status.textContent = '✓'; status.className = 'small text-success';
+      document.getElementById('end-numero').focus();
+    } catch (e) { status.textContent = ''; }
+  }
+  cep.addEventListener('input', function () {
+    let d = cep.value.replace(/\D/g, '').slice(0, 8);
+    cep.value = d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+    if (d.length === 8) buscar();
+  });
+})();
+</script>
 
 <!-- Resumo -->
 <div class="row g-3 mb-4">
@@ -109,6 +269,78 @@
     <div><div class="num">{{ cliente.total_pendente | moeda }}</div><div class="lbl">Pendente</div></div>
   </div></div>
 </div>
+
+{% if favoritos %}
+<!-- Favoritos da vitrine -->
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h5"><i class="bi bi-heart-fill text-danger"></i> Favoritos na vitrine ({{ favoritos | length }})</h2>
+    <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle tabela-cartao">
+      <thead class="table-light"><tr><th>Peça</th><th>Coleção</th><th class="text-end">Preço vitrine</th><th class="text-end">Disponível</th><th></th></tr></thead>
+      <tbody>
+      {% for p in favoritos %}
+        <tr>
+          <td data-label="Peça">
+            {% if p.foto %}<img src="{{ url_for('static', filename=(p.foto | thumb)) }}" alt="" style="width:34px;height:42px;object-fit:cover;border-radius:5px" class="me-2">{% endif %}
+            <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="link-atelier fw-bold">{{ p.nome }}</a>
+          </td>
+          <td data-label="Coleção" class="small text-muted">{{ p.colecao or '—' }}</td>
+          <td data-label="Preço" class="text-end">{{ p.preco_vitrine | moeda }}</td>
+          <td data-label="Disponível" class="text-end">
+            {% if p.esgotado %}<span class="badge text-bg-secondary">esgotado</span>
+            {% elif p.sob_encomenda %}<span class="badge text-bg-warning">sob encomenda</span>
+            {% else %}{{ p.disponivel_total | num }} un.{% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if carrinho_itens %}
+<!-- Carrinho salvo (não fechou o pedido) -->
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h2 class="h5 mb-0"><i class="bi bi-bag text-warning"></i> Itens no carrinho ({{ carrinho_itens | length }})</h2>
+      <div class="small text-muted">Atualizado em {{ cliente.carrinho_em | dt }}
+        {% if cliente.whatsapp_numero %}
+        {% set msg = 'Olá, ' ~ cliente.nome.split(' ')[0] ~ '! Vi que você deixou peças no carrinho da nossa loja. Posso ajudar a finalizar o pedido? 💛' %}
+        · <a href="https://wa.me/{{ cliente.whatsapp_numero }}?text={{ msg | urlencode }}" target="_blank" class="btn btn-sm btn-outline-success"><i class="bi bi-whatsapp"></i> Chamar</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-responsive mt-2">
+    <table class="table table-sm align-middle tabela-cartao">
+      <thead class="table-light"><tr><th>Item</th><th>Tam.</th><th class="text-end">Qtd</th><th class="text-end">Preço</th><th class="text-end">Subtotal</th></tr></thead>
+      <tbody>
+      {% for i in carrinho_itens %}
+        <tr>
+          <td data-label="Item">
+            {% if i.get('id') %}<a href="{{ url_for('main.detalhe_peca', peca_id=i['id']) }}" class="link-atelier">{{ i.get('nome') or '—' }}</a>
+            {% else %}{{ i.get('nome') or '—' }}{% endif %}
+          </td>
+          <td data-label="Tam."><span class="badge text-bg-light">{{ i.get('tam') or '—' }}</span></td>
+          <td data-label="Qtd" class="text-end">{{ i.get('qtd', 1) }}</td>
+          <td data-label="Preço" class="text-end">{{ (i.get('preco') or 0) | moeda }}</td>
+          <td data-label="Subtotal" class="text-end fw-bold">{{ ((i.get('preco') or 0) * (i.get('qtd') or 1)) | moeda }}</td>
+        </tr>
+      {% endfor %}
+        <tr><td colspan="4" class="text-end fw-bold">Total</td>
+            <td class="text-end fw-bold">{{ carrinho_total | moeda }}</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Histórico de compras -->
 <div class="card bg-white">

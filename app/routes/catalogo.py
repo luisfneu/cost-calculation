@@ -29,12 +29,14 @@ from werkzeug.utils import secure_filename
 from .. import csrf
 from ..extensions import cache, limiter
 from ..models import (
+    MEDIDAS_FEMININAS,
     TAMANHOS,
     Auditoria,
     Cliente,
     Colecao,
     Cupom,
     Despesa,
+    Endereco,
     EstoquePeca,
     FotoPeca,
     Insumo,
@@ -144,6 +146,9 @@ def form_insumo(insumo_id=None):
 
 @bp.route("/insumos/<int:insumo_id>/excluir", methods=["POST"])
 def excluir_insumo(insumo_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     insumo = Insumo.query.get_or_404(insumo_id)
     if insumo.usos:
         flash("Não é possível excluir: este insumo é usado em uma ou mais peças.", "erro")
@@ -269,12 +274,15 @@ def form_peca(peca_id=None):
         def _num(campo, atual):
             return _to_float(request.form.get(campo)) if campo in request.form else atual
 
+        promo_antes = bool(peca and peca.em_promocao)   # p/ aviso de promoção
         peca.nome = nome
         peca.vitrine_publica = request.form.get("vitrine_publica") == "on"
         peca.tipo = _txt("tipo", peca.tipo)
         peca.colecao = _txt("colecao", peca.colecao)
         peca.tags = _txt("tags", peca.tags)
         peca.descricao = _txt("descricao", peca.descricao)
+        peca.composicao = _txt("composicao", peca.composicao)
+        peca.medidas = _txt("medidas", peca.medidas)
         peca.custo_mao_de_obra = dinheiro(_num("custo_mao_de_obra", peca.custo_mao_de_obra))
         peca.custos_extras = dinheiro(_num("custos_extras", peca.custos_extras))
         peca.margem_percentual = _num("margem_percentual", peca.margem_percentual)
@@ -336,6 +344,7 @@ def form_peca(peca_id=None):
         peca.sku = Peca.gerar_sku(peca.id)
 
         db.session.commit()
+        _avisar_favoritos_promocao(peca, promo_antes)
         flash("Peça salva. Use 'Produzir' para fabricar e dar entrada no estoque.", "sucesso")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
@@ -351,6 +360,9 @@ def detalhe_peca(peca_id):
 
 @bp.route("/pecas/<int:peca_id>/excluir", methods=["POST"])
 def excluir_peca(peca_id):
+    bloqueio = _exigir_admin()   # destrutivo: apaga fotos e cadastro
+    if bloqueio:
+        return bloqueio
     peca = Peca.query.get_or_404(peca_id)
     # Guarda: não apagar peça que já tem histórico (vendas ou ordens de produção).
     # Apagar quebraria recibos/vendas antigos (it.peca vira None → erro) e perderia
@@ -432,7 +444,8 @@ def duplicar_peca(peca_id):
     orig = Peca.query.get_or_404(peca_id)
     nova = Peca(
         nome=f"{orig.nome} (cópia)", colecao=orig.colecao, tags=orig.tags,
-        descricao=orig.descricao, foto=_copiar_foto(orig.foto),
+        descricao=orig.descricao, composicao=orig.composicao, medidas=orig.medidas,
+        foto=_copiar_foto(orig.foto),
         custo_mao_de_obra=orig.custo_mao_de_obra, custos_extras=orig.custos_extras,
         margem_percentual=orig.margem_percentual, preco_etiqueta=orig.preco_etiqueta,
         peso_g=orig.peso_g, altura_cm=orig.altura_cm,
@@ -453,6 +466,7 @@ def produzir_peca(peca_id):
     """Produz N unidades de um tamanho: baixa os insumos da ficha e dá
     entrada no estoque da peça naquele tamanho (com histórico)."""
     peca = Peca.query.get_or_404(peca_id)
+    disp_antes = peca.disponivel_total   # para o aviso "voltou ao estoque"
     tamanho = request.form.get("tamanho", "").strip().upper()
     unidades = _to_float(request.form.get("unidades"), padrao=1) or 1
 
@@ -501,6 +515,7 @@ def produzir_peca(peca_id):
     )
 
     db.session.commit()
+    _avisar_favoritos_voltou(peca, disp_antes)
     flash(
         f"Produzidas {unidades:g} un. de '{peca.nome}' tam {tamanho}. "
         f"Estoque da peça e dos insumos atualizados.", "sucesso",
@@ -522,6 +537,7 @@ def atualizar_preco_etiqueta(peca_id):
 def ajustar_estoque_peca(peca_id):
     """Define manualmente a quantidade em estoque de um tamanho da peça."""
     peca = Peca.query.get_or_404(peca_id)
+    disp_antes = peca.disponivel_total   # para o aviso "voltou ao estoque"
     tamanho = request.form.get("tamanho", "").strip().upper()
     nova_qtd = _to_float(request.form.get("quantidade"), padrao=-1)
 
@@ -544,6 +560,7 @@ def ajustar_estoque_peca(peca_id):
         )
     )
     db.session.commit()
+    _avisar_favoritos_voltou(peca, disp_antes)
     _log("estoque", f"ajuste manual {peca.nome} tam {tamanho} → {nova_qtd:g}")
     flash(f"Estoque do tamanho {tamanho} ajustado para {nova_qtd:g}.", "sucesso")
     return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
@@ -569,68 +586,56 @@ def etiquetas_lote():
     return render_template("etiquetas_lote.html", pecas=pecas)
 
 
+@publico_bp.route("/robots.txt")
+@limiter.exempt
+def robots_txt():
+    corpo = ("User-agent: *\n"
+             "Disallow: /console/\n"
+             "Disallow: /conta/\n"
+             "Disallow: /publico/\n"
+             f"Sitemap: {_link_publico('/sitemap.xml')}\n")
+    return Response(corpo, mimetype="text/plain")
+
+
+@publico_bp.route("/sitemap.xml")
+@limiter.exempt
+def sitemap_xml():
+    """Sitemap: vitrine + páginas públicas das peças (para indexação)."""
+    urls = [(_link_publico("/"), None)]
+    for p in Peca.query.filter_by(vitrine_publica=True).all():
+        urls.append((_link_publico(url_for("publico.peca_publica", peca_id=p.id)), p.criado_em))
+    linhas = ['<?xml version="1.0" encoding="UTF-8"?>',
+              '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for loc, dt_ in urls:
+        lastmod = f"<lastmod>{dt_.date().isoformat()}</lastmod>" if dt_ else ""
+        linhas.append(f"<url><loc>{loc}</loc>{lastmod}</url>")
+    linhas.append("</urlset>")
+    return Response("\n".join(linhas), mimetype="application/xml")
+
+
+@publico_bp.route("/publico/sugestoes")
+@limiter.limit("60 per minute")
+def sugestoes_busca():
+    """Autocomplete da busca da vitrine: nomes/coleções que casam com ?q=."""
+    q = request.args.get("q", "").strip()
+    out = []
+    if len(q) >= 2:
+        like = f"%{q}%"
+        pecas = (Peca.query.filter(Peca.vitrine_publica.is_(True))
+                 .filter(db.or_(Peca.nome.ilike(like), Peca.colecao.ilike(like),
+                                Peca.tags.ilike(like)))
+                 .order_by(Peca.nome).limit(8).all())
+        out = [{"nome": p.nome, "url": url_for("publico.peca_publica", peca_id=p.id)}
+               for p in pecas]
+    return {"sugestoes": out}
+
+
 def _cliente_esta_logado():
     """True se há um cliente logado na vitrine. Usado para NÃO cachear a página
     quando ela contém o menu/dados pessoais do cliente (senão o cache global
     serviria o menu 'Sair' e os dados de um cliente para outros visitantes)."""
     from .conta import _cliente_logado
     return _cliente_logado() is not None
-
-
-@publico_bp.route("/")                 # raiz: www.sabrinahansen.com.br
-@publico_bp.route("/publico/vitrine")  # alias (mantém links antigos)
-@limiter.limit("60 per minute")
-# unless: pula o cache para visitantes logados (a página tem menu/dados pessoais).
-# O cache guarda apenas a versão anônima, servida só a quem não está logado.
-@cache.cached(timeout=60, query_string=True, unless=_cliente_esta_logado)
-def vitrine_publica():
-    q = request.args.get("q", "").strip().lower()
-    tipo = request.args.get("tipo", "").strip()
-    colecao = request.args.get("colecao", "").strip()
-    ordem = request.args.get("ordem", "").strip()  # preco_asc | preco_desc | nome
-
-    # Só as peças marcadas para a vitrine pública.
-    publicas = Peca.query.filter_by(vitrine_publica=True).all()
-    pecas = publicas
-    if q:
-        pecas = [p for p in pecas
-                 if q in p.nome.lower() or q in (p.colecao or "").lower() or q in (p.tags or "").lower()]
-    if tipo:
-        pecas = [p for p in pecas if p.tipo == tipo]
-    if colecao:
-        pecas = [p for p in pecas if (p.colecao or "") == colecao]
-
-    # Ordenação (lista única, sem agrupar por coleção).
-    chaves = {
-        "preco_asc": lambda p: p.preco_vitrine,
-        "preco_desc": lambda p: -p.preco_vitrine,
-        "nome": lambda p: p.nome.lower(),
-    }
-    chave = chaves.get(ordem, lambda p: p.nome.lower())
-    pecas = sorted(pecas, key=chave)
-
-    # Opções dos filtros (a partir de todas as peças públicas).
-    tipos = sorted({p.tipo for p in publicas if p.tipo})
-    colecoes = sorted({p.colecao for p in publicas if p.colecao})
-    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
-    whatsapp = Parametro.obter("whatsapp", "")
-    meta_desc = Parametro.obter("vitrine_descricao",
-                                "Peças exclusivas do ateliê Sabrina Hansen. Veja a coleção e faça seu pedido pelo WhatsApp.")
-    # Imagem para o preview de compartilhamento (WhatsApp/Instagram): a 1ª peça com foto.
-    og_peca = next((p for p in pecas if p.foto), None) or next((p for p in publicas if p.foto), None)
-    og_image = (url_for("static", filename="uploads/" + og_peca.foto, _external=True)
-                if og_peca else None)
-    resp = make_response(render_template(
-        "vitrine_publica.html", pecas=pecas, tipos=tipos, colecoes=colecoes, tamanhos=TAMANHOS,
-        q=request.args.get("q", ""), tipo=tipo, colecao=colecao, ordem=ordem,
-        colecao_fotos=colecao_fotos, whatsapp=whatsapp,
-        meta_desc=meta_desc, og_image=og_image,
-    ))
-    # Página do cliente logado tem dados pessoais: o navegador não deve guardá-la
-    # (evita mostrar o estado antigo — ex.: ainda "logado" — após o logout).
-    if _cliente_esta_logado():
-        resp.headers["Cache-Control"] = "no-store"
-    return resp
 
 
 @publico_bp.route("/peca/<int:peca_id>")
@@ -640,14 +645,42 @@ def peca_publica(peca_id):
     peca = Peca.query.get_or_404(peca_id)
     if not peca.vitrine_publica:
         abort(404)
+    # Contador de views via UPDATE direto (não passa pelo ORM) — de propósito:
+    # objeto Peca "sujo" no commit derrubaria o cache da vitrine a cada visita.
+    db.session.execute(db.update(Peca).where(Peca.id == peca.id).values(views=Peca.views + 1))
+    db.session.commit()
     colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
     whatsapp = Parametro.obter("whatsapp", "")
     foto = peca.foto or colecao_fotos.get(peca.colecao)
     og_image = url_for("static", filename="uploads/" + foto, _external=True) if foto else None
     meta_desc = (peca.descricao or "").strip() or f"{peca.nome} — ateliê Sabrina Hansen."
+    # Avaliações aprovadas (prova social) + JSON-LD Product (rich results).
+    avaliacoes = [a for a in peca.avaliacoes if a.aprovado]
+    jsonld = {
+        "@context": "https://schema.org", "@type": "Product",
+        "name": peca.nome, "description": meta_desc,
+        "sku": peca.sku or f"SH-{peca.id}",
+        "image": [og_image] if og_image else [],
+        "offers": {
+            "@type": "Offer", "priceCurrency": "BRL",
+            "price": f"{peca.preco_etiqueta_efetivo:.2f}",
+            "availability": "https://schema.org/" + (
+                "OutOfStock" if peca.esgotado else
+                ("PreOrder" if peca.sob_encomenda else "InStock")),
+            "url": url_for("publico.peca_publica", peca_id=peca.id, _external=True),
+        },
+    }
+    if avaliacoes:
+        jsonld["aggregateRating"] = {
+            "@type": "AggregateRating",
+            "ratingValue": f"{sum(a.nota for a in avaliacoes) / len(avaliacoes):.1f}",
+            "reviewCount": len(avaliacoes),
+        }
     resp = make_response(render_template(
         "peca_publica.html", peca=peca, tamanhos=TAMANHOS, colecao_fotos=colecao_fotos,
-        whatsapp=whatsapp, og_image=og_image, meta_desc=meta_desc))
+        whatsapp=whatsapp, og_image=og_image, meta_desc=meta_desc,
+        avaliacoes=avaliacoes, jsonld=jsonld, medidas_padrao=MEDIDAS_FEMININAS,
+        guia_medidas=Parametro.obter("guia_medidas", "")))
     if _cliente_esta_logado():
         resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -679,18 +712,24 @@ def pecas_info():
                 "url": url_for("publico.peca_publica", peca_id=p.id),
                 "foto": _foto_thumb_url(p.foto),
                 "sob_encomenda": bool(p.sob_encomenda),
-                "preco": float(p.preco_vitrine if p.sob_encomenda else p.preco_etiqueta_efetivo),
+                "esgotado": bool(p.esgotado),
+                # Esgotado exibe o preço de etiqueta (não é comprável, não vai ao carrinho).
+                # Encomenda comprável mantém o sinal (preco_vitrine) — é o que o carrinho usa.
+                "preco": float(p.preco_etiqueta_efetivo if (p.esgotado or not p.sob_encomenda) else p.preco_vitrine),
                 "preco_de": (float(p.preco_base) if (not p.sob_encomenda and p.em_promocao) else None),
                 "tamanhos": [{"t": t, "disp": p.disponivel_por_tamanho.get(t, 0) > 0} for t in TAMANHOS],
             })
     return {"pecas": out}
 
 
-@publico_bp.route("/vitrine2")
+@publico_bp.route("/")                 # raiz: www.sabrinahansen.com.br
+@publico_bp.route("/vitrine2")         # alias (mantém links antigos da prévia)
+@publico_bp.route("/publico/vitrine")  # alias (links antigos)
 @limiter.limit("60 per minute")
+# Cacheia só a versão anônima (a logada tem menu/dados pessoais → pula o cache).
+@cache.cached(timeout=60, query_string=True, unless=_cliente_esta_logado)
 def vitrine_v2():
-    """Vitrine V2 (layout estilo marketplace) — paralela à vitrine atual, para
-    avaliação em /vitrine2. Mesmos dados; nada é cacheado enquanto é preview."""
+    """Vitrine pública (layout marketplace). Serve a raiz do site."""
     q = request.args.get("q", "").strip().lower()
     tipo = request.args.get("tipo", "").strip()
     colecao = request.args.get("colecao", "").strip()
@@ -715,7 +754,16 @@ def vitrine_v2():
     chaves = {"preco_asc": lambda p: p.preco_vitrine,
               "preco_desc": lambda p: -p.preco_vitrine,
               "nome": lambda p: p.nome.lower()}
-    pecas = sorted(pecas, key=chaves.get(ordem, lambda p: p.nome.lower()))
+    chave = chaves.get(ordem, lambda p: p.nome.lower())
+
+    # Disponibilidade manda na ordem, sempre: em estoque primeiro, depois sob
+    # encomenda (produzível) e por último as esgotadas. A ordenação escolhida
+    # (preço/nome) vale dentro de cada grupo.
+    def _grupo(p):
+        if p.esgotado:
+            return 2
+        return 1 if p.sob_encomenda else 0
+    pecas = sorted(pecas, key=lambda p: (_grupo(p), chave(p)))
 
     tipos = sorted({p.tipo for p in publicas if p.tipo})
     colecoes = sorted({p.colecao for p in publicas if p.colecao})
@@ -723,13 +771,19 @@ def vitrine_v2():
     whatsapp = Parametro.obter("whatsapp", "")
     limite_novo = datetime.utcnow() - timedelta(days=21)
     novos = {p.id for p in publicas if p.criado_em and p.criado_em >= limite_novo}
+    meta_desc = Parametro.obter("vitrine_descricao",
+                                "Peças exclusivas do ateliê Sabrina Hansen. Veja a coleção e faça seu pedido pelo WhatsApp.")
+    og_peca = next((p for p in pecas if p.foto), None) or next((p for p in publicas if p.foto), None)
+    og_image = (url_for("static", filename="uploads/" + og_peca.foto, _external=True)
+                if og_peca else None)
 
     resp = make_response(render_template(
         "vitrine2.html", pecas=pecas, tipos=tipos, colecoes=colecoes, tamanhos=TAMANHOS,
         q=request.args.get("q", ""), tipo=tipo, colecao=colecao, ordem=ordem,
         tam_sel=tam_sel, colecao_fotos=colecao_fotos, whatsapp=whatsapp, novos=novos,
-        total=len(pecas)))
-    resp.headers["Cache-Control"] = "no-store"      # preview: sempre fresco
+        total=len(pecas), meta_desc=meta_desc, og_image=og_image))
+    if _cliente_esta_logado():
+        resp.headers["Cache-Control"] = "no-store"   # página logada: não guardar no navegador
     return resp
 
 
@@ -755,18 +809,21 @@ def frete_publico():
         return {"ok": False, "erro": "Carrinho vazio."}, 400
 
     # Soma o peso e empilha as alturas; usa a maior largura/comprimento (caixa que cabe tudo).
+    # Valor do seguro = subtotal do carrinho (preço do servidor, nunca do cliente).
     peso = altura = 0.0
     largura = comprimento = 0.0
+    valor_seguro = 0.0
     for peca in Peca.query.filter(Peca.id.in_(ids)).all():
         q = quantidades.get(peca.id, 0)
         peso += (peca.peso_g or 0) * q
         altura += (peca.altura_cm or 0) * q
         largura = max(largura, peca.largura_cm or 0)
         comprimento = max(comprimento, peca.comprimento_cm or 0)
+        valor_seguro += float(peca.preco_vitrine) * q
 
     opcoes, erro = _frete_opcoes(
         dados.get("cep", ""), peso_g=peso, altura_cm=altura,
-        largura_cm=largura, comprimento_cm=comprimento,
+        largura_cm=largura, comprimento_cm=comprimento, valor_seguro=valor_seguro,
     )
     if erro:
         codigo = 400 if ("config" in erro or "CEP" in erro) else 502
@@ -820,14 +877,15 @@ def _frete_recalculado(cep, linhas, frete_nome):
         return 0.0, True
     ids = [x["id"] for x in linhas]
     peso = altura = largura = comprimento = 0.0
+    valor_seguro = sum(float(x.get("preco", 0) or 0) * x["qtd"] for x in linhas)
     for peca in Peca.query.filter(Peca.id.in_(ids)).all():
         q = sum(x["qtd"] for x in linhas if x["id"] == peca.id)
         peso += (peca.peso_g or 0) * q
         altura += (peca.altura_cm or 0) * q
         largura = max(largura, peca.largura_cm or 0)
         comprimento = max(comprimento, peca.comprimento_cm or 0)
-    opcoes, erro = _frete_opcoes(cep, peso_g=peso, altura_cm=altura,
-                                 largura_cm=largura, comprimento_cm=comprimento)
+    opcoes, erro = _frete_opcoes(cep, peso_g=peso, altura_cm=altura, largura_cm=largura,
+                                 comprimento_cm=comprimento, valor_seguro=valor_seguro)
     if erro:
         return None, False
     match = next((o for o in opcoes if o.get("nome") == frete_nome), None)
@@ -856,6 +914,10 @@ def pedido_publico():
     telefone = str(cli.get("telefone", "")).strip()
     if len(re.sub(r"\D", "", telefone)) < 10:
         return {"ok": False, "erro": "Informe um WhatsApp válido com DDD."}, 400
+    # E-mail opcional do convidado (melhora o casamento com a conta futura).
+    email = Cliente.normalizar_email(str(cli.get("email", "")))
+    if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return {"ok": False, "erro": "E-mail inválido — corrija ou deixe em branco."}, 400
 
     # Recalcula itens e preços a partir do banco.
     linhas, subtotal = [], 0.0
@@ -864,17 +926,26 @@ def pedido_publico():
             peca = Peca.query.get(int(it.get("id")))
         except (TypeError, ValueError):
             peca = None
-        if not peca:
-            continue
+        if not peca or peca.esgotado:
+            continue                 # esgotada (sem insumos p/ produzir): não entra no pedido
         try:
             qtd = max(1, int(float(it.get("qtd", 1))))
         except (TypeError, ValueError):
             qtd = 1
+        # Tamanho só dentro da grade — JSON forjado não cria item "XXL" (cai no
+        # padrão "M" mais adiante, como tamanho vazio).
+        tam = str(it.get("tam", "")).strip().upper()
+        if tam not in TAMANHOS:
+            tam = ""
+        # Sob encomenda: o cliente paga o SINAL agora (preco_vitrine), mas o item
+        # da venda registra o preço cheio — o restante fica como saldo a receber.
         preco = float(peca.preco_vitrine)
+        preco_cheio = float(peca.preco_etiqueta_efetivo) if peca.sob_encomenda else preco
         subtotal += preco * qtd
         linhas.append({
-            "id": peca.id, "nome": peca.nome, "tam": str(it.get("tam", "")).strip().upper(),
-            "qtd": qtd, "preco": preco, "encomenda": bool(peca.sob_encomenda),
+            "id": peca.id, "nome": peca.nome, "tam": tam,
+            "qtd": qtd, "preco": preco, "preco_cheio": preco_cheio,
+            "encomenda": bool(peca.sob_encomenda),
         })
     if not linhas:
         return {"ok": False, "erro": "Seu pedido está vazio."}, 400
@@ -919,7 +990,8 @@ def pedido_publico():
     }
     # Resumo legível para a tela de Leads.
     linhas_txt = [f"• {x['qtd']}x {x['nome']}" + (f" ({x['tam']})" if x['tam'] else "")
-                  + (" [sob encomenda]" if x['encomenda'] else "") + f" — {_brl(x['preco'] * x['qtd'])}"
+                  + (f" [sob encomenda — sinal; peça {_brl(x['preco_cheio'])}]" if x['encomenda'] else "")
+                  + f" — {_brl(x['preco'] * x['qtd'])}"
                   for x in linhas]
     resumo = "\n".join(linhas_txt)
     resumo += f"\nSubtotal: {_brl(subtotal)}"
@@ -931,6 +1003,12 @@ def pedido_publico():
         frete_final = max(0.0, frete_valor - desconto_frete)
         resumo += f"\nFrete ({frete_nome}): {_brl(frete_final) if frete_final else 'grátis'}"
     resumo += f"\nTotal: {_brl(total)}"
+    # Encomendas: o total acima é o sinal; o restante do preço cheio é cobrado
+    # antes da entrega e fica registrado na venda como saldo a receber.
+    restante_encomenda = dinheiro(sum((x["preco_cheio"] - x["preco"]) * x["qtd"]
+                                      for x in linhas if x["encomenda"]))
+    if restante_encomenda > 0:
+        resumo += f"\nRestante das encomendas (antes da entrega): {_brl(restante_encomenda)}"
 
     # Cliente logado na vitrine? O pedido já vincula à conta dele (entra no
     # histórico da conta) e NÃO gera Lead. Convidado continua virando Lead.
@@ -940,7 +1018,8 @@ def pedido_publico():
     lead = None
     if cliente is None:
         lead = Lead(
-            nome=nome, telefone=telefone, instagram=str(cli.get("instagram", "")).strip(),
+            nome=nome, telefone=telefone, email=email,
+            instagram=str(cli.get("instagram", "")).strip(),
             cep=str(cli.get("cep", "")).strip(), logradouro=str(cli.get("logradouro", "")).strip(),
             numero=str(cli.get("numero", "")).strip(), complemento=str(cli.get("complemento", "")).strip(),
             bairro=str(cli.get("bairro", "")).strip(), cidade=str(cli.get("cidade", "")).strip(),
@@ -962,6 +1041,20 @@ def pedido_publico():
         for c in ("cep", "logradouro", "numero", "complemento", "bairro", "cidade"):
             _atualiza(c, cli.get(c))
         _atualiza("uf", cli.get("uf"), upper=True)
+        # Pedido feito: o carrinho salvo na conta deixa de ser "abandonado".
+        cliente.carrinho_json = ""
+        cliente.carrinho_em = None
+        # Mantém "Meus endereços" coerente com o endereço usado no checkout:
+        # reflete no endereço principal (cria um se a conta não tem nenhum).
+        if cliente.tem_endereco:
+            princ = next((e for e in cliente.enderecos if e.principal), None)
+            if princ is None:
+                princ = Endereco(cliente_id=cliente.id, destinatario=cliente.nome,
+                                 principal=True,
+                                 cobranca=not any(e.cobranca for e in cliente.enderecos))
+                db.session.add(princ)
+            for c in ("cep", "logradouro", "numero", "complemento", "bairro", "cidade", "uf"):
+                setattr(princ, c, getattr(cliente, c))
 
     # Cria o pedido como PRÉ-PEDIDO na tela de vendas (não efetiva: sem baixa de
     # estoque). Marca itens sem estoque no tamanho como 'a produzir'.
@@ -979,13 +1072,20 @@ def pedido_publico():
             continue
         tam = x["tam"] or "M"
         produzir = peca.disponivel_por_tamanho.get(tam, 0.0) < x["qtd"]
+        if not produzir:
+            # Reserva o estoque até o admin confirmar/descartar: some da
+            # disponibilidade da vitrine e do balcão (disponível = qtd − reservado),
+            # evitando vender no balcão a peça já pedida na vitrine.
+            linha_est = _linha_estoque_peca(peca, tam, criar=True)
+            linha_est.reservado += x["qtd"]
         db.session.add(VendaItem(
             venda=venda, peca_id=peca.id, tamanho=tam, quantidade=x["qtd"],
-            preco_unitario=x["preco"], custo_unitario=peca.custo_total, produzir=produzir,
+            preco_unitario=x["preco_cheio"], custo_unitario=peca.custo_total, produzir=produzir,
         ))
     db.session.commit()
     quem = f"conta {cliente.nome}" if cliente else nome
     _log("pedido_vitrine", f"{quem}: pré-pedido #{venda.id}, {len(linhas)} itens, total {_brl(total)}")
+    _notificar_pedido_novo(venda, resumo)   # e-mail para o ateliê (se configurado)
 
     return {
         "ok": True, "lead_id": (lead.id if lead else None), "pedido_id": venda.id, "total": total,
@@ -1042,11 +1142,50 @@ def toggle_kit(kit_id):
 
 @bp.route("/kits/<int:kit_id>/excluir", methods=["POST"])
 def excluir_kit(kit_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     kit = Kit.query.get_or_404(kit_id)
     db.session.delete(kit)
     db.session.commit()
     flash("Kit excluído.", "sucesso")
     return redirect(url_for("main.listar_kits"))
+
+
+# --------------------------------------------------------------------------- #
+# Avaliações (moderação)
+# --------------------------------------------------------------------------- #
+@bp.route("/avaliacoes")
+def listar_avaliacoes():
+    from ..models import Avaliacao
+    pendentes = (Avaliacao.query.filter_by(aprovado=False)
+                 .order_by(Avaliacao.criado_em.desc()).all())
+    aprovadas = (Avaliacao.query.filter_by(aprovado=True)
+                 .order_by(Avaliacao.criado_em.desc()).limit(50).all())
+    return render_template("avaliacoes.html", pendentes=pendentes, aprovadas=aprovadas)
+
+
+@bp.route("/avaliacoes/<int:avaliacao_id>/aprovar", methods=["POST"])
+def aprovar_avaliacao(avaliacao_id):
+    from ..models import Avaliacao
+    av = Avaliacao.query.get_or_404(avaliacao_id)
+    av.aprovado = not av.aprovado
+    db.session.commit()
+    flash("Avaliação " + ("aprovada — já aparece na loja." if av.aprovado else "ocultada."), "sucesso")
+    return redirect(url_for("main.listar_avaliacoes"))
+
+
+@bp.route("/avaliacoes/<int:avaliacao_id>/excluir", methods=["POST"])
+def excluir_avaliacao(avaliacao_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    from ..models import Avaliacao
+    av = Avaliacao.query.get_or_404(avaliacao_id)
+    db.session.delete(av)
+    db.session.commit()
+    flash("Avaliação excluída.", "sucesso")
+    return redirect(url_for("main.listar_avaliacoes"))
 
 
 # --------------------------------------------------------------------------- #
@@ -1127,6 +1266,9 @@ def pecas_colecao(colecao_id):
 
 @bp.route("/colecoes/<int:colecao_id>/excluir", methods=["POST"])
 def excluir_colecao(colecao_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     colecao = Colecao.query.get_or_404(colecao_id)
     _remover_foto(colecao.foto)
     db.session.delete(colecao)

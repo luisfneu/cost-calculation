@@ -36,6 +36,9 @@
         {% if lead.whatsapp_numero %}
           <a href="https://wa.me/{{ lead.whatsapp_numero }}" target="_blank" class="link-atelier"><i class="bi bi-whatsapp text-success"></i> {{ lead.telefone }}</a><br>
         {% endif %}
+        {% if lead.email %}
+          <a href="mailto:{{ lead.email }}" class="link-atelier small"><i class="bi bi-envelope"></i> {{ lead.email }}</a><br>
+        {% endif %}
         {% if lead.instagram_handle %}
           <a href="https://instagram.com/{{ lead.instagram_handle }}" target="_blank" class="link-insta"><i class="bi bi-instagram"></i> @{{ lead.instagram_handle }}</a>
         {% endif %}

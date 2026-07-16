@@ -61,6 +61,9 @@ from ..models import (
 from . import bp, publico_bp
 from .helpers import *  # noqa: F401,F403
 
+# Em memória DO PROCESSO: funciona porque o Gunicorn roda com 1 worker
+# (gunicorn.conf.py). Se aumentar `workers`, cada processo tem seu contador e o
+# limite efetivo multiplica — mover para storage compartilhado (ex.: SQLite).
 _LOGIN_FALHAS = {}    # ip -> [timestamps de falhas recentes]
 _LOGIN_MAX = 5        # falhas permitidas dentro da janela
 _LOGIN_JANELA = 300   # segundos (5 min)
@@ -121,8 +124,10 @@ def login():
             flash("Login ou senha inválidos.", "erro")
             return render_template("login.html")
 
-        # 2) Senha-mestre (acesso admin de emergência).
-        if senha == current_app.config["APP_SENHA"]:
+        # 2) Senha-mestre (acesso admin de emergência). compare_digest: comparação
+        # em tempo constante (== permite inferir a senha por timing).
+        import hmac
+        if hmac.compare_digest(senha.encode(), str(current_app.config["APP_SENHA"]).encode()):
             _login_ok(ip)
             session["logado"] = True
             session["usuario"] = "Admin"
@@ -135,11 +140,16 @@ def login():
     return render_template("login.html")
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["POST"])
 def logout():
+    # POST-only: logout via GET permite deslogar por link forjado (CSRF) e por
+    # prefetch/histórico do navegador.
     if session.get("logado"):
         _log("logout")
-    session.clear()
+    # Remove só as chaves do ERP: session.clear() derrubaria também a sessão de
+    # cliente da vitrine (mesmo cookie) — ex.: a dona testando a loja logada.
+    for chave in ("logado", "usuario", "admin"):
+        session.pop(chave, None)
     flash("Você saiu do sistema.", "sucesso")
     return redirect(url_for("main.login"))
 
@@ -237,6 +247,10 @@ def index():
 
 @bp.route("/configuracoes", methods=["GET", "POST"])
 def configuracoes():
+    # Só admin: aqui mora a chave Pix (trocar = redirecionar pagamentos).
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     if request.method == "POST":
         Parametro.definir("pix_chave", request.form.get("pix_chave", "").strip())
         Parametro.definir("pix_nome", request.form.get("pix_nome", "").strip())
@@ -249,6 +263,10 @@ def configuracoes():
         Parametro.definir("vitrine_url", request.form.get("vitrine_url", "").strip())
         # Fuso horário para exibição das datas/horas.
         Parametro.definir("fuso", request.form.get("fuso", "America/Sao_Paulo").strip())
+        # E-mail que recebe os avisos de pedido novo da vitrine.
+        Parametro.definir("aviso_email", request.form.get("aviso_email", "").strip())
+        # Guia de medidas exibido nas páginas das peças (texto livre).
+        Parametro.definir("guia_medidas", request.form.get("guia_medidas", "").strip())
         db.session.commit()
         flash("Configurações salvas.", "sucesso")
         return redirect(url_for("main.configuracoes"))
@@ -266,6 +284,8 @@ def configuracoes():
         "whatsapp": Parametro.obter("whatsapp", ""),
         "vitrine_url": Parametro.obter("vitrine_url", ""),
         "fuso": Parametro.obter("fuso", "America/Sao_Paulo"),
+        "aviso_email": Parametro.obter("aviso_email", ""),
+        "guia_medidas": Parametro.obter("guia_medidas", ""),
     }
     fusos = [
         "America/Sao_Paulo", "America/Bahia", "America/Fortaleza", "America/Recife",
@@ -388,6 +408,11 @@ def _caminho_banco():
 
 @bp.route("/backup")
 def backup():
+    # Só admin: o arquivo contém o banco inteiro (hashes de senha, CPFs,
+    # endereços e telefones de todos os clientes e usuários).
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     caminho = _caminho_banco()
     if not caminho or not os.path.exists(caminho):
         flash("Banco de dados não encontrado.", "erro")

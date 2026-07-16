@@ -93,6 +93,39 @@
   </div>
 </div>
 
+<!-- Carrinhos abandonados (clientes logados que não fecharam o pedido) -->
+{% if carrinhos %}
+<div class="card bg-white mb-4">
+  <div class="card-body">
+    <h2 class="h6"><i class="bi bi-bag-x text-warning"></i> Carrinhos abandonados ({{ carrinhos|length }})</h2>
+    <p class="small text-muted mb-2">Clientes que montaram o carrinho na vitrine e não enviaram o pedido. Um toque no WhatsApp costuma recuperar a venda.</p>
+    <div class="table-responsive">
+    <table class="table table-sm align-middle tabela-cartao">
+      <thead class="table-light"><tr><th>Cliente</th><th>Itens</th><th class="text-end">Total</th><th>Quando</th><th></th></tr></thead>
+      <tbody>
+      {% for cx in carrinhos %}
+        <tr>
+          <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=cx.cliente.id) }}" class="link-atelier">{{ cx.cliente.nome }}</a></td>
+          <td data-label="Itens" class="small">
+            {% for i in cx.itens %}{{ i.qtd }}x {{ i.nome }}{{ ' (' ~ i.tam ~ ')' if i.tam }}{{ ' · ' if not loop.last }}{% endfor %}
+          </td>
+          <td data-label="Total" class="text-end">{{ cx.total | moeda }}</td>
+          <td data-label="Quando" class="small text-muted">{{ cx.em | dt }}</td>
+          <td class="text-end">
+            {% if cx.cliente.whatsapp_numero %}
+            {% set msg = 'Olá, ' ~ cx.cliente.nome.split(' ')[0] ~ '! Vi que você deixou peças no carrinho da nossa loja. Posso ajudar a finalizar o pedido? 💛' %}
+            <a href="https://wa.me/{{ cx.cliente.whatsapp_numero }}?text={{ msg | urlencode }}" target="_blank" class="btn btn-sm btn-outline-success"><i class="bi bi-whatsapp"></i> Chamar</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Sem compras -->
 {% if sem_compra %}
 <div class="card bg-white">

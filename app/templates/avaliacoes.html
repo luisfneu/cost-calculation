@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Avaliações de peças</h1>
+</div>
+
+{% macro linha(a, pendente) %}
+<tr>
+  <td data-label="Peça"><a href="{{ url_for('main.detalhe_peca', peca_id=a.peca_id) }}" class="link-atelier">{{ a.peca.nome }}</a></td>
+  <td data-label="Cliente"><a href="{{ url_for('main.detalhe_cliente', cliente_id=a.cliente_id) }}" class="link-atelier">{{ a.cliente.nome if a.cliente else '—' }}</a></td>
+  <td data-label="Nota"><span class="text-warning">{% for _ in range(a.nota) %}★{% endfor %}</span></td>
+  <td data-label="Texto" class="small" style="max-width:340px">{{ a.texto or '—' }}</td>
+  <td data-label="Data" class="small text-muted">{{ a.criado_em | dt }}</td>
+  <td class="text-end text-nowrap">
+    <form method="post" action="{{ url_for('main.aprovar_avaliacao', avaliacao_id=a.id) }}" class="d-inline">
+      <button class="btn btn-sm {{ 'btn-success' if pendente else 'btn-outline-secondary' }}">
+        {{ 'Aprovar' if pendente else 'Ocultar' }}
+      </button>
+    </form>
+    {% if session.admin %}
+    <form method="post" action="{{ url_for('main.excluir_avaliacao', avaliacao_id=a.id) }}" class="d-inline"
+          data-confirm="Excluir esta avaliação?">
+      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+    </form>
+    {% endif %}
+  </td>
+</tr>
+{% endmacro %}
+
+<div class="card bg-white mb-4"><div class="card-body">
+  <h2 class="h6 mb-2">Pendentes de aprovação {% if pendentes %}<span class="badge text-bg-danger">{{ pendentes | length }}</span>{% endif %}</h2>
+  {% if pendentes %}
+  <div class="table-responsive"><table class="table table-sm align-middle tabela-cartao">
+    <thead class="table-light"><tr><th>Peça</th><th>Cliente</th><th>Nota</th><th>Texto</th><th>Data</th><th></th></tr></thead>
+    <tbody>{% for a in pendentes %}{{ linha(a, True) }}{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="text-muted small mb-0">Nenhuma avaliação aguardando.</p>{% endif %}
+</div></div>
+
+<div class="card bg-white"><div class="card-body">
+  <h2 class="h6 mb-2">Aprovadas (aparecem na loja)</h2>
+  {% if aprovadas %}
+  <div class="table-responsive"><table class="table table-sm align-middle tabela-cartao">
+    <thead class="table-light"><tr><th>Peça</th><th>Cliente</th><th>Nota</th><th>Texto</th><th>Data</th><th></th></tr></thead>
+    <tbody>{% for a in aprovadas %}{{ linha(a, False) }}{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="text-muted small mb-0">Nenhuma avaliação aprovada ainda.</p>{% endif %}
+</div></div>
+{% endblock %}

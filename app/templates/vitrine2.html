@@ -4,8 +4,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Loja · Sabrina Hansen Atelier</title>
+  <title>{{ colecao ~ ' · ' if colecao }}Sabrina Hansen Atelier</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-title" content="Sabrina Hansen">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#b89a78">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="description" content="{{ meta_desc }}">
+  <link rel="canonical" href="{{ url_for('publico.vitrine_v2', _external=True) }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sabrina Hansen Atelier">
+  <meta property="og:title" content="{{ colecao ~ ' · ' if colecao }}Sabrina Hansen Atelier">
+  <meta property="og:description" content="{{ meta_desc }}">
+  <meta property="og:url" content="{{ url_for('publico.vitrine_v2', _external=True) }}">
+  {% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+  <meta name="twitter:card" content="{{ 'summary_large_image' if og_image else 'summary' }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
@@ -18,13 +33,17 @@
   <form id="filtros" method="get" action="{{ url_for('publico.vitrine_v2') }}"></form>
 
   <div class="v2-loja">
-  <div class="v2-preview-flag">PRÉVIA — Vitrine V2 (em avaliação). A loja atual continua em <a href="{{ url_for('publico.vitrine_publica') }}" style="color:#fff;text-decoration:underline">/</a></div>
   {% include "_v2_header.html" %}
 
   <div class="v2-wrap">
     <div class="v2-corpo">
-      <!-- Sidebar de filtros -->
-      <aside class="v2-filtros">
+      <!-- Sidebar de filtros: gaveta (offcanvas) no celular, fixa no desktop -->
+      <aside class="v2-filtros offcanvas-md offcanvas-start" tabindex="-1" id="filtros-oc" aria-labelledby="filtros-tit">
+      <div class="offcanvas-header d-md-none">
+        <h5 class="offcanvas-title" id="filtros-tit"><i class="bi bi-funnel"></i> Filtros</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#filtros-oc" aria-label="Fechar"></button>
+      </div>
+      <div class="offcanvas-body">
         <h3>Categoria</h3>
         <a class="f-item {{ 'on' if not tipo }}" href="{{ url_for('publico.vitrine_v2', colecao=colecao, ordem=ordem) }}">Todas</a>
         {% for t in tipos %}
@@ -40,6 +59,12 @@
         {% endif %}
 
         <h3>Tamanho</h3>
+        {% if cliente_logado and cliente_logado.tamanho_preferido in tamanhos %}
+          <a class="f-item fw-bold {{ 'on' if tam_sel == [cliente_logado.tamanho_preferido] }}"
+             href="{{ url_for('publico.vitrine_v2', tamanho=cliente_logado.tamanho_preferido, tipo=tipo, colecao=colecao, ordem=ordem) }}">
+            <i class="bi bi-person-check"></i> Meu tamanho ({{ cliente_logado.tamanho_preferido }})
+          </a>
+        {% endif %}
         {% for t in tamanhos %}
           <label class="f-item"><input type="checkbox" name="tamanho" value="{{ t }}" form="filtros"
                  {{ 'checked' if t in tam_sel }} onchange="document.getElementById('filtros').submit()"> {{ t }}</label>
@@ -49,12 +74,16 @@
         <input type="hidden" name="tipo" value="{{ tipo }}" form="filtros">
         <input type="hidden" name="colecao" value="{{ colecao }}" form="filtros">
         <input type="hidden" name="ordem" value="{{ ordem }}" form="filtros">
+      </div><!-- /offcanvas-body -->
       </aside>
 
       <!-- Grade -->
       <main class="v2-main">
         <div class="v2-barra">
-          <div class="text-muted small"><strong>{{ total }}</strong> peça{{ '' if total == 1 else 's' }}</div>
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-primary btn-sm d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#filtros-oc"><i class="bi bi-funnel"></i> Filtros</button>
+            <div class="text-muted small"><strong>{{ total }}</strong> peça{{ '' if total == 1 else 's' }}</div>
+          </div>
           <div class="d-flex align-items-center gap-3">
             <div class="v2-colsel d-none d-md-inline-flex" role="group" aria-label="Número de colunas">
               <button type="button" data-cols="2" title="2 colunas" aria-label="2 colunas"><i class="bi bi-grid"></i></button>
@@ -75,7 +104,7 @@
         <div class="v2-grid cols-4" id="v2-grid">
           {% for p in pecas %}
           {% set foto = p.foto or colecao_fotos.get(p.colecao) %}
-          <div class="v2-card">
+          <div class="v2-card{{ ' v2-esgotado' if p.esgotado }}">
             <div class="v2-thumb">
               <a class="v2-thumb-link" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}" aria-label="{{ p.nome }}">
                 {% if foto %}
@@ -88,7 +117,9 @@
                 {% set pct = ((p.preco_base - p.preco_etiqueta_efetivo) / p.preco_base * 100) | round(0, 'floor') | int %}
                 <span class="v2-badge v2-desc">-{{ pct }}%</span>
               {% endif %}
-              {% if p.sob_encomenda %}<span class="v2-badge v2-enc">sob encomenda</span>
+              {% if p.esgotado %}<span class="v2-badge v2-esgot">Esgotado</span>
+              {% elif p.sob_encomenda %}<span class="v2-badge v2-enc">sob encomenda</span>
+              {% elif p.disponivel_total <= 2 %}<span class="v2-badge" style="background:#c0392b;color:#fff">últimas unidades</span>
               {% elif p.id in novos %}<span class="v2-badge v2-novo">Novo</span>{% endif %}
               <button type="button" class="v2-fav js-fav" aria-label="Favoritar {{ p.nome }}"
                       data-id="{{ p.id }}" data-nome="{{ p.nome }}" data-preco="{{ p.preco_vitrine }}"
@@ -101,8 +132,14 @@
               {% if p.colecao or p.tipo %}<div class="v2-cat">{{ p.colecao or p.tipo }}</div>{% endif %}
               <a class="v2-nome-link text-reset text-decoration-none" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}"><div class="v2-nome">{{ p.nome }}</div></a>
               <div class="mt-1">
-                {% if p.sob_encomenda %}
-                  <span class="v2-preco-atual">{{ p.preco_vitrine | moeda }}</span>
+                {% if p.esgotado %}
+                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+                {% elif p.sob_encomenda %}
+                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+                  <span class="v2-preco-enc" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
+                        title="Sinal de {{ p.preco_encomenda | moeda }} para iniciar a encomenda. O valor cheio da peça é cobrado antes da entrega.">
+                    sinal {{ p.preco_encomenda | moeda }} <i class="bi bi-question-circle"></i>
+                  </span>
                 {% elif p.em_promocao %}
                   <span class="v2-preco-de">{{ p.preco_base | moeda }}</span>
                   <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
@@ -115,7 +152,12 @@
           {% endfor %}
         </div>
         {% else %}
-        <p class="text-muted py-5 text-center">Nenhuma peça encontrada com esses filtros.</p>
+        <div class="text-muted py-5 text-center">
+          <p class="mb-2">Nenhuma peça encontrada com esses filtros.</p>
+          <a href="{{ url_for('publico.vitrine_v2') }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-arrow-counterclockwise"></i> Limpar filtros e ver tudo
+          </a>
+        </div>
         {% endif %}
       </main>
     </div>

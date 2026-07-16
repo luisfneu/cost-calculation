@@ -10,8 +10,9 @@ def test_frete_publico_sem_login_e_carrinho_vazio(app):
 
 def test_frete_publico_calcula(client, app, seed, monkeypatch):
     # Evita a chamada externa ao Melhor Envio: substitui o helper por um retorno fixo.
-    def fake(cep, peso_g=0, altura_cm=0, largura_cm=0, comprimento_cm=0):
+    def fake(cep, peso_g=0, altura_cm=0, largura_cm=0, comprimento_cm=0, valor_seguro=0):
         assert peso_g >= 0  # dimensões vieram somadas do banco
+        assert valor_seguro > 0  # sempre segura pelo valor do carrinho
         return ([{"nome": "SEDEX", "preco": "34.60", "prazo": 2, "rapido": True},
                  {"nome": "PAC", "preco": "17.50", "prazo": 6}], None)
     monkeypatch.setattr("app.routes.catalogo._frete_opcoes", fake)

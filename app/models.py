@@ -119,6 +119,18 @@ class Insumo(db.Model):
         )
 
 
+# Tabela de medidas feminina padrão (cm) — usada na vitrine quando a peça não
+# tem medidas próprias cadastradas.
+MEDIDAS_FEMININAS = [
+    {"tam": "PP", "busto": 86, "cintura": 68, "quadril": 94},
+    {"tam": "P", "busto": 92, "cintura": 74, "quadril": 100},
+    {"tam": "M", "busto": 98, "cintura": 80, "quadril": 106},
+    {"tam": "G", "busto": 104, "cintura": 86, "quadril": 112},
+    {"tam": "GG", "busto": 110, "cintura": 92, "quadril": 118},
+    {"tam": "XG", "busto": 116, "cintura": 98, "quadril": 124},
+]
+
+
 class Peca(db.Model):
     __tablename__ = "pecas"
 
@@ -128,6 +140,9 @@ class Peca(db.Model):
     colecao = db.Column(db.String(120), default="")  # coleção a que a peça pertence
     tags = db.Column(db.String(255), default="")     # etiquetas livres, separadas por vírgula
     descricao = db.Column(db.Text, default="")
+    composicao = db.Column(db.Text, default="", server_default="")   # ex.: 95% algodão, 5% elastano
+    # Medidas específicas da peça (texto livre). Em branco → usa MEDIDAS_FEMININAS (tabela padrão).
+    medidas = db.Column(db.Text, default="", server_default="")
     foto = db.Column(db.String(255))  # nome do arquivo salvo em static/uploads
     # Se True, a peça aparece na vitrine PÚBLICA (link do cliente). A vitrine
     # interna mostra todas, independente deste campo.
@@ -147,6 +162,9 @@ class Peca(db.Model):
     preco_promocional = db.Column(db.Float, nullable=False, default=0.0)
     # Código/SKU único, gerado automaticamente no padrão SH-00000000 (id da peça).
     sku = db.Column(db.String(40), unique=True, default="")
+    # Visualizações da página pública da peça (incrementado via UPDATE direto,
+    # sem passar pelo ORM — não invalida o cache da vitrine).
+    views = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     @staticmethod
     def gerar_sku(peca_id) -> str:
@@ -299,6 +317,27 @@ class Peca(db.Model):
         if self.sob_encomenda:
             return float(arredondar_cima(self.custo_total, 5))
         return self.preco_etiqueta_efetivo
+
+    @property
+    def preco_encomenda(self) -> float:
+        """Sinal da encomenda: custo de produção arredondado p/ cima ao próximo R$5.
+        É o valor pago ao fazer o pedido sob encomenda; o valor cheio da peça
+        (preço de etiqueta) é cobrado antes da entrega."""
+        return float(arredondar_cima(self.custo_total, 5))
+
+    @property
+    def esgotado(self) -> bool:
+        """Indisponível para compra na vitrine.
+
+        - Em estoque: nunca esgota aqui (há disponível, senão viraria encomenda).
+        - Sob encomenda: esgota quando a ficha técnica tem insumos consumíveis mas
+          o estoque deles não dá nem 1 peça. Ficha sem insumos (produção_possivel
+          None) NÃO bloqueia — o ateliê controla manualmente.
+        """
+        if not self.sob_encomenda:
+            return False              # tem estoque pronto para venda
+        pp = self.producao_possivel
+        return pp is not None and pp < 1
 
     @property
     def tags_lista(self) -> list:
@@ -483,6 +522,12 @@ class Cliente(db.Model):
     cpf = db.Column(db.String(14), default="")      # só dígitos ou formatado
     # Tamanho habitual informado manualmente (sobrepõe o calculado).
     tamanho_habitual = db.Column(db.String(5), default="")
+    # Favoritos da vitrine (ids de peças em JSON) — sincronizados entre aparelhos.
+    favoritos_json = db.Column(db.Text, nullable=False, default="", server_default="")
+    # Carrinho do cliente logado (JSON) + quando foi atualizado — alimenta o
+    # CRM de carrinhos abandonados e a continuidade entre aparelhos.
+    carrinho_json = db.Column(db.Text, nullable=False, default="", server_default="")
+    carrinho_em = db.Column(db.DateTime)
 
     # Endereço (opcional) — para envio via Correios.
     cep = db.Column(db.String(12), default="")
@@ -509,6 +554,21 @@ class Cliente(db.Model):
         """Cliente com login ativo na vitrine (e-mail + senha definidos)."""
         return bool(self.email and self.senha_hash)
 
+    # ----- Favoritos da vitrine -----
+    @property
+    def favoritos_ids(self) -> list:
+        import json
+        try:
+            return [int(x) for x in json.loads(self.favoritos_json or "[]")]
+        except (ValueError, TypeError):
+            return []
+
+    def definir_favoritos(self, ids):
+        """Grava a lista de ids (únicos, preservando a ordem)."""
+        import json
+        unicos = list(dict.fromkeys(int(x) for x in ids))
+        self.favoritos_json = json.dumps(unicos)
+
     @staticmethod
     def normalizar_email(email: str) -> str:
         return (email or "").strip().lower()
@@ -518,6 +578,25 @@ class Cliente(db.Model):
         """Busca por e-mail (case-insensitive). None se vazio."""
         email = cls.normalizar_email(email)
         return cls.query.filter(db.func.lower(cls.email) == email).first() if email else None
+
+    @classmethod
+    def por_cpf(cls, cpf: str):
+        """Busca pelo CPF (só dígitos). None se vazio/não achar."""
+        d = re.sub(r"\D", "", cpf or "")
+        return cls.query.filter(cls.cpf == d).first() if d else None
+
+    @classmethod
+    def por_login(cls, valor: str):
+        """Busca por e-mail OU CPF (aceita CPF formatado). None se não achar."""
+        valor = (valor or "").strip()
+        if not valor:
+            return None
+        if "@" in valor:
+            return cls.por_email(valor)
+        c = cls.por_cpf(valor)
+        if c:
+            return c
+        return cls.por_email(valor)
 
     @staticmethod
     def normalizar_whatsapp(telefone: str) -> str:
@@ -539,11 +618,25 @@ class Cliente(db.Model):
         return iguais[0] if iguais else None
 
     @property
+    def endereco_principal(self):
+        """O Endereco marcado como principal (entrega). Se não houver marcado,
+        o primeiro da lista. None quando o cliente não tem endereços cadastrados."""
+        ends = list(self.enderecos)
+        if not ends:
+            return None
+        return next((e for e in ends if e.principal), ends[0])
+
+    @property
     def tem_endereco(self) -> bool:
-        return bool(self.logradouro or self.cep or self.cidade)
+        return bool(self.enderecos) or bool(self.logradouro or self.cep or self.cidade)
 
     @property
     def endereco_completo(self) -> str:
+        # Fonte da verdade é o endereço PRINCIPAL cadastrado; os campos inline são
+        # só um espelho (cadastro antigo sem a tabela de endereços).
+        princ = self.endereco_principal
+        if princ:
+            return princ.endereco_completo
         linha1 = self.logradouro
         if self.numero:
             linha1 += f", {self.numero}"
@@ -722,6 +815,8 @@ class Lead(db.Model):
     nome = db.Column(db.String(160), nullable=False)
     instagram = db.Column(db.String(80), default="")
     telefone = db.Column(db.String(40), default="")   # WhatsApp
+    # E-mail opcional do checkout: melhora o casamento com a conta futura.
+    email = db.Column(db.String(160), nullable=False, default="", server_default="")
 
     cep = db.Column(db.String(12), default="")
     logradouro = db.Column(db.String(160), default="")
@@ -807,6 +902,8 @@ class Venda(db.Model):
     lead_id = db.Column(db.Integer, db.ForeignKey("leads.id"))
     # Etapa da jornada do pedido para o cliente (independente do `status` do ERP).
     etapa_pedido = db.Column(db.String(20), nullable=False, default="recebido")
+    # Código de rastreio do envio (Correios/transportadora) — exibido ao cliente.
+    rastreio = db.Column(db.String(60), nullable=False, default="", server_default="")
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
@@ -820,7 +917,6 @@ class Venda(db.Model):
         ("pgto_aprovado", "Pagamento aprovado", 1),
         ("recibo", "Emissão de recibo", 2),
         ("preparando", "Preparando envio", 3),
-        ("enviado", "Pedido enviado", 3),
         ("na_transportadora", "Entregue à transportadora", 3),
         ("em_transporte", "Em transporte", 4),
         ("saiu_entrega", "Saiu para entrega", 4),
@@ -873,6 +969,42 @@ class Venda(db.Model):
         ordem = [k for k, _, _ in self.ETAPAS]
         if ordem.index(alvo) > self.etapa_idx:
             self.etapa_pedido = alvo
+
+    # Jornada (etapa) → status de negócio do ERP. É o inverso do _STATUS_MIN_ETAPA:
+    # a etapa (o que o operador e o cliente veem) é o campo mestre; o status é
+    # derivado dela para estoque/relatórios/pagamento continuarem funcionando.
+    _ETAPA_STATUS = {
+        "recebido": "pre-pedido",
+        "aguard_pgto": "realizado",
+        "pgto_aprovado": "pago",
+        "recibo": "pago",
+        "preparando": "enviado",
+        "na_transportadora": "enviado",
+        "em_transporte": "enviado",
+        "saiu_entrega": "enviado",
+        "entregue": "entregue",
+    }
+
+    @classmethod
+    def grupo_da_etapa(cls, chave) -> int:
+        """Índice do grupo (bolinha) de uma etapa. -1 se desconhecida."""
+        for k, _, g in cls.ETAPAS:
+            if k == chave:
+                return g
+        return -1
+
+    def sincronizar_status(self):
+        """Deriva o `status` de negócio a partir da etapa atual (campo mestre).
+        Pré-pedido só sai via confirmação; nunca 'despaga' uma venda já recebida."""
+        if self.eh_pre_pedido:
+            return
+        novo = self._ETAPA_STATUS.get(self.etapa_pedido, self.status)
+        if novo == "pago" and self.parcelas:      # crediário mantém rótulo próprio
+            novo = "crediario"
+        # Voltar a etapa não pode rebaixar abaixo de 'pago' se já houve pagamento.
+        if self._POS.get(novo, 0) < 1 and (self.saldo_receber <= 0.01 or self.pagamentos):
+            return
+        self.status = novo
     cliente = db.relationship("Cliente", back_populates="vendas")
     itens = db.relationship(
         "VendaItem", back_populates="venda", cascade="all, delete-orphan"
@@ -1337,6 +1469,30 @@ class FotoPeca(db.Model):
     arquivo = db.Column(db.String(255), nullable=False)
 
     peca = db.relationship("Peca", back_populates="fotos")
+
+
+class Avaliacao(db.Model):
+    """Avaliação de peça feita por cliente (após pedido entregue). Só aparece
+    na vitrine depois de aprovada no ERP (moderação)."""
+
+    __tablename__ = "avaliacoes"
+    __table_args__ = (db.UniqueConstraint("peca_id", "cliente_id",
+                                          name="uq_avaliacao_peca_cliente"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"), nullable=False)
+    nota = db.Column(db.Integer, nullable=False, default=5)   # 1..5
+    texto = db.Column(db.Text, nullable=False, default="")
+    aprovado = db.Column(db.Boolean, nullable=False, default=False)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    peca = db.relationship("Peca", backref=db.backref("avaliacoes", cascade="all, delete-orphan"))
+    cliente = db.relationship("Cliente")
+
+    @property
+    def cliente_primeiro_nome(self) -> str:
+        return (self.cliente.nome.split()[0] if self.cliente and self.cliente.nome else "Cliente")
 
 
 class Colecao(db.Model):

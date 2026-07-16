@@ -11,7 +11,7 @@ import os
 
 bind = os.environ.get("BIND", "127.0.0.1:8000")
 workers = 1
-threads = int(os.environ.get("THREADS", "4"))
+threads = int(os.environ.get("THREADS", "8"))
 worker_class = "gthread"
 timeout = 60
 graceful_timeout = 30

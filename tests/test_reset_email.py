@@ -2,14 +2,25 @@
 O envio real é substituído por um mock (não bate na rede)."""
 
 
+class _ClienteFake:
+    def __init__(self, cid=42, senha_hash="hash-x"):
+        self.id = cid
+        self.senha_hash = senha_hash
+
+
 def test_token_roundtrip_e_expira(app):
-    from app.emails import gerar_token_reset, ler_token_reset
+    from app.emails import gerar_token_reset, ler_token_reset, token_confere_com
     with app.app_context():
-        tok = gerar_token_reset(42)
-        assert ler_token_reset(tok) == 42
-        assert ler_token_reset(tok + "x") is None        # adulterado
-        assert ler_token_reset("lixo") is None           # inválido
-        assert ler_token_reset(tok, max_age=-1) is None   # expirado
+        cliente = _ClienteFake()
+        tok = gerar_token_reset(cliente)
+        cid, versao = ler_token_reset(tok)
+        assert cid == 42 and token_confere_com(cliente, versao)
+        assert ler_token_reset(tok + "x") == (None, None)        # adulterado
+        assert ler_token_reset("lixo") == (None, None)           # inválido
+        assert ler_token_reset(tok, max_age=-1) == (None, None)  # expirado
+        # Trocou a senha: a versão do token antigo deixa de conferir.
+        cliente.senha_hash = "hash-novo"
+        assert not token_confere_com(cliente, versao)
 
 
 def test_esqueci_envia_link_para_conta_existente(app, monkeypatch):
@@ -48,18 +59,18 @@ def test_redefinir_com_token_valido_troca_senha(app):
         c.set_senha("antiga1")
         db.session.add(c); db.session.commit()
         cid = c.id
-        token = gerar_token_reset(cid)
+        token = gerar_token_reset(c)
 
     cli = app.test_client()
     assert cli.get(f"/conta/redefinir/{token}").status_code == 200
-    cli.post(f"/conta/redefinir/{token}", data={"senha": "novasenha9"})
+    cli.post(f"/conta/redefinir/{token}", data={"senha": "Novasenha9!"})
     with app.app_context():
         c = Cliente.query.get(cid)
-        assert c.conferir_senha("novasenha9")
+        assert c.conferir_senha("Novasenha9!")
         assert not c.conferir_senha("antiga1")
 
 
 def test_redefinir_token_invalido_redireciona(app):
     cli = app.test_client()
     r = cli.get("/conta/redefinir/tokenfalso")
-    assert r.status_code == 302 and "/conta/esqueci" in r.headers["Location"]
+    assert r.status_code == 302 and "login=1" in r.headers["Location"]

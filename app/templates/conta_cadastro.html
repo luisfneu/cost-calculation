@@ -1,54 +1,113 @@
-{% extends "conta_base.html" %}
-{% block titulo %}Criar conta{% endblock %}
-{% block conteudo %}
-<div class="conta-card">
-  <div class="card">
-    <div class="card-body">
-      <h1 class="conta-tit h4 mb-1">Criar conta</h1>
-      <p class="text-muted small mb-3">Salve seus dados e acompanhe seus pedidos. Já tem conta?
-        <a href="{{ url_for('publico.conta_entrar') }}" class="link-atelier">Entrar</a>.</p>
-      <form method="post" action="{{ url_for('publico.conta_cadastro', next=request.args.get('next')) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-2">
-          <label class="form-label small mb-1">Nome*</label>
-          <input type="text" name="nome" class="form-control" required value="{{ dados.get('nome', '') }}">
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Criar conta · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <style>
+    body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--ink);
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .auth-card { background: var(--cream); max-width: 460px; width: 100%; border-radius: 14px;
+                 padding: 30px 28px; box-shadow: 0 14px 40px rgba(0,0,0,.15); text-align: center; }
+    .auth-card .logo { width: 190px; max-width: 68%; margin-bottom: 4px; }
+    .auth-tit { font-family: var(--fonte-titulo); font-size: 1.5rem; margin: 6px 0 4px; }
+    .auth-card form { text-align: left; }
+  </style>
+</head>
+<body>
+  {% set prox = request.args.get('next') %}
+  <div class="auth-card">
+    <a href="{{ url_for('publico.vitrine_v2') }}"><img class="logo" src="{{ url_for('static', filename='logo.svg') }}" alt="Sabrina Hansen Atelier"></a>
+    <div class="auth-tit">Criar conta</div>
+    <p class="text-muted small mb-3">Salve seus dados e acompanhe seus pedidos.</p>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}<div class="alert alert-{{ 'danger' if cat=='erro' else 'success' }} py-2">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('publico.conta_cadastro', next=prox) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-2">
+        <label class="form-label small mb-1">Nome*</label>
+        <input type="text" name="nome" class="form-control" required value="{{ dados.get('nome', '') }}">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">E-mail*</label>
+        <input type="email" name="email" class="form-control" required autocomplete="email" value="{{ dados.get('email', '') }}">
+      </div>
+      <div class="row g-2">
+        <div class="col-md-7 mb-2">
+          <label class="form-label small mb-1">CPF*</label>
+          <input type="text" name="cpf" class="form-control" inputmode="numeric" data-cpf required placeholder="000.000.000-00" value="{{ dados.get('cpf', '') }}">
+          <div class="invalid-feedback">CPF inválido.</div>
         </div>
-        <div class="mb-2">
-          <label class="form-label small mb-1">E-mail*</label>
-          <input type="email" name="email" class="form-control" required autocomplete="email" value="{{ dados.get('email', '') }}">
-        </div>
-        <div class="mb-2">
-          <label class="form-label small mb-1">Senha* <span class="text-muted">(mín. 6 caracteres)</span></label>
-          <input type="password" name="senha" class="form-control" required minlength="6" autocomplete="new-password">
-        </div>
-        <div class="mb-2">
+        <div class="col-md-5 mb-2">
           <label class="form-label small mb-1">WhatsApp*</label>
           <input type="tel" name="telefone" class="form-control" required placeholder="(00) 00000-0000" value="{{ dados.get('telefone', '') }}">
         </div>
-        <details class="mb-2" {{ 'open' if dados.get('cep') or dados.get('logradouro') }}>
-          <summary class="form-label small mb-1">Endereço para entrega (opcional)</summary>
-          <div class="row g-2 mt-1">
-            <div class="col-5">
-              <input type="text" name="cep" class="form-control" placeholder="CEP" inputmode="numeric" maxlength="9"
-                     autocomplete="postal-code" data-cep-autofill value="{{ dados.get('cep', '') }}">
-              <span data-cep-status class="small"></span>
-            </div>
-            <div class="col-7"><input type="text" name="logradouro" class="form-control" placeholder="Rua" value="{{ dados.get('logradouro', '') }}"></div>
-            <div class="col-4"><input type="text" name="numero" class="form-control" placeholder="Nº" value="{{ dados.get('numero', '') }}"></div>
-            <div class="col-8"><input type="text" name="complemento" class="form-control" placeholder="Complemento" value="{{ dados.get('complemento', '') }}"></div>
-            <div class="col-12"><input type="text" name="bairro" class="form-control" placeholder="Bairro" value="{{ dados.get('bairro', '') }}"></div>
-            <div class="col-9"><input type="text" name="cidade" class="form-control" placeholder="Cidade" value="{{ dados.get('cidade', '') }}"></div>
-            <div class="col-3"><input type="text" name="uf" class="form-control" placeholder="UF" maxlength="2" style="text-transform:uppercase" value="{{ dados.get('uf', '') }}"></div>
-          </div>
-        </details>
-        <div class="form-check mb-3">
-          <input class="form-check-input" type="checkbox" name="aceita_novidades" id="nov" {{ 'checked' if dados.get('aceita_novidades') }}>
-          <label class="form-check-label small" for="nov">Quero receber novidades e lançamentos</label>
+      </div>
+      <div class="row g-2">
+        <div class="col-md-6 mb-2">
+          <label class="form-label small mb-1">Data de nascimento</label>
+          <input type="text" name="nascimento" class="form-control" placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" value="{{ dados.get('nascimento', '') }}">
         </div>
-        <button class="btn btn-primary w-100">Criar conta</button>
-      </form>
-    </div>
+        <div class="col-md-6 mb-2">
+          <label class="form-label small mb-1">Preferência de tamanho</label>
+          <select name="tamanho_habitual" class="form-select">
+            <option value="" selected>Selecione</option>
+            <option value="PP">PP</option>
+            <option value="P">P</option>
+            <option value="M">M</option>
+            <option value="G">G</option>
+            <option value="GG">GG</option>
+            <option value="XG">XG</option>
+            <option value="">Ainda não sei</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-1">
+        <label class="form-label small mb-1">Senha*</label>
+        <div class="pw-wrap">
+          <input type="password" name="senha" id="cad-senha" class="form-control" required autocomplete="new-password"
+                 data-senha-forte data-checks="#cad-checks" data-submit="#cad-submit">
+          <button type="button" class="pw-eye" data-eye="#cad-senha" aria-label="Mostrar senha"><i class="bi bi-eye"></i></button>
+        </div>
+      </div>
+      <p class="small fw-bold mb-1 mt-2">Sua senha deve conter no mínimo:</p>
+      <div id="cad-checks" class="senha-checks mb-3">
+        <div class="s-chk" data-rule="len"><i class="bi bi-circle"></i> Mínimo de 8 caracteres</div>
+        <div class="s-chk" data-rule="upper"><i class="bi bi-circle"></i> 1 letra maiúscula</div>
+        <div class="s-chk" data-rule="special"><i class="bi bi-circle"></i> 1 caractere especial, como ?-!*$#</div>
+      </div>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="aceita_novidades" id="nov" {{ 'checked' if dados.get('aceita_novidades') }}>
+        <label class="form-check-label small" for="nov">Aceito receber novidades, promoções e informações por e-mail e WhatsApp.</label>
+      </div>
+      <p class="text-muted mb-3" style="font-size:.8rem">
+        Ao se cadastrar, você declara que está ciente dos termos da nossa
+        <a href="{{ url_for('publico.politica_privacidade') }}" target="_blank" rel="noopener" class="link-atelier fw-bold">Política de Privacidade</a>.
+      </p>
+      <button id="cad-submit" class="btn btn-primary w-100" disabled>Criar conta</button>
+    </form>
+    <p class="small mt-3 mb-0">Já tem conta? <a href="{{ url_for('publico.conta_entrar', next=prox) }}" class="link-atelier">Entrar</a>
+      · <a href="{{ url_for('publico.vitrine_v2') }}" class="link-atelier">Voltar à loja</a></p>
   </div>
-</div>
-<script src="{{ url_for('static', filename='js/cep-autofill.js') }}"></script>
-{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vitrine2.css') }}">
+  <script src="{{ url_for('static', filename='js/cpf.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/senha-forte.js') }}"></script>
+  <script>
+    document.querySelectorAll('input[name="nascimento"]').forEach(i => {
+      i.addEventListener('input', () => {
+        let v = i.value.replace(/\D/g, '').slice(0, 8);
+        if (v.length > 4) v = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
+        else if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+        i.value = v;
+      });
+    });
+  </script>
+</body>
+</html>

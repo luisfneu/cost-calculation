@@ -69,15 +69,20 @@ def _exigir_login():
 
 
 @bp.app_context_processor
-def _injetar_leads_pendentes():
-    """Contador de leads pendentes para o badge no menu (só admin)."""
-    if not session.get("admin"):
-        return {}
+def _injetar_pendencias_menu():
+    """Contadores para os badges do menu: leads pendentes (só admin) e
+    pré-pedidos da vitrine aguardando confirmação (todos os usuários — pedido
+    de cliente logado não gera lead, então sem este badge ele passaria
+    despercebido)."""
     from ..models import Lead
+    dados = {}
     try:
-        return {"leads_pendentes": Lead.query.filter_by(status="pendente").count()}
+        dados["pre_pedidos_pendentes"] = Venda.query.filter_by(status="pre-pedido").count()
+        if session.get("admin"):
+            dados["leads_pendentes"] = Lead.query.filter_by(status="pendente").count()
     except Exception:  # noqa: BLE001 - tela de erro não deve quebrar por causa do badge
         return {}
+    return dados
 
 
 # Reexporta helpers para compatibilidade (ex.: testes usam app.routes._pix_payload).

@@ -44,7 +44,7 @@
         <label class="form-label small mb-1">Gênero</label>
         <select name="genero" class="form-select">
           <option value="">—</option>
-          {% for g in ['Feminino', 'Masculino', 'Outro'] %}
+          {% for g in ['Feminino', 'Masculino', 'Outro', 'Prefiro não informar'] %}
             <option value="{{ g }}" {{ 'selected' if cliente.genero == g }}>{{ g }}</option>
           {% endfor %}
         </select>
@@ -66,7 +66,7 @@
         <label class="form-label small mb-1">Tamanho habitual</label>
         <select name="tamanho_habitual" class="form-select">
           <option value="">—</option>
-          {% for t in ['PP', 'P', 'M', 'G', 'GG'] %}
+          {% for t in ['PP', 'P', 'M', 'G', 'GG', 'XG'] %}
             <option value="{{ t }}" {{ 'selected' if cliente.tamanho_habitual == t }}>{{ t }}</option>
           {% endfor %}
         </select>
@@ -103,16 +103,19 @@
           </div>
           <div class="mb-2">
             <label class="form-label small mb-1">Nova senha</label>
-            <input type="password" name="nova_senha" id="s-nova" class="form-control" required minlength="6" autocomplete="new-password">
+            <input type="password" name="nova_senha" id="s-nova" class="form-control" required autocomplete="new-password">
           </div>
           <div class="mb-2">
             <label class="form-label small mb-1">Confirmar nova senha</label>
             <input type="password" name="confirmar_senha" id="s-conf" class="form-control" required autocomplete="new-password">
           </div>
-          <ul class="list-unstyled small mb-0">
-            <li id="chk-len" class="text-muted"><i class="bi bi-circle"></i> pelo menos 6 caracteres</li>
-            <li id="chk-match" class="text-muted"><i class="bi bi-circle"></i> as senhas conferem</li>
-          </ul>
+          <p class="small fw-bold mb-1">Sua senha deve conter no mínimo:</p>
+          <div class="senha-checks mb-0">
+            <div class="s-chk" id="chk-len"><i class="bi bi-circle"></i> Mínimo de 8 caracteres</div>
+            <div class="s-chk" id="chk-upper"><i class="bi bi-circle"></i> 1 letra maiúscula</div>
+            <div class="s-chk" id="chk-special"><i class="bi bi-circle"></i> 1 caractere especial, como ?-!*$#</div>
+            <div class="s-chk" id="chk-match"><i class="bi bi-circle"></i> as senhas conferem</div>
+          </div>
         </div>
         <div class="modal-footer border-0">
           <button type="button" class="btn btn-link text-muted" data-bs-dismiss="modal">cancelar</button>
@@ -129,17 +132,19 @@
   (function () {
     const nova = document.getElementById('s-nova'), conf = document.getElementById('s-conf'),
           atual = document.getElementById('s-atual'), salvar = document.getElementById('s-salvar'),
-          chkLen = document.getElementById('chk-len'), chkMatch = document.getElementById('chk-match');
+          chkLen = document.getElementById('chk-len'), chkUpper = document.getElementById('chk-upper'),
+          chkSpecial = document.getElementById('chk-special'), chkMatch = document.getElementById('chk-match');
     if (!nova) return;
     function marca(el, ok) {
-      el.className = 'small ' + (ok ? 'text-success' : 'text-muted');
+      el.classList.toggle('ok', ok);
       el.querySelector('.bi').className = 'bi ' + (ok ? 'bi-check-circle-fill' : 'bi-circle');
     }
     function checar() {
-      const okLen = nova.value.length >= 6;
-      const okMatch = conf.value.length > 0 && nova.value === conf.value;
-      marca(chkLen, okLen); marca(chkMatch, okMatch);
-      salvar.disabled = !(okLen && okMatch && atual.value.length > 0);
+      const v = nova.value;
+      const okLen = v.length >= 8, okUpper = /[A-Z]/.test(v), okSpecial = /[^A-Za-z0-9]/.test(v);
+      const okMatch = conf.value.length > 0 && v === conf.value;
+      marca(chkLen, okLen); marca(chkUpper, okUpper); marca(chkSpecial, okSpecial); marca(chkMatch, okMatch);
+      salvar.disabled = !(okLen && okUpper && okSpecial && okMatch && atual.value.length > 0);
     }
     [nova, conf, atual].forEach(el => el.addEventListener('input', checar));
   })();

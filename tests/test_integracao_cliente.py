@@ -17,8 +17,8 @@ def test_reivindicar_conta_sem_endereco_preserva_erp(client, app):
 
     cli = app.test_client()  # visitante da vitrine (sem sessão de cliente)
     r = cli.post("/conta/cadastro", data={
-        "nome": "Ana", "email": "ana@ex.com", "senha": "segredo1",
-        "telefone": "51988887777",  # endereço em branco de propósito
+        "nome": "Ana", "email": "ana@ex.com", "senha": "Segredo1!",
+        "telefone": "51988887777", "cpf": "529.982.247-25",  # sem endereço (novo cadastro não pede)
     })
     assert r.status_code in (302, 200)
     with app.app_context():
@@ -29,8 +29,9 @@ def test_reivindicar_conta_sem_endereco_preserva_erp(client, app):
         assert c.cep == "90000-000"
 
 
-def test_reivindicar_conta_com_endereco_atualiza(client, app):
-    """Se o cliente preenche o endereço no cadastro, ele atualiza (não é ignorado)."""
+def test_cadastro_nao_mexe_no_endereco_do_erp(client, app):
+    """Cadastro da vitrine não pede endereço; campos de endereço enviados são
+    ignorados e o endereço do ERP fica intacto (endereço se gerencia na conta)."""
     from app.models import Cliente, db
     with app.app_context():
         c = Cliente(nome="Bia", email="bia@ex.com", telefone="51977776666",
@@ -40,14 +41,14 @@ def test_reivindicar_conta_com_endereco_atualiza(client, app):
 
     cli = app.test_client()
     cli.post("/conta/cadastro", data={
-        "nome": "Bia", "email": "bia@ex.com", "senha": "segredo1",
-        "telefone": "51977776666",
-        "cep": "91000-000", "logradouro": "Rua Nova", "numero": "20",
-        "bairro": "Sarandi", "cidade": "Porto Alegre", "uf": "RS",
+        "nome": "Bia", "email": "bia@ex.com", "senha": "Segredo1!",
+        "telefone": "51977776666", "cpf": "529.982.247-25",
+        "logradouro": "Rua Nova", "cidade": "Porto Alegre",  # devem ser ignorados
     })
     with app.app_context():
         c = Cliente.query.get(cid)
-        assert c.logradouro == "Rua Nova" and c.cidade == "Porto Alegre"
+        assert c.tem_conta is True
+        assert c.logradouro == "Antiga" and c.cidade == "Canoas"
 
 
 def test_confirmar_lead_completa_campos_vazios_sem_sobrescrever(client, app):
@@ -84,8 +85,9 @@ def test_cadastro_vitrine_nao_duplica_cadastro_de_balcao(client, app):
 
     cli = app.test_client()
     cli.post("/conta/cadastro", data={
-        "nome": "Fernando Neu", "email": "luisneu@gmail.com", "senha": "segredo1",
+        "nome": "Fernando Neu", "email": "luisneu@gmail.com", "senha": "Segredo1!",
         "telefone": "(51) 98029-1284",  # mesmo número, formatado diferente
+        "cpf": "529.982.247-25",
     })
     with app.app_context():
         assert Cliente.query.count() == total_antes    # não duplicou

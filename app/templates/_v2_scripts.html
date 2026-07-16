@@ -21,8 +21,209 @@
   </div>
 </div>
 
+<!-- Entrar / cadastrar (favoritar e pedir exigem conta) -->
+<div class="modal fade" id="modal-login" tabindex="-1" aria-labelledby="modal-login-tit" aria-hidden="true">
+  {% set prox = (request.args.get('next') or request.full_path) if request else '' %}
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0" style="overflow:hidden;border-radius:14px">
+      <div class="row g-0">
+        <div class="col-md-5 d-none d-md-flex flex-column justify-content-center text-center p-4"
+             style="background:var(--mocha);color:var(--cream)">
+          <img src="{{ url_for('static', filename='logo-claro.svg') }}" alt="Sabrina Hansen Atelier"
+               style="width:230px;max-width:80%;margin:0 auto 16px" onerror="this.style.display='none'">
+          <h5 style="font-family:var(--fonte-titulo)">Sua conta no ateliê</h5>
+          <p class="small mb-0" style="opacity:.85">Salve seus favoritos e acompanhe seus pedidos.</p>
+        </div>
+        <div class="col-md-7 p-4" style="background:var(--cream);max-height:88vh;overflow-y:auto">
+          <div class="d-flex justify-content-between align-items-start">
+            <h5 class="modal-title" id="modal-login-tit" style="font-family:var(--fonte-titulo)">Entre ou cadastre-se</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+
+          {% with msgs = get_flashed_messages(with_categories=true) %}
+            {% for cat, m in msgs %}<div class="alert alert-{{ 'danger' if cat=='erro' else 'success' }} py-2 mt-3 mb-0">{{ m }}</div>{% endfor %}
+          {% endwith %}
+
+          <!-- Aba: ENTRAR -->
+          <div data-auth-pane="login">
+            <form method="post" action="{{ url_for('publico.conta_entrar') }}" class="mt-3">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ prox }}">
+              <input type="hidden" name="origem" value="modal">
+              <div class="mb-2">
+                <label class="form-label small mb-1">E-mail ou CPF</label>
+                <input type="text" name="email" class="form-control" required autocomplete="username">
+              </div>
+              <div class="mb-2">
+                <label class="form-label small mb-1">Senha</label>
+                <div class="pw-wrap">
+                  <input type="password" name="senha" id="login-senha" class="form-control" required autocomplete="current-password">
+                  <button type="button" class="pw-eye" data-eye="#login-senha" aria-label="Mostrar senha"><i class="bi bi-eye"></i></button>
+                </div>
+              </div>
+              <button class="btn btn-primary w-100 mt-2">Entrar</button>
+            </form>
+            <p class="small mt-3 mb-0">
+              <a href="#" class="link-atelier" data-auth-go="esqueci">Esqueci a senha</a>
+              · Novo por aqui? <a href="#" class="link-atelier fw-bold" data-auth-go="signup">Criar conta</a>
+            </p>
+          </div>
+
+          <!-- Aba: ESQUECI A SENHA -->
+          <div data-auth-pane="esqueci" hidden>
+            <p class="text-muted small mt-3 mb-2">Informe seu e-mail e enviaremos um link para redefinir a senha.</p>
+            <form method="post" action="{{ url_for('publico.conta_esqueci') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="origem" value="modal">
+              <div class="mb-2">
+                <label class="form-label small mb-1">E-mail</label>
+                <input type="email" name="email" class="form-control" required autocomplete="email">
+              </div>
+              <button class="btn btn-primary w-100 mt-2">Enviar link</button>
+            </form>
+            <p class="small mt-3 mb-0 text-center">
+              <a href="#" class="link-atelier" data-auth-go="login"><i class="bi bi-arrow-left"></i> Voltar ao login</a>
+            </p>
+          </div>
+
+          <!-- Aba: CRIAR CONTA -->
+          <div data-auth-pane="signup" hidden>
+            <form method="post" action="{{ url_for('publico.conta_cadastro') }}" class="mt-3">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ prox }}">
+              <input type="hidden" name="origem" value="modal">
+              <div class="mb-2">
+                <input type="text" name="nome" class="form-control" required placeholder="Nome e sobrenome">
+              </div>
+              <div class="mb-2">
+                <input type="text" name="cpf" class="form-control" inputmode="numeric" data-cpf required placeholder="CPF">
+                <div class="invalid-feedback">CPF inválido.</div>
+              </div>
+              <div class="mb-2">
+                <input type="tel" name="telefone" class="form-control" required placeholder="Celular / WhatsApp">
+              </div>
+              <div class="mb-2">
+                <input type="email" name="email" class="form-control" required autocomplete="email" placeholder="E-mail pessoal">
+              </div>
+              <div class="mb-2">
+                <input type="text" name="nascimento" class="form-control" data-nascimento placeholder="Data de Nascimento (dd/mm/aaaa)" inputmode="numeric" maxlength="10">
+              </div>
+              <div class="mb-1">
+                <div class="pw-wrap">
+                  <input type="password" name="senha" id="cad-senha" class="form-control" required placeholder="Senha"
+                         data-senha-forte data-checks="#cad-checks" data-submit="#cad-submit" autocomplete="new-password">
+                  <button type="button" class="pw-eye" data-eye="#cad-senha" aria-label="Mostrar senha"><i class="bi bi-eye"></i></button>
+                </div>
+              </div>
+              <p class="small fw-bold mb-1 mt-2">Sua senha deve conter no mínimo:</p>
+              <div id="cad-checks" class="senha-checks mb-3">
+                <div class="s-chk" data-rule="len"><i class="bi bi-circle"></i> Mínimo de 8 caracteres</div>
+                <div class="s-chk" data-rule="upper"><i class="bi bi-circle"></i> 1 letra maiúscula</div>
+                <div class="s-chk" data-rule="special"><i class="bi bi-circle"></i> 1 caractere especial, como ?-!*$#</div>
+              </div>
+              <div class="mb-2">
+                <select name="tamanho_habitual" class="form-select">
+                  <option value="" selected>Preferência de tamanho</option>
+                  <option value="PP">PP</option>
+                  <option value="P">P</option>
+                  <option value="M">M</option>
+                  <option value="G">G</option>
+                  <option value="GG">GG</option>
+                  <option value="XG">XG</option>
+                  <option value="">Ainda não sei</option>
+                </select>
+              </div>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="aceita_novidades" id="cad-nov" checked>
+                <label class="form-check-label small" for="cad-nov">Aceito receber novidades, promoções e informações por e-mail e WhatsApp.</label>
+              </div>
+              <p class="text-muted mb-3" style="font-size:.8rem">
+                Ao se cadastrar, você declara que está ciente dos termos da nossa
+                <a href="{{ url_for('publico.politica_privacidade') }}" target="_blank" rel="noopener" class="link-atelier fw-bold">Política de Privacidade</a>.
+              </p>
+              <button id="cad-submit" class="btn btn-primary w-100" disabled>Criar conta</button>
+            </form>
+            <p class="small mt-3 mb-0 text-center">Já tem uma conta?
+              <a href="#" class="link-atelier fw-bold" data-auth-go="login">Clique aqui para entrar</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.SH_LOGGED = {{ 'true' if cliente_logado else 'false' }};
+  window.SH_FAVS_SYNC = {{ url_for('publico.conta_favoritos_sync') | tojson }};
+  window.SH_PECAS_INFO = {{ url_for('publico.pecas_info') | tojson }};
+</script>
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/cpf.js') }}"></script>
+<script src="{{ url_for('static', filename='js/senha-forte.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vitrine-favs.js') }}"></script>
+<script>
+  // Ao sair da conta: limpa favoritos e carrinho do navegador (localStorage) para
+  // não vazar os dados do cliente que saiu para o próximo (badge zera).
+  document.addEventListener('click', function (e) {
+    const a = e.target.closest('a[href]');
+    if (!a || a.getAttribute('href').indexOf('/conta/sair') === -1) return;
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k === 'sh_favs' || k.indexOf('sh_favs') === 0
+            || k === 'sh_cart_v1' || k.indexOf('sh_cart_v1') === 0) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (err) { /* localStorage indisponível: ignora */ }
+    // deixa a navegação seguir para o logout normalmente
+  });
+
+  // Tooltips no mesmo padrão do ERP (Bootstrap exige init manual).
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    bootstrap.Tooltip.getOrCreateInstance(el);
+  });
+</script>
+<script>
+  // Alterna abas Entrar / Criar conta dentro do modal.
+  (function () {
+    const modal = document.getElementById('modal-login');
+    if (!modal) return;
+    const panes = modal.querySelectorAll('[data-auth-pane]');
+    function mostrar(qual) {
+      panes.forEach(p => { p.hidden = p.dataset.authPane !== qual; });
+    }
+    modal.addEventListener('click', e => {
+      const g = e.target.closest('[data-auth-go]');
+      if (!g) return;
+      e.preventDefault();
+      mostrar(g.dataset.authGo);
+    });
+    // Trigger pode pedir a aba de cadastro: data-auth-open="signup".
+    modal.addEventListener('show.bs.modal', e => {
+      const alvo = e.relatedTarget && e.relatedTarget.dataset ? e.relatedTarget.dataset.authOpen : null;
+      mostrar(alvo === 'signup' ? 'signup' : 'login');
+    });
+    // Redirecionado com ?login=... → abre a modal já na aba certa.
+    // 1 → entrar · cadastro → criar conta · esqueci → esqueci a senha.
+    if (window.SH_LOGGED === false && window.bootstrap) {
+      const alvo = new URLSearchParams(location.search).get('login');
+      const abas = { '1': 'login', 'cadastro': 'signup', 'esqueci': 'esqueci' };
+      if (abas[alvo]) {
+        mostrar(abas[alvo]);
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+      }
+    }
+    // Máscara simples de data dd/mm/aaaa.
+    modal.querySelectorAll('input[data-nascimento]').forEach(i => {
+      i.addEventListener('input', () => {
+        let v = i.value.replace(/\D/g, '').slice(0, 8);
+        if (v.length > 4) v = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
+        else if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+        i.value = v;
+      });
+    });
+  })();
+</script>
 
 {% include "_carrinho.html" %}
 {% if whatsapp %}
@@ -40,6 +241,7 @@
       frete: {{ url_for('publico.frete_publico') | tojson }},
       cupom: {{ url_for('publico.cupom_publico') | tojson }},
       pedido: {{ url_for('publico.pedido_publico') | tojson }},
+      carrinho: {{ url_for('publico.conta_carrinho_sync') | tojson }},
     },
     contaSair: {{ url_for('publico.conta_sair') | tojson }},
   };

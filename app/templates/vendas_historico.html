@@ -6,8 +6,8 @@
   <a href="{{ url_for('main.registrar_venda') }}" class="btn btn-primary">+ Nova venda</a>
 </div>
 
-{% set rotulos = {'realizado':'Pago','pago':'Enviado','enviado':'Entregue'} %}
-{% set cores = {'pre-pedido':'text-bg-warning','realizado':'text-bg-secondary','pago':'text-bg-info','crediario':'text-bg-info','enviado':'text-bg-primary','entregue':'text-bg-success'} %}
+{# Cor da bolinha (grupo) da jornada: recebido, pagamento, recibo, envio, transporte, entregue #}
+{% set cores_grupo = ['text-bg-secondary','text-bg-info','text-bg-info','text-bg-primary','text-bg-primary','text-bg-success'] %}
 
 <div class="card bg-white">
   <div class="card-body">
@@ -53,7 +53,12 @@
           </td>
           <td>{% if v.cliente %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=v.cliente.id) }}" class="link-atelier">{{ v.cliente.nome }}</a>{% else %}{{ v.cliente_nome or '—' }}{% endif %}</td>
           <td>
-            <span class="badge {{ cores[v.status] }}">{{ v.estado_label }}</span>
+            {% if v.eh_pre_pedido %}
+              <span class="badge text-bg-warning">Pré-pedido</span>
+            {% else %}
+              <span class="badge {{ cores_grupo[v.grupo_atual] }}">{{ v.etapa_label }}</span>
+            {% endif %}
+            {% if v.eh_crediario and v.saldo_receber > 0.01 %}<span class="badge text-bg-light border">crediário</span>{% endif %}
             {% if v.tipo == 'encomenda' %}<span class="badge text-bg-warning">encomenda</span>{% endif %}
           </td>
           <td class="fw-bold">{{ v.receita | moeda }}</td>
@@ -70,10 +75,10 @@
         <tr class="stepper-row">
           <td colspan="6" class="pt-0">
             <div class="stepper mini">
-              {% for et in v.fluxo_etapas %}
-                <div class="step {{ 'concluido' if et.concluido }} {{ 'atual' if et.atual }}">
-                  <div class="step-circulo">{% if et.concluido %}✓{% else %}{{ loop.index }}{% endif %}</div>
-                  <div class="step-label">{{ et.label }}</div>
+              {% for g in v.GRUPOS %}
+                <div class="step {{ 'concluido' if loop.index0 < v.grupo_atual }} {{ 'atual' if loop.index0 == v.grupo_atual }}">
+                  <div class="step-circulo">{% if loop.index0 < v.grupo_atual %}✓{% else %}{{ loop.index }}{% endif %}</div>
+                  <div class="step-label">{{ g }}</div>
                 </div>
               {% endfor %}
             </div>

@@ -52,7 +52,7 @@ from ..models import (
     dinheiro,
 )
 
-__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes', '_limpar_cache_vitrine']
+__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_item_baixa_estoque', '_liberar_reservas_pre_pedido', '_notificar_pedido_novo', '_avisar_favoritos_voltou', '_avisar_favoritos_promocao', '_notificar_etapa_cliente', '_link_publico', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes', '_limpar_cache_vitrine']
 
 
 def _limpar_cache_vitrine():
@@ -82,11 +82,20 @@ def _log(acao, detalhe=""):
 
 
 def _to_float(valor, padrao=0.0):
-    """Converte string de formulário em float, aceitando vírgula decimal."""
+    """Converte string de formulário em float, aceitando vírgula decimal e
+    ponto de milhar brasileiro ("1.200" = 1200; "1.200,50" = 1200.5).
+
+    Sem vírgula, um ponto seguido de exatamente 3 dígitos é tratado como
+    milhar — exceto começando com "0." ("0.500" = 0.5, quantidade decimal)."""
     if valor is None or str(valor).strip() == "":
         return padrao
+    s = str(valor).strip()
     try:
-        return float(str(valor).replace(".", "").replace(",", ".")) if "," in str(valor) else float(valor)
+        if "," in s:
+            return float(s.replace(".", "").replace(",", "."))
+        if re.fullmatch(r"-?(?!0\.)\d{1,3}(\.\d{3})+", s):
+            return float(s.replace(".", ""))
+        return float(s)
     except ValueError:
         return padrao
 
@@ -116,9 +125,30 @@ def _salvar_foto(arquivo):
     nome = f"{uuid.uuid4().hex}.{ext}"
     caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
     arquivo.save(caminho)
+    if not _imagem_valida(caminho):
+        # Conteúdo não é imagem (só a extensão era) — não hospedar arquivo
+        # arbitrário em static/uploads.
+        os.remove(caminho)
+        flash("O arquivo enviado não é uma imagem válida.", "erro")
+        return None
     _otimizar_imagem(caminho)
     _gerar_thumbnail(nome)      # miniatura leve para a grade da vitrine
     return nome
+
+
+def _imagem_valida(caminho):
+    """Confere se o conteúdo do arquivo é imagem de verdade (não só a extensão).
+    Sem Pillow instalado, aceita (best-effort, como a otimização)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return True
+    try:
+        with Image.open(caminho) as img:
+            img.verify()
+        return True
+    except Exception:  # noqa: BLE001 - qualquer falha de decodificação = não é imagem
+        return False
 
 
 def _otimizar_imagem(caminho, lado_max=1200):
@@ -225,6 +255,147 @@ def _paginar(itens, por_pagina=None):
     return itens[ini:ini + pp], pagina, total
 
 
+def _notificar_pedido_novo(venda, resumo):
+    """E-maila o ateliê quando entra pedido pela vitrine (se configurado em
+    Configurações → E-mail de avisos). Assíncrono — não atrasa o checkout."""
+    from markupsafe import escape
+
+    from ..emails import email_configurado, enviar_email_async
+    destino = Parametro.obter("aviso_email", "").strip()
+    if not destino or not email_configurado():
+        return
+    link = url_for("main.visualizar_venda", venda_id=venda.id, _external=True)
+    html = (
+        f"<h3>Novo pedido na vitrine — #{venda.id}</h3>"
+        f"<p><strong>Cliente:</strong> {escape(venda.cliente_nome or '—')}</p>"
+        f"<pre style='font-family:inherit;white-space:pre-wrap'>{escape(resumo)}</pre>"
+        f"<p><a href='{escape(link)}'>Abrir o pedido no sistema</a></p>"
+    )
+    enviar_email_async(destino, f"Novo pedido #{venda.id} na vitrine", html)
+
+
+def _avisar_favoritos_voltou(peca, disponivel_antes):
+    """Avisa por e-mail quem favoritou a peça quando ela SAI de indisponível
+    (0) para disponível (>0) na vitrine pública. Só clientes com conta, e-mail
+    e opt-in de novidades. A transição evita spam a cada entrada de estoque."""
+    if disponivel_antes > 0 or peca.disponivel_total <= 0 or not peca.vitrine_publica:
+        return
+    from ..emails import email_configurado, enviar_email_async
+    if not email_configurado():
+        return
+    from markupsafe import escape
+    interessados = [
+        c for c in Cliente.query.filter(
+            Cliente.email.isnot(None), Cliente.aceita_novidades.is_(True),
+            Cliente.favoritos_json != "").all()
+        if peca.id in c.favoritos_ids
+    ]
+    if not interessados:
+        return
+    base_publica = Parametro.obter("vitrine_url", "").strip().rstrip("/")
+    caminho = url_for("publico.peca_publica", peca_id=peca.id)
+    link = (base_publica + caminho) if base_publica else url_for(
+        "publico.peca_publica", peca_id=peca.id, _external=True)
+    for c in interessados:
+        html = (
+            f"<p>Olá, {escape(c.nome)}!</p>"
+            f"<p>A peça <strong>{escape(peca.nome)}</strong> que você favoritou "
+            f"voltou a ficar disponível na loja.</p>"
+            f"<p><a href='{escape(link)}'>Ver a peça</a></p>"
+            f"<p>Sabrina Hansen Atelier 💛</p>"
+        )
+        enviar_email_async(c.email, f"Voltou! {peca.nome} disponível na loja", html)
+
+
+def _link_publico(caminho):
+    """URL pública absoluta: usa vitrine_url configurada, senão o host atual."""
+    base = Parametro.obter("vitrine_url", "").strip().rstrip("/")
+    if base:
+        return base + caminho
+    return request.url_root.rstrip("/") + caminho
+
+
+def _avisar_favoritos_promocao(peca, em_promocao_antes):
+    """Avisa quem favoritou quando a peça ENTRA em promoção (transição)."""
+    if em_promocao_antes or not peca.em_promocao or not peca.vitrine_publica:
+        return
+    from ..emails import email_configurado, enviar_email_async
+    if not email_configurado():
+        return
+    from markupsafe import escape
+    interessados = [
+        c for c in Cliente.query.filter(
+            Cliente.email.isnot(None), Cliente.aceita_novidades.is_(True),
+            Cliente.favoritos_json != "").all()
+        if peca.id in c.favoritos_ids
+    ]
+    link = _link_publico(url_for("publico.peca_publica", peca_id=peca.id))
+    for c in interessados:
+        html = (
+            f"<p>Olá, {escape(c.nome)}!</p>"
+            f"<p><strong>{escape(peca.nome)}</strong>, que você favoritou, entrou em promoção: "
+            f"de {_brl(peca.preco_base)} por <strong>{_brl(peca.preco_etiqueta_efetivo)}</strong>.</p>"
+            f"<p><a href='{escape(link)}'>Ver a peça</a></p><p>Sabrina Hansen Atelier 💛</p>"
+        )
+        enviar_email_async(c.email, f"Promoção! {peca.nome} com desconto", html)
+
+
+# Etapas cuja mudança gera e-mail ao cliente (marcos que interessam).
+_ETAPAS_NOTIFICAVEIS = {"pgto_aprovado", "na_transportadora", "saiu_entrega", "entregue"}
+
+
+def _notificar_etapa_cliente(venda, etapa_antes):
+    """E-maila o cliente quando a etapa do pedido avança para um marco
+    (pagamento aprovado, enviado, saiu para entrega, entregue). Inclui o
+    código de rastreio quando houver. Chamar DEPOIS do commit."""
+    if venda.etapa_pedido == etapa_antes or venda.etapa_pedido not in _ETAPAS_NOTIFICAVEIS:
+        return
+    cliente = venda.cliente
+    if not cliente or not cliente.email:
+        return
+    from ..emails import email_configurado, enviar_email_async
+    if not email_configurado():
+        return
+    from markupsafe import escape
+    link = _link_publico(url_for("publico.conta_pedido_detalhe", venda_id=venda.id))
+    rastreio = ""
+    if venda.rastreio and venda.etapa_pedido in ("na_transportadora", "saiu_entrega"):
+        url_rast = f"https://www.melhorrastreio.com.br/rastreio/{venda.rastreio}"
+        rastreio = (f"<p>Código de rastreio: <strong>{escape(venda.rastreio)}</strong> — "
+                    f"<a href='{escape(url_rast)}'>acompanhar</a></p>")
+    html = (
+        f"<p>Olá, {escape(cliente.nome)}!</p>"
+        f"<p>Seu pedido <strong>#{venda.id}</strong> avançou: "
+        f"<strong>{escape(venda.etapa_label)}</strong>.</p>"
+        f"{rastreio}"
+        f"<p><a href='{escape(link)}'>Ver o pedido</a></p><p>Sabrina Hansen Atelier 💛</p>"
+    )
+    enviar_email_async(cliente.email, f"Pedido #{venda.id}: {venda.etapa_label}", html)
+
+
+def _liberar_reservas_pre_pedido(venda):
+    """Devolve ao disponível as reservas feitas na criação do pré-pedido
+    (itens não-'produzir'). Chamar ao confirmar, descartar ou excluir um
+    pré-pedido. Clampa em 0 para pré-pedidos antigos (criados sem reserva)."""
+    for it in venda.itens:
+        if it.produzir:
+            continue
+        linha = _linha_estoque_peca(it.peca, it.tamanho)
+        if linha and linha.reservado > 0:
+            linha.reservado = max(0.0, linha.reservado - it.quantidade)
+
+
+def _item_baixa_estoque(it):
+    """True se o item sai do estoque pronto (baixa/estorno se aplicam a ele).
+
+    Itens 'produzir' (faltantes de pedido da vitrine) e itens já produzidos
+    direto para o cliente (insumo_baixado) nunca passam pelo estoque da peça:
+    os insumos são consumidos ao marcar 'produzido' e a peça vai ao cliente sem
+    entrada/saída de estoque. Baixar ou estornar esses itens criaria estoque
+    fantasma ou consumo em dobro."""
+    return not it.produzir and not it.insumo_baixado
+
+
 def _validar_estoque_pecas(agrupado):
     """Retorna lista de faltas (strings) para {(peca_id, tamanho): qtd}.
     Considera o estoque disponível (quantidade − reservado)."""
@@ -239,8 +410,11 @@ def _validar_estoque_pecas(agrupado):
 
 
 def _baixar_estoque_venda(venda):
-    """Dá baixa no estoque das peças de uma venda (marca estoque_baixado)."""
+    """Dá baixa no estoque das peças de uma venda (marca estoque_baixado).
+    Itens de produção direta (_item_baixa_estoque False) são ignorados."""
     for it in venda.itens:
+        if not _item_baixa_estoque(it):
+            continue
         linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
         linha.quantidade -= it.quantidade
         db.session.add(MovimentoPeca(
@@ -251,8 +425,11 @@ def _baixar_estoque_venda(venda):
 
 
 def _restaurar_estoque_venda(venda):
-    """Devolve ao estoque as peças de uma venda (desfaz a baixa)."""
+    """Devolve ao estoque as peças de uma venda (desfaz a baixa).
+    Itens de produção direta nunca saíram do estoque — não são devolvidos."""
     for it in venda.itens:
+        if not _item_baixa_estoque(it):
+            continue
         linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
         linha.quantidade += it.quantidade
         db.session.add(MovimentoPeca(
@@ -509,7 +686,13 @@ def _processar_pedido(modo):
     cod = request.form.get("cupom", "").strip().upper()
     if cod:
         cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == cod).first()
-        if cupom and cupom.valido:
+        # Cupom pessoal só vale para o cliente dono (a prévia JS já valida, mas
+        # o submit direto precisa da mesma regra — senão vaza desconto exclusivo).
+        if cupom and cupom.valido and cupom.cliente_id and cupom.cliente_id != venda.cliente_id:
+            dono = cupom.cliente.nome if cupom.cliente else "outro cliente"
+            flash(f"Cupom '{cod}' é pessoal de {dono} — ignorado. "
+                  "Selecione esse cliente na venda para usá-lo.", "erro")
+        elif cupom and cupom.valido:
             if cupom.tipo == "frete":
                 # Desconto sobre o frete efetivamente cobrado (0 se já é cortesia)
                 # — mantém venda.frete como registro do valor nominal do envio.
@@ -525,6 +708,7 @@ def _processar_pedido(modo):
     if modo == "venda":
         # Venda: pedido é fechado sem pagamento (status "Pedido feito"); baixa estoque.
         _baixar_estoque_venda(venda)
+        venda.sincronizar_etapa()   # jornada acompanha o status desde a criação
         db.session.commit()
         _log("venda", f"pedido #{venda.id} registrado ({_brl(venda.receita)})")
         flash("Pedido registrado. Agora registre o pagamento.", "sucesso")
@@ -533,9 +717,11 @@ def _processar_pedido(modo):
     # Encomenda: mantém pagamento no cadastro e não baixa estoque.
     _aplicar_pagamentos(venda, _pagamentos_do_form())
     venda.estoque_baixado = False
+    venda.sincronizar_etapa()   # jornada acompanha o status desde a criação
     db.session.commit()
     _log("encomenda", f"encomenda #{venda.id} registrada ({_brl(venda.receita)})")
-    flash("Encomenda registrada. Produza as peças e use 'Baixar estoque'.", "sucesso")
+    flash("Encomenda registrada. Marque os itens como produzidos na tela "
+          "Encomendas (isso baixa os insumos da ficha técnica).", "sucesso")
     return redirect(url_for("main.listar_encomendas"))
 
 
@@ -713,11 +899,14 @@ def _salvar_itens_kit(kit):
         kit.itens.append(KitItem(peca_id=pid, quantidade=qtd))
 
 
-def _frete_opcoes(cep_destino, peso_g=0.0, altura_cm=0.0, largura_cm=0.0, comprimento_cm=0.0):
+def _frete_opcoes(cep_destino, peso_g=0.0, altura_cm=0.0, largura_cm=0.0,
+                  comprimento_cm=0.0, valor_seguro=0.0):
     """Consulta o Melhor Envio e devolve (opcoes, erro).
 
     opcoes: lista de {nome, preco, prazo, rapido?} (a mais rápida + as mais baratas).
     erro:   mensagem (str) ou None. Dimensões em 0 caem para um padrão razoável.
+    valor_seguro: valor declarado da mercadoria — quando > 0, o pedido é segurado
+                  (o preço cotado já vem com o seguro embutido). 0 = sem seguro.
     """
     import json
     import urllib.request
@@ -741,6 +930,14 @@ def _frete_opcoes(cep_destino, peso_g=0.0, altura_cm=0.0, largura_cm=0.0, compri
             "length": float(comprimento_cm) or 30,
         },
     }
+    # Seguro: valor declarado da mercadoria. Sempre segura quando há valor; o preço
+    # cotado já vem com o seguro embutido. Sem valor (carrinho vazio) → sem seguro.
+    try:
+        seguro = round(float(valor_seguro or 0), 2)
+    except (TypeError, ValueError):
+        seguro = 0.0
+    if seguro > 0:
+        payload["options"] = {"insurance_value": seguro, "receipt": False, "own_hand": False}
     req = urllib.request.Request(
         "https://melhorenvio.com.br/api/v2/me/shipment/calculate",
         data=json.dumps(payload).encode(),
@@ -753,7 +950,7 @@ def _frete_opcoes(cep_destino, peso_g=0.0, altura_cm=0.0, largura_cm=0.0, compri
         # ProxyHandler({}) explícito: NÃO consulta o proxy do sistema (evita o
         # crash de fork-safety do Obj-C no macOS dentro do worker do Gunicorn).
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(req, timeout=15) as resp:
+        with opener.open(req, timeout=8) as resp:
             dados = json.loads(resp.read())
     except Exception as e:  # noqa: BLE001
         return [], f"Falha ao consultar frete: {e}"

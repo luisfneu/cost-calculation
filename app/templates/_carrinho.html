@@ -58,11 +58,12 @@
       <div id="cart-form" hidden class="mt-3 border-top pt-3">
         <div id="pc-conta-banner" hidden class="alert alert-light border py-1 px-2 small mb-2"></div>
         <div id="pc-conta-cta" hidden class="small text-muted mb-2">
-          Já é cliente? <a href="{{ url_for('publico.conta_entrar') }}">Entrar</a> para preencher automático — ou continue como convidado.
+          Já é cliente? <a href="{{ url_for('publico.conta_entrar') }}" data-bs-toggle="modal" data-bs-target="#modal-login">Entrar</a> para preencher automático — ou continue como convidado.
         </div>
         <h6 class="mb-2"><i class="bi bi-person-lines-fill"></i> Seus dados</h6>
         <input type="text" id="pc-nome" class="form-control form-control-sm mb-2" placeholder="Nome completo *" autocomplete="name" aria-label="Nome completo">
         <input type="text" id="pc-whats" class="form-control form-control-sm mb-2" placeholder="WhatsApp com DDD *" inputmode="tel" autocomplete="tel" aria-label="WhatsApp com DDD">
+        <input type="email" id="pc-email" class="form-control form-control-sm mb-2" placeholder="E-mail (para acompanhar o pedido)" autocomplete="email" aria-label="E-mail">
         <input type="text" id="pc-insta" class="form-control form-control-sm mb-2" placeholder="Instagram (opcional)" aria-label="Instagram">
         <div class="row g-2">
           <div class="col-8"><input type="text" id="pc-logradouro" class="form-control form-control-sm mb-2" placeholder="Rua / Av." aria-label="Rua ou avenida"></div>

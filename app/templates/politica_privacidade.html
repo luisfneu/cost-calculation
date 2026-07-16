@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de Privacidade · Sabrina Hansen Atelier</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <style>
+    body { background: var(--cream); font-family: var(--fonte-corpo); color: var(--ink); }
+    .pp-head { background: var(--ink); color: var(--cream); padding: 22px 0; }
+    .pp-wrap { max-width: 820px; margin: 0 auto; padding: 0 18px; }
+    .pp-body { padding: 32px 0 60px; }
+    .pp-body h2 { font-family: var(--fonte-titulo); font-size: 1.25rem; margin: 26px 0 8px; }
+    .pp-body p, .pp-body li { line-height: 1.6; }
+    .pp-body ul { padding-left: 1.1rem; }
+    .pp-meta { color: var(--ink-soft); font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <div class="pp-head">
+    <div class="pp-wrap d-flex align-items-center justify-content-between">
+      <a href="{{ url_for('publico.vitrine_v2') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="color:var(--cream)">
+        <img src="{{ url_for('static', filename='monograma.svg') }}" alt="sh" style="height:34px">
+        <span style="font-family:var(--fonte-titulo);font-size:1.05rem">Sabrina Hansen Atelier</span>
+      </a>
+      <a href="{{ url_for('publico.vitrine_v2') }}" class="btn btn-sm btn-outline-light"><i class="bi bi-arrow-left"></i> Voltar à loja</a>
+    </div>
+  </div>
+
+  <div class="pp-wrap pp-body">
+    <h1 style="font-family:var(--fonte-titulo)">Política de Privacidade</h1>
+    <p class="pp-meta">Última atualização: {{ atualizado_em }}</p>
+
+    <p>O <strong>Sabrina Hansen Atelier</strong> ("nós") respeita a sua privacidade e se
+    compromete a proteger os dados pessoais que você compartilha ao usar nossa loja
+    on-line. Esta política explica quais dados coletamos, como os usamos e quais são
+    os seus direitos, em conformidade com a <strong>Lei Geral de Proteção de Dados
+    (Lei nº 13.709/2018 – LGPD)</strong>.</p>
+
+    <h2>1. Dados que coletamos</h2>
+    <ul>
+      <li><strong>Cadastro:</strong> nome, CPF, e-mail, telefone/WhatsApp, data de
+        nascimento e preferências informadas por você.</li>
+      <li><strong>Endereço:</strong> quando você o cadastra para entrega ou cobrança.</li>
+      <li><strong>Pedidos:</strong> itens escolhidos, valores, histórico de compras e
+        comunicações de atendimento.</li>
+      <li><strong>Uso do site:</strong> dados técnicos básicos (como itens favoritados,
+        armazenados no seu navegador) para melhorar sua experiência.</li>
+    </ul>
+
+    <h2>2. Para que usamos seus dados</h2>
+    <ul>
+      <li>Criar e gerenciar sua conta e autenticar seu acesso.</li>
+      <li>Processar pedidos, calcular frete, combinar entrega e pagamento.</li>
+      <li>Prestar atendimento e enviar informações sobre seus pedidos.</li>
+      <li>Com seu consentimento, enviar novidades e promoções por e-mail e WhatsApp.</li>
+      <li>Cumprir obrigações legais, fiscais e de defesa em processos.</li>
+    </ul>
+
+    <h2>3. Base legal</h2>
+    <p>Tratamos seus dados com base na <strong>execução de contrato</strong> (para
+    concluir sua compra), no <strong>consentimento</strong> (para comunicações de
+    marketing, que você pode retirar a qualquer momento), no <strong>cumprimento de
+    obrigação legal</strong> e no <strong>legítimo interesse</strong> de operar e
+    melhorar a loja.</p>
+
+    <h2>4. Compartilhamento</h2>
+    <p>Não vendemos seus dados. Compartilhamos apenas o necessário com parceiros que
+    viabilizam o serviço, por exemplo: transportadoras e serviços de cálculo de frete,
+    provedor de e-mail e ferramentas de mensagens. Também podemos divulgar dados
+    quando exigido por lei ou autoridade competente.</p>
+
+    <h2>5. Cookies e armazenamento local</h2>
+    <p>Usamos cookies e o armazenamento local do navegador para manter sua sessão,
+    lembrar seu carrinho e seus favoritos. Você pode limpá-los nas configurações do
+    seu navegador, ciente de que isso pode afetar o funcionamento da loja.</p>
+
+    <h2>6. Seus direitos</h2>
+    <p>Nos termos da LGPD, você pode solicitar: confirmação e acesso aos seus dados,
+    correção de dados incompletos ou desatualizados, anonimização ou eliminação,
+    portabilidade, informação sobre compartilhamento e revogação do consentimento.
+    Para exercê-los, fale conosco pelos canais abaixo.</p>
+
+    <h2>7. Segurança e retenção</h2>
+    <p>Adotamos medidas técnicas e organizacionais para proteger seus dados (como
+    senhas armazenadas de forma criptografada). Mantemos os dados apenas pelo tempo
+    necessário às finalidades acima ou conforme exigido por lei.</p>
+
+    <h2>8. Contato</h2>
+    <p>Dúvidas ou solicitações sobre seus dados podem ser enviadas pelo nosso
+    {% if whatsapp %}<a href="https://wa.me/{{ whatsapp }}" class="link-atelier" target="_blank" rel="noopener">WhatsApp</a>{% else %}canal de atendimento por WhatsApp{% endif %}.</p>
+
+    <h2>9. Alterações desta política</h2>
+    <p>Podemos atualizar esta política periodicamente. A data da última revisão é
+    sempre indicada no topo. Alterações relevantes serão comunicadas pelos nossos
+    canais.</p>
+  </div>
+</body>
+</html>

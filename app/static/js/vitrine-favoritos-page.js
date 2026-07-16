@@ -19,17 +19,18 @@
     const tams = p.tamanhos.map(x =>
       `<option value="${x.t}" data-disp="${x.disp ? 1 : 0}">${x.t}${x.disp ? '' : ' (sob encomenda)'}</option>`).join('');
     const preco = (p.preco_de ? `<span class="favg-de">${fmt(p.preco_de)}</span>` : '') + `<span>${fmt(p.preco)}</span>`;
+    const hover = p.esgotado
+      ? '<span class="badge text-bg-secondary">Esgotado</span>'
+      : `<select class="form-select form-select-sm favg-tam" aria-label="Tamanho">`
+        + `<option value="">Tam…</option>${tams}</select>`
+        + `<button type="button" class="btn btn-sm btn-primary favg-buy">Comprar</button>`;
     return `
-      <div class="favg-card" data-id="${p.id}">
+      <div class="favg-card${p.esgotado ? ' favg-esgotado' : ''}" data-id="${p.id}">
         <div class="favg-thumb">
           <button type="button" class="favg-x" data-rem aria-label="Remover">✕</button>
+          ${p.esgotado ? '<span class="favg-badge-esgot badge text-bg-secondary">Esgotado</span>' : ''}
           <a href="${p.url}">${p.foto ? `<img src="${p.foto}" alt="" loading="lazy">` : ''}</a>
-          <div class="favg-hover">
-            <select class="form-select form-select-sm favg-tam" aria-label="Tamanho">
-              <option value="">Tam…</option>${tams}
-            </select>
-            <button type="button" class="btn btn-sm btn-primary favg-buy">Comprar</button>
-          </div>
+          <div class="favg-hover">${hover}</div>
         </div>
         <div class="favg-nome"><a href="${p.url}" class="text-reset text-decoration-none">${p.nome}</a></div>
         <div class="favg-preco mt-1">${preco}</div>
@@ -69,6 +70,7 @@
     const id = card.dataset.id;
     if (e.target.closest('[data-rem]')) {
       const favs = lerFavs(); delete favs[id]; salvarFavs(favs);
+      if (window.SHFavs) SHFavs.sync('replace');   // remove também da conta
       atualizarBadge(Object.keys(favs).length);
       card.remove();
       const n = grid.querySelectorAll('.favg-card').length;
@@ -78,6 +80,7 @@
     }
     if (e.target.closest('.favg-buy')) {
       const p = grid._pecas && grid._pecas[id];
+      if (!p || p.esgotado) return;
       const sel = card.querySelector('.favg-tam');
       if (!p || !sel.value) { sel.classList.add('is-invalid'); setTimeout(() => sel.classList.remove('is-invalid'), 1200); return; }
       const opt = sel.options[sel.selectedIndex];
@@ -88,4 +91,6 @@
   });
 
   carregar();
+  // Sincronização com a conta terminou (merge de outro aparelho): recarrega a grade.
+  document.addEventListener('sh:favs-atualizados', carregar);
 })();

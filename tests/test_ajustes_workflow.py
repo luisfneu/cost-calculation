@@ -62,7 +62,7 @@ def test_reivindicar_bloqueia_quando_dados_nao_conferem(app):
         db.session.add(c); db.session.commit()
     cli = app.test_client()
     cli.post("/conta/cadastro", data={
-        "nome": "Atacante", "email": "dona@ex.com", "senha": "segredo1",
+        "nome": "Atacante", "email": "dona@ex.com", "senha": "Segredo1!",
         "telefone": "51999999999",  # telefone diferente do cadastro
     })
     with app.app_context():

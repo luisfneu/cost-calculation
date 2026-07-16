@@ -96,7 +96,10 @@ def listar_encomendas():
 @bp.route("/encomendas/item/<int:item_id>/produzido", methods=["POST"])
 def marcar_item_produzido(item_id):
     item = VendaItem.query.get_or_404(item_id)
-    _aplicar_producao_item(item, not item.produzido)
+    if not _aplicar_producao_item(item, not item.produzido):
+        flash("Este item saiu do estoque pronto (a venda já baixou o estoque) — "
+              "marcar como produzido consumiria os insumos em dobro.", "erro")
+        return redirect(request.referrer or url_for("main.listar_encomendas"))
     db.session.commit()
     estado = "produzido" if item.produzido else "reaberto"
     _log("producao_encomenda", f"item #{item.id} ({item.peca.nome}) {estado}")
@@ -106,7 +109,14 @@ def marcar_item_produzido(item_id):
 def _aplicar_producao_item(item, produzido):
     """Marca/desmarca um item de encomenda como produzido, baixando (ou estornando)
     os insumos da ficha uma única vez — idempotente via item.insumo_baixado.
-    Não faz commit (o chamador decide)."""
+    Não faz commit (o chamador decide).
+
+    Retorna False (sem alterar nada) ao tentar produzir um item que já saiu do
+    estoque pronto (venda com estoque baixado e item não-'produzir'): a peça do
+    estoque já consumiu insumos quando foi produzida — marcar 'produzido' aqui
+    consumiria os insumos em dobro."""
+    if produzido and item.venda.estoque_baixado and not item.produzir and not item.insumo_baixado:
+        return False
     if produzido and not item.insumo_baixado:
         for pi in item.peca.insumos:
             _registrar_movimento(
@@ -124,6 +134,7 @@ def _aplicar_producao_item(item, produzido):
             )
         item.insumo_baixado = False
     item.produzido = produzido
+    return True
 
 
 @bp.route("/encomendas/produzir-lote", methods=["POST"])
@@ -131,17 +142,23 @@ def produzir_lote():
     """Marca vários itens de encomenda como produzidos de uma vez."""
     ids = request.form.getlist("item_ids", type=int)
     itens = VendaItem.query.filter(VendaItem.id.in_(ids)).all() if ids else []
-    n = 0
+    n = bloqueados = 0
     for item in itens:
-        if not item.produzido:
-            _aplicar_producao_item(item, True)
+        if item.produzido:
+            continue
+        if _aplicar_producao_item(item, True):
             n += 1
+        else:
+            bloqueados += 1
     if n:
         db.session.commit()
         _log("producao_encomenda_lote", f"{n} item(ns) marcados como produzido")
         flash(f"{n} item(ns) marcados como produzido.", "sucesso")
-    else:
+    elif not bloqueados:
         flash("Nenhum item pendente selecionado.", "erro")
+    if bloqueados:
+        flash(f"{bloqueados} item(ns) ignorado(s): já saíram do estoque pronto "
+              "(estoque da venda já baixado).", "erro")
     return redirect(url_for("main.listar_encomendas"))
 
 
@@ -158,9 +175,17 @@ def baixar_estoque_venda(venda_id):
     if venda.estoque_baixado:
         flash("Estoque desta venda já foi baixado.", "erro")
         return redirect(request.referrer or url_for("main.listar_vendas"))
+    # Só itens que saem do estoque pronto — os de produção direta (produzir /
+    # insumo já baixado) não entram na baixa nem na validação.
     agrup = {}
     for it in venda.itens:
+        if not _item_baixa_estoque(it):
+            continue
         agrup[(it.peca_id, it.tamanho)] = agrup.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
+    if not agrup:
+        flash("Nada a baixar: os itens deste pedido são de produção direta "
+              "(marque-os como produzidos em Encomendas).", "erro")
+        return redirect(request.referrer or url_for("main.listar_vendas"))
     faltando = _validar_estoque_pecas(agrup)
     if faltando:
         flash("Sem estoque para baixar: " + "; ".join(faltando) + ". Produza as peças primeiro.", "erro")
@@ -179,24 +204,48 @@ def confirmar_pedido(venda_id):
     if venda.status != "pre-pedido":
         flash("Este pedido já foi confirmado.", "erro")
         return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
-    baixou = False
+    # Libera as reservas do pré-pedido primeiro — senão a própria reserva
+    # derrubaria o "disponível" na revalidação abaixo.
+    _liberar_reservas_pre_pedido(venda)
+    # Revalida a disponibilidade AGORA (pode ter vendido no balcão desde o
+    # pré-pedido). Item sem estoque suficiente vira 'produzir' em vez de deixar
+    # o estoque negativo em silêncio.
+    disponiveis = {}
+    movidos = 0
     for it in venda.itens:
         if it.produzir:
             continue   # item de encomenda: baixa/produz depois (tela de Encomendas)
+        chave = (it.peca_id, it.tamanho)
+        if chave not in disponiveis:
+            disponiveis[chave] = it.peca.disponivel_por_tamanho.get(it.tamanho, 0.0)
+        if it.quantidade > disponiveis[chave]:
+            it.produzir = True
+            movidos += 1
+            continue
+        disponiveis[chave] -= it.quantidade
         linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
         linha.quantidade -= it.quantidade
         db.session.add(MovimentoPeca(
             peca=it.peca, tamanho=it.tamanho, tipo="saida", quantidade=it.quantidade,
             observacao=f"Venda #{venda.id} (vitrine)",
         ))
-        baixou = True
-    venda.estoque_baixado = baixou
+    # Contabilidade de estoque concluída: itens em estoque baixados; itens
+    # 'produzir' seguem via Encomendas e nunca passam pelo estoque da peça.
+    venda.estoque_baixado = True
     venda.status = "realizado"
     venda.sincronizar_etapa()
+    # Consome o uso do cupom só agora (pedido efetivado) — pré-pedido descartado
+    # não queima o limite de usos do cupom.
+    if venda.cupom_codigo:
+        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == venda.cupom_codigo.upper()).first()
+        if cupom:
+            cupom.usos += 1
     db.session.commit()
     _log("pedido_confirmado", f"pré-pedido #{venda.id} confirmado")
     n_prod = len(venda.itens_a_produzir)
     extra = f" · {n_prod} item(ns) para produzir em Encomendas" if n_prod else ""
+    if movidos:
+        extra += f" ({movidos} sem estoque desde o pedido — foram para produção)"
     flash(f"Pedido #{venda.id} confirmado{extra}.", "sucesso")
     return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
 
@@ -218,26 +267,68 @@ def alterar_status_venda(venda_id, novo):
     if novo in ("enviado", "entregue") and venda.saldo_receber > 0.01 and not venda.eh_crediario:
         flash("Registre o pagamento antes de enviar/entregar o pedido.", "erro")
         return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+    etapa_antes = venda.etapa_pedido
     venda.status = novo
     # Crediário: o 'pago' fica a cargo do pagamento das parcelas (não força aqui).
     if not venda.eh_crediario:
-        venda.pago = novo in ("pago", "enviado", "entregue")
+        # Com pagamentos registrados, o 'pago' segue o que foi de fato recebido
+        # (voltar o status não "despaga" a venda). Sem pagamentos, comportamento
+        # legado: a flag acompanha o status.
+        venda.pago = venda.quitado if venda.pagamentos else novo in ("pago", "enviado", "entregue")
     venda.sincronizar_etapa()
     db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
     flash(f"Pedido #{venda.id}: {venda.status_label}.", "sucesso")
     return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
 
 
 @bp.route("/vendas/<int:venda_id>/etapa/<direcao>", methods=["POST"])
 def avancar_etapa_pedido(venda_id, direcao):
-    """Avança/volta a etapa da jornada do pedido (stepper que o cliente vê)."""
+    """Avança/volta a etapa da jornada do pedido — controle ÚNICO de status.
+    O `status` de negócio é derivado da etapa (Venda.sincronizar_status)."""
     venda = Venda.query.get_or_404(venda_id)
-    if direcao == "avancar" and venda.proxima_etapa:
-        venda.etapa_pedido = venda.proxima_etapa
+    if venda.eh_pre_pedido:
+        flash("Confirme o pré-pedido antes de avançar a jornada.", "erro")
+        return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+    etapa_antes = venda.etapa_pedido
+    if direcao == "avancar":
+        prox = venda.proxima_etapa
+        if not prox:
+            return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+        grupo_prox = Venda.grupo_da_etapa(prox)
+        pago_ok = venda.saldo_receber <= 0.01 or venda.eh_crediario
+        # Não cruza o pagamento sem estar pago (o pagamento avança a jornada sozinho).
+        if prox == "pgto_aprovado" and not pago_ok:
+            flash("Registre o pagamento para aprovar o pedido.", "erro")
+            return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+        # Não entra em envio/transporte/entrega sem pagar e sem concluir a produção.
+        if grupo_prox >= 3 and not pago_ok:
+            flash("Registre o pagamento antes de enviar/entregar o pedido.", "erro")
+            return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+        if grupo_prox >= 3 and venda.producao_pendente:
+            flash("Há itens de encomenda ainda não produzidos. Conclua a produção antes de enviar.", "erro")
+            return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+        venda.etapa_pedido = prox
     elif direcao == "voltar" and venda.etapa_anterior:
         venda.etapa_pedido = venda.etapa_anterior
+    venda.sincronizar_status()      # etapa é o campo mestre → deriva o status
     db.session.commit()
-    _log("pedido_etapa", f"venda #{venda.id} → {venda.etapa_label}")
+    _notificar_etapa_cliente(venda, etapa_antes)
+    _log("pedido_etapa", f"venda #{venda.id} → {venda.etapa_label} ({venda.status})")
+    return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
+
+
+@bp.route("/vendas/<int:venda_id>/rastreio", methods=["POST"])
+def salvar_rastreio(venda_id):
+    """Grava o código de rastreio do envio (aparece no pedido do cliente)."""
+    venda = Venda.query.get_or_404(venda_id)
+    venda.rastreio = request.form.get("rastreio", "").strip()[:60]
+    db.session.commit()
+    if venda.rastreio:
+        _log("rastreio", f"pedido #{venda.id}: {venda.rastreio}")
+        flash("Código de rastreio salvo — o cliente já vê no pedido.", "sucesso")
+    else:
+        flash("Código de rastreio removido.", "sucesso")
     return redirect(request.referrer or url_for("main.visualizar_venda", venda_id=venda.id))
 
 
@@ -282,12 +373,40 @@ def editar_venda(venda_id):
         flash(erro, "erro")
         return _re_render()
 
-    # Ajusta o estoque só se a venda já tinha estoque baixado.
+    # Flags de produção dos itens atuais, por (peça, tamanho) — preservadas na
+    # edição para o item não sumir de Encomendas nem "esquecer" insumo já baixado.
+    flags = {}
+    produzidas = {}   # qtd já produzida sob encomenda, por (peça, tamanho)
+    for it in venda.itens:
+        flags.setdefault((it.peca_id, it.tamanho), {
+            "produzir": it.produzir, "produzido": it.produzido,
+            "insumo_baixado": it.insumo_baixado,
+            # Snapshot do custo na época da venda — editar não reescreve o
+            # lucro histórico com o custo atual da peça.
+            "custo_unitario": it.custo_unitario,
+        })
+        if it.insumo_baixado:
+            chave = (it.peca_id, it.tamanho)
+            produzidas[chave] = produzidas.get(chave, 0.0) + it.quantidade
+
+    def _linha_baixa_estoque(linha):
+        f = flags.get((linha["peca"].id, linha["tamanho"]))
+        return f is None or (not f["produzir"] and not f["insumo_baixado"])
+
+    # Pré-pedido: solta as reservas dos itens antigos (as novas são refeitas
+    # depois que os itens forem recriados).
+    if venda.eh_pre_pedido:
+        _liberar_reservas_pre_pedido(venda)
+
+    # Ajusta o estoque só se a venda já tinha estoque baixado. Itens de produção
+    # direta ficam fora dos dois lados da conta (nunca saíram do estoque).
     if venda.estoque_baixado:
         retornos = {}
         for it in venda.itens:
+            if not _item_baixa_estoque(it):
+                continue
             retornos[(it.peca_id, it.tamanho)] = retornos.get((it.peca_id, it.tamanho), 0.0) + it.quantidade
-        necessarios = _agrupar(linhas)
+        necessarios = _agrupar([l for l in linhas if _linha_baixa_estoque(l)])
         for (pid, tam), need in necessarios.items():
             peca = Peca.query.get(pid)
             linha = _linha_estoque_peca(peca, tam)
@@ -314,11 +433,44 @@ def editar_venda(venda_id):
         db.session.delete(it)
     venda.itens = []
     for l in linhas:
+        f = flags.get((l["peca"].id, l["tamanho"]), {})
         db.session.add(VendaItem(
             venda=venda, peca=l["peca"], tamanho=l["tamanho"],
             quantidade=l["quantidade"], preco_unitario=l["preco"],
-            desconto=l["desconto"], custo_unitario=l["peca"].custo_total,
+            desconto=l["desconto"],
+            custo_unitario=f.get("custo_unitario", l["peca"].custo_total),
+            produzir=f.get("produzir", False), produzido=f.get("produzido", False),
+            insumo_baixado=f.get("insumo_baixado", False),
         ))
+
+    # Pré-pedido editado: refaz as reservas conforme os itens novos.
+    if venda.eh_pre_pedido:
+        for l in linhas:
+            f = flags.get((l["peca"].id, l["tamanho"]), {})
+            if not f.get("produzir", False):
+                linha_est = _linha_estoque_peca(l["peca"], l["tamanho"], criar=True)
+                linha_est.reservado += l["quantidade"]
+
+    # Peça produzida sob encomenda que saiu da venda (item removido ou quantidade
+    # reduzida) existe fisicamente — entra no estoque. Insumos ficam consumidos.
+    restantes = {}
+    for l in linhas:
+        f = flags.get((l["peca"].id, l["tamanho"]), {})
+        if f.get("insumo_baixado"):
+            chave = (l["peca"].id, l["tamanho"])
+            restantes[chave] = restantes.get(chave, 0.0) + l["quantidade"]
+    for (pid, tam), qtd_antiga in produzidas.items():
+        sobra = qtd_antiga - restantes.get((pid, tam), 0.0)
+        if sobra <= 0:
+            continue
+        peca = Peca.query.get(pid)
+        linha_est = _linha_estoque_peca(peca, tam, criar=True)
+        linha_est.quantidade += sobra
+        db.session.add(MovimentoPeca(
+            peca=peca, tamanho=tam, tipo="producao", quantidade=sobra,
+            observacao=f"Edição da venda #{venda.id}: peça produzida sob encomenda entrou no estoque",
+        ))
+
     cid = request.form.get("cliente_id", type=int)
     venda.frete = dinheiro(_to_float(request.form.get("frete")))
     venda.frete_cortesia = request.form.get("frete_cortesia") == "on"
@@ -341,16 +493,36 @@ def editar_venda(venda_id):
 
 @bp.route("/vendas/<int:venda_id>/excluir", methods=["POST"])
 def excluir_venda(venda_id):
+    # Destrutivo (apaga histórico e mexe em estoque): só admin.
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     venda = Venda.query.get_or_404(venda_id)
+    # Pré-pedido: devolve ao disponível o que foi reservado na criação.
+    if venda.eh_pre_pedido:
+        _liberar_reservas_pre_pedido(venda)
     # Devolve ao estoque só se a venda tinha baixado estoque (não é orçamento/encomenda).
     if venda.estoque_baixado:
         for it in venda.itens:
+            if not _item_baixa_estoque(it):
+                continue  # produção direta: nunca saiu do estoque, nada a devolver
             linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
             linha.quantidade += it.quantidade
             db.session.add(MovimentoPeca(
                 peca=it.peca, tamanho=it.tamanho, tipo="estorno", quantidade=it.quantidade,
                 observacao=f"Estorno por exclusão de venda #{venda.id}",
             ))
+    # Itens produzidos sob encomenda existem fisicamente: sem a venda, a peça
+    # entra no estoque. Os insumos ficam consumidos (foram usados de verdade).
+    for it in venda.itens:
+        if not it.insumo_baixado:
+            continue
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade += it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="producao", quantidade=it.quantidade,
+            observacao=f"Venda #{venda.id} excluída: peça produzida sob encomenda entrou no estoque",
+        ))
     vid = venda.id
     db.session.delete(venda)
     db.session.commit()
@@ -363,6 +535,10 @@ def excluir_venda(venda_id):
 def marcar_pago(venda_id):
     """Quita a venda: registra um pagamento para o saldo restante."""
     venda = Venda.query.get_or_404(venda_id)
+    if venda.eh_pre_pedido:
+        flash("Confirme o pré-pedido antes de registrar pagamento.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+    etapa_antes = venda.etapa_pedido
     saldo = venda.saldo_receber
     if saldo > 0:
         db.session.add(Pagamento(
@@ -372,7 +548,9 @@ def marcar_pago(venda_id):
     venda.pago = True
     if venda.status == "realizado":
         venda.status = "pago"
+    venda.sincronizar_etapa()   # o stepper do cliente avança junto
     db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
     flash(f"Venda #{venda.id} quitada.", "sucesso")
     return redirect(request.referrer or url_for("main.contabilidade"))
 
@@ -381,16 +559,25 @@ def marcar_pago(venda_id):
 def receber_pagamento(venda_id):
     """Registra um pagamento parcial (ex.: recebimento do saldo de um sinal)."""
     venda = Venda.query.get_or_404(venda_id)
+    if venda.eh_pre_pedido:
+        flash("Confirme o pré-pedido antes de registrar pagamento.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+    etapa_antes = venda.etapa_pedido
     valor = _to_float(request.form.get("valor"))
     forma = request.form.get("forma", "").strip() or "Dinheiro"
     if valor <= 0:
         flash("Informe um valor maior que zero.", "erro")
         return redirect(request.referrer or url_for("main.contabilidade"))
+    # total_pago já inclui o pagamento recém-criado (entra em venda.pagamentos
+    # na construção) — somar `valor` de novo contaria em dobro e marcaria como
+    # paga uma venda com pagamento parcial.
     db.session.add(Pagamento(venda=venda, forma=forma, valor=valor))
-    venda.pago = (venda.total_pago + valor) >= venda.receita - 0.01
+    venda.pago = venda.total_pago >= venda.receita - 0.01
     if venda.pago and venda.status == "realizado":
         venda.status = "pago"
+    venda.sincronizar_etapa()
     db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
     flash(f"Pagamento de {valor:.2f} registrado no pedido #{venda.id}.", "sucesso")
     return redirect(request.referrer or url_for("main.contabilidade"))
 
@@ -400,7 +587,11 @@ def receber_pagamentos(venda_id):
     """Adiciona pagamentos (múltiplas formas). Só dinheiro pode exceder o saldo
     (o excesso vira troco). Formas eletrônicas não podem passar do saldo."""
     venda = Venda.query.get_or_404(venda_id)
+    if venda.eh_pre_pedido:
+        flash("Confirme o pré-pedido antes de registrar pagamento.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
 
+    etapa_antes = venda.etapa_pedido
     # Crediário: cobre todo o saldo em parcelas (não marca como pago).
     formas = request.form.getlist("pag_forma")
     if "Crediário" in formas:
@@ -413,6 +604,7 @@ def receber_pagamentos(venda_id):
         _gerar_parcelas(venda, total, n, inicio)
         if venda.status == "realizado":
             venda.status = "crediario"
+        venda.sincronizar_etapa()
         db.session.commit()
         _log("crediario", f"pedido #{venda.id}: {n}x de {_brl(total / n)}")
         flash(f"Crediário criado: {n} parcela(s). O pedido foi liberado e as parcelas "
@@ -449,7 +641,9 @@ def receber_pagamentos(venda_id):
     venda.pago = venda.total_pago >= venda.receita - 0.01
     if venda.pago and venda.status == "realizado":
         venda.status = "pago"
+    venda.sincronizar_etapa()
     db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
     total_novos = sum(p["valor"] for p in novos)
     _log("pagamento", f"pedido #{venda.id}: {_brl(total_novos)}")
     msg = f"Pagamento registrado (R$ {total_novos:.2f})."
@@ -467,6 +661,7 @@ def calcular_frete():
         altura_cm=_to_float(request.form.get("altura")),
         largura_cm=_to_float(request.form.get("largura")),
         comprimento_cm=_to_float(request.form.get("comprimento")),
+        valor_seguro=_to_float(request.form.get("valor")),  # sempre segura pelo valor do pedido
     )
     if erro:
         codigo = 400 if "config" in erro or "CEP" in erro else 502
@@ -505,6 +700,9 @@ def validar_cupom():
 
 @bp.route("/cupons/novo", methods=["POST"])
 def salvar_cupom():
+    bloqueio = _exigir_admin()   # cupom = política de desconto: só admin
+    if bloqueio:
+        return bloqueio
     codigo = request.form.get("codigo", "").strip().upper()
     if not codigo:
         flash("Informe o código do cupom.", "erro")
@@ -528,6 +726,9 @@ def salvar_cupom():
 
 @bp.route("/cupons/<int:cupom_id>/toggle", methods=["POST"])
 def toggle_cupom(cupom_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     c = Cupom.query.get_or_404(cupom_id)
     c.ativo = not c.ativo
     db.session.commit()
@@ -536,6 +737,9 @@ def toggle_cupom(cupom_id):
 
 @bp.route("/cupons/<int:cupom_id>/excluir", methods=["POST"])
 def excluir_cupom(cupom_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
     c = Cupom.query.get_or_404(cupom_id)
     db.session.delete(c)
     db.session.commit()
@@ -579,6 +783,10 @@ def desativar_vale(vale_id):
 @bp.route("/vendas/<int:venda_id>/usar-vale", methods=["POST"])
 def usar_vale(venda_id):
     venda = Venda.query.get_or_404(venda_id)
+    if venda.eh_pre_pedido:
+        flash("Confirme o pré-pedido antes de registrar pagamento.", "erro")
+        return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
+    etapa_antes = venda.etapa_pedido
     cod = request.form.get("codigo", "").strip().upper()
     vale = Vale.query.filter(db.func.upper(Vale.codigo) == cod).first()
     if not vale or not vale.disponivel:
@@ -593,7 +801,9 @@ def usar_vale(venda_id):
     venda.pago = venda.total_pago >= venda.receita - 0.01
     if venda.pago and venda.status == "realizado":
         venda.status = "pago"
+    venda.sincronizar_etapa()
     db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
     flash(f"Vale {vale.codigo} aplicado: R$ {aplicado:.2f} (saldo do vale: R$ {vale.saldo:.2f}).", "sucesso")
     return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
 
@@ -621,9 +831,12 @@ def devolucao_venda(venda_id):
         flash("Selecione ao menos um item e quantidade para devolver.", "erro")
         return redirect(url_for("main.devolucao_venda", venda_id=venda.id))
 
-    # Devolve ao estoque e reduz a quantidade do item na venda.
+    # Devolve ao estoque e reduz a quantidade do item na venda. A peça devolvida
+    # entra no estoque se saiu da prateleira (estoque baixado) OU se foi produzida
+    # sob encomenda (existe fisicamente). Item ainda não produzido não credita.
     for it, qtd, _vu in itens_devolvidos:
-        if venda.estoque_baixado:
+        veio_do_estoque = venda.estoque_baixado and _item_baixa_estoque(it)
+        if veio_do_estoque or it.insumo_baixado:
             linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
             linha.quantidade += qtd
             db.session.add(MovimentoPeca(
@@ -642,6 +855,13 @@ def devolucao_venda(venda_id):
         observacao=f"Devolução do pedido #{venda.id}",
     )
     db.session.add(vale)
+    # A receita mudou: recalcula o 'pago' (pagamento parcial pode agora cobrir
+    # o que restou) e alinha a etapa do pedido.
+    db.session.flush()
+    venda.pago = venda.total_pago >= venda.receita - 0.01
+    if venda.pago and venda.status == "realizado":
+        venda.status = "pago"
+    venda.sincronizar_etapa()
     db.session.commit()
     flash(f"Devolução registrada. Vale-troca {vale.codigo} gerado: R$ {total_credito:.2f}.", "sucesso")
     return redirect(url_for("main.listar_vales"))

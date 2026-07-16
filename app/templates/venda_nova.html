@@ -290,7 +290,7 @@
     const PEC = dadosPec ? JSON.parse(dadosPec.textContent) : [];
     const achaPec = id => PEC.find(p => String(p.id) === String(id));
     const nf = v => parseFloat(String(v || '0').replace(',', '.')) || 0;
-    let peso = 0, altura = 0, largura = 0, comprimento = 0;
+    let peso = 0, altura = 0, largura = 0, comprimento = 0, valor = 0;
     document.querySelectorAll('.item-row').forEach(tr => {
       const p = achaPec(tr.querySelector('.picker-value') && tr.querySelector('.picker-value').value);
       const qtd = nf(tr.querySelector('.in-qtd') && tr.querySelector('.in-qtd').value);
@@ -299,11 +299,15 @@
       altura += (p.altura_cm || 0) * qtd;            // empilha as peças
       largura = Math.max(largura, p.largura_cm || 0);
       comprimento = Math.max(comprimento, p.comprimento_cm || 0);
+      // Valor do seguro = preço da linha (ou o preço da peça, se em branco) × qtd.
+      const precoLinha = nf(tr.querySelector('.in-preco') && tr.querySelector('.in-preco').value) || (p.preco || 0);
+      valor += precoLinha * qtd;
     });
     fd.append('peso', peso);                 // g (backend converte p/ kg)
     fd.append('altura', altura);             // cm
     fd.append('largura', largura);           // cm
     fd.append('comprimento', comprimento);   // cm
+    fd.append('valor', valor);               // seguro (valor declarado)
 
     const resp = await fetch("{{ url_for('main.calcular_frete') }}", { method: 'POST', body: fd });
     const d = await resp.json();
