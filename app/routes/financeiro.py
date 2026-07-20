@@ -7,7 +7,7 @@ import os
 import re
 import unicodedata
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -65,7 +65,35 @@ def _eh_compra(mov):
 
 @bp.route("/contabilidade")
 def contabilidade():
+    # Filtro por período (de/até). Atalhos pré-preenchem as datas. Aceita ?mes= antigo.
+    hoje = date.today()
+    de = _to_date(request.args.get("de", ""))
+    ate = _to_date(request.args.get("ate", ""))
     mes = request.args.get("mes", "").strip()
+    if not de and not ate:
+        if mes:                                  # link antigo por mês → vira intervalo do mês
+            try:
+                y, m = (int(x) for x in mes.split("-"))
+                de = date(y, m, 1)
+                ate = (date(y + m // 12, m % 12 + 1, 1) - timedelta(days=1))
+            except (ValueError, TypeError):
+                de = ate = None
+        if not de:                               # default: este mês (do dia 1 até hoje)
+            de, ate = hoje.replace(day=1), hoje
+    de = de or (ate.replace(day=1) if ate else hoje.replace(day=1))
+    ate = ate or hoje
+    if de > ate:
+        de, ate = ate, de
+
+    # Atalhos de período (label -> (de, ate)) para os botões.
+    ini_mes = hoje.replace(day=1)
+    fim_mes_passado = ini_mes - timedelta(days=1)
+    presets = [
+        ("Hoje", hoje, hoje),
+        ("7 dias", hoje - timedelta(days=6), hoje),
+        ("Este mês", ini_mes, hoje),
+        ("Mês passado", fim_mes_passado.replace(day=1), fim_mes_passado),
+    ]
 
     vendas = Venda.query.filter(Venda.status != "pre-pedido").order_by(Venda.criado_em).all()
     compras = [
@@ -78,19 +106,27 @@ def contabilidade():
     def _compra_valor(c):
         return c.valor if c.custo_unitario else c.quantidade * c.insumo.custo_unitario
 
-    # Meses disponíveis (dos dados) para o filtro.
-    meses = sorted(
-        {_mes_de(v.criado_em) for v in vendas} | {_mes_de(c.criado_em) for c in compras}
-        | {_mes_de(d.criado_em) for d in despesas},
-        reverse=True,
-    )
+    # Timestamps são gravados em UTC; converte para o fuso do ateliê (mesmo do
+    # filtro | dt) antes de comparar, senão "hoje" erra perto da meia-noite.
+    from datetime import UTC as _UTC
 
-    def no_mes(dt):
-        return (not mes) or _mes_de(dt) == mes
+    from .. import _fuso_atual
+    _tz = _fuso_atual()
 
-    vendas_f = [v for v in vendas if no_mes(v.criado_em)]
-    compras_f = [c for c in compras if no_mes(c.criado_em)]
-    despesas_f = [d for d in despesas if no_mes(d.criado_em)]
+    def no_periodo(dt):
+        if not dt:
+            return False
+        if hasattr(dt, "tzinfo"):
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_UTC)
+            d = dt.astimezone(_tz).date()
+        else:
+            d = dt
+        return de <= d <= ate
+
+    vendas_f = [v for v in vendas if no_periodo(v.criado_em)]
+    compras_f = [c for c in compras if no_periodo(c.criado_em)]
+    despesas_f = [d for d in despesas if no_periodo(d.criado_em)]
 
     # Razão (ledger) unificado: vendas = entrada, compras/despesas = saída.
     ledger = []
@@ -123,6 +159,12 @@ def contabilidade():
     saidas_total = saidas_insumos + saidas_despesas
     lucro = sum(v.lucro for v in vendas_f)
 
+    # Saldo de caixa ACUMULADO (todo o histórico, ignora o filtro de período) —
+    # dá a saúde financeira ao longo do tempo.
+    recebido_geral = sum(v.total_pago for v in vendas)
+    saidas_geral = sum(_compra_valor(c) for c in compras) + sum(d.valor for d in despesas if d.pago)
+    saldo_acumulado = recebido_geral - saidas_geral
+
     # Recebido por forma de pagamento (a partir dos pagamentos).
     formas = {}
     for v in vendas_f:
@@ -146,7 +188,8 @@ def contabilidade():
         "recebido": recebido,
         "a_receber": a_receber,
         "saidas": saidas_total,
-        "saldo": recebido - saidas_total,
+        "saldo": recebido - saidas_total,          # resultado do período
+        "saldo_acumulado": saldo_acumulado,        # caixa ao longo do tempo
         "lucro": lucro,
         "n_vendas": len(vendas_f),
         "ticket": (sum(v.receita for v in vendas_f) / len(vendas_f)) if vendas_f else 0.0,
@@ -154,9 +197,15 @@ def contabilidade():
         "a_pagar_total": sum(d.valor for d in a_pagar),
     }
 
+    presets_ctx = [{"label": lb, "de": d0.isoformat(), "ate": d1.isoformat(),
+                    "ativo": (d0 == de and d1 == ate)} for lb, d0, d1 in presets]
+
     return render_template(
         "contabilidade.html", ledger=ledger, kpis=kpis, formas=formas,
-        pendentes=pendentes, a_pagar=a_pagar, meses=meses, mes_atual=mes, mes_label=_mes_label,
+        pendentes=pendentes, a_pagar=a_pagar,
+        de=de.isoformat(), ate=ate.isoformat(), presets=presets_ctx,
+        compras_total=saidas_insumos, n_compras=len(compras_f),
+        despesas_total=saidas_despesas,
         pagina=pagina, total_paginas=total_paginas, total_movimentos=total_movimentos,
     )
 

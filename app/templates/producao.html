@@ -5,7 +5,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Ordens de produção</h1>
   <div class="d-flex gap-2">
-    <a href="{{ url_for('main.inventario') }}" class="btn btn-outline-secondary btn-sm">← Inventário</a>
+    <a href="{{ url_for('main.inventario') }}" class="btn btn-link px-0">← Inventário</a>
     <a href="{{ url_for('main.nova_ordem_from_minimos') }}" class="btn btn-outline-primary btn-sm">Gerar dos mínimos</a>
   </div>
 </div>
@@ -23,7 +23,7 @@
         <thead class="table-light"><tr><th style="width:55%">Peça</th><th>Tamanho</th><th>Qtd</th><th></th></tr></thead>
         <tbody class="op-linhas"></tbody>
       </table>
-      <button type="button" class="btn btn-outline-primary btn-sm mb-3 op-add">+ Adicionar peça</button>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-3 op-add"><i class="bi bi-plus-lg"></i> Adicionar peça</button>
       <div class="text-end"><button class="btn btn-primary">Criar ordem</button></div>
     </form>
     {% else %}
@@ -46,7 +46,7 @@
           <td data-label="Peças">{{ o.total_unidades|int }}</td>
           <td data-label="Status">{% if o.status == 'aberta' %}<span class="badge text-bg-primary">Aberta</span>{% else %}<span class="badge text-bg-success">Concluída</span>{% endif %}</td>
           <td data-label="Criada" class="small text-muted">{{ o.criado_em | dt }}</td>
-          <td class="text-end"><a href="{{ url_for('main.detalhe_ordem', ordem_id=o.id) }}" class="btn btn-sm btn-outline-primary">Abrir</a></td>
+          <td class="text-end"><a href="{{ url_for('main.detalhe_ordem', ordem_id=o.id) }}" class="btn btn-sm btn-outline-primary" title="Abrir ordem"><i class="bi bi-eye"></i></a></td>
         </tr>
       {% endfor %}
       </tbody>
@@ -84,7 +84,7 @@
       </td>
       <td><select name="tamanho" class="form-select form-select-sm">${TAMS.map(t => `<option value="${t}">${t}</option>`).join('')}</select></td>
       <td><input type="text" name="quantidade" class="form-control form-control-sm" value="1" style="width:70px"></td>
-      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger op-rem">×</button></td>`;
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger op-rem" title="Remover"><i class="bi bi-x-lg"></i></button></td>`;
     tbody.appendChild(tr);
   }
 

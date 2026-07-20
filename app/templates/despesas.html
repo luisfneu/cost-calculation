@@ -49,10 +49,10 @@
           <td data-label="Status">{% if d.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}</td>
           <td class="text-end text-nowrap">
             <form method="post" action="{{ url_for('main.pagar_despesa', despesa_id=d.id) }}" class="d-inline">
-              <button class="btn btn-sm btn-outline-success">{{ 'desmarcar' if d.pago else '✓ pago' }}</button>
+              <button class="btn btn-sm btn-outline-success">{% if d.pago %}desmarcar{% else %}<i class="bi bi-check-lg"></i> pago{% endif %}</button>
             </form>
             <form method="post" action="{{ url_for('main.excluir_despesa', despesa_id=d.id) }}" class="d-inline" data-confirm="Excluir despesa?">
-              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+              <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
             </form>
           </td>
         </tr>

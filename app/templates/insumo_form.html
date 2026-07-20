@@ -12,9 +12,11 @@
   <div class="row">
     <div class="col-md-6 mb-3">
       <label class="form-label">Tipo de insumo</label>
-      <select name="tipo" class="form-select">
-        <option value="materia_prima" {{ 'selected' if not insumo or insumo.tipo == 'materia_prima' }}>Matéria-prima</option>
-        <option value="embalagem" {{ 'selected' if insumo and insumo.tipo == 'embalagem' }}>Embalagem</option>
+      <select name="tipo" id="insumo-tipo" class="form-select">
+        {% set t = insumo.tipo if insumo else 'tecido' %}
+        <option value="tecido" {{ 'selected' if t == 'tecido' }}>Tecido</option>
+        <option value="aviamento" {{ 'selected' if t == 'aviamento' }}>Aviamento</option>
+        <option value="embalagem" {{ 'selected' if t == 'embalagem' }}>Embalagem</option>
       </select>
     </div>
     <div class="col-md-6 mb-3">
@@ -23,24 +25,36 @@
              value="{{ insumo.fornecedor if insumo else '' }}" placeholder="Ex.: Armarinho Central...">
     </div>
   </div>
+  <div class="row tecido-only" id="campo-composicao" {{ 'hidden' if (insumo.tipo if insumo else 'tecido') != 'tecido' }}>
+    <div class="col-md-8 mb-3">
+      <label class="form-label">Composição do tecido {{ ui.ajuda('Ex.: 95% algodão, 5% elastano. Só para insumos do tipo Tecido.') }}</label>
+      <input type="text" name="composicao" class="form-control"
+             value="{{ insumo.composicao if insumo else '' }}" placeholder="Ex.: 95% algodão, 5% elastano">
+    </div>
+    <div class="col-md-4 mb-3">
+      <label class="form-label">Largura (cm) {{ ui.ajuda('Largura do rolo de tecido. Informativo, não entra em cálculo por enquanto.') }}</label>
+      <input type="text" name="largura" class="form-control" inputmode="decimal"
+             value="{{ insumo.largura_cm | num if insumo and insumo.largura_cm else '' }}" placeholder="Ex.: 150">
+    </div>
+  </div>
   {{ ui.foto_unica(insumo.foto if insumo else '', 'Foto do insumo') }}
   <div class="row">
     <div class="col-md-6 mb-3">
       <label class="form-label">Unidade de medida</label>
-      <input type="text" name="unidade" class="form-control"
-             value="{{ insumo.unidade if insumo else 'un' }}" placeholder="un, m, kg, rolo...">
+      <input type="text" name="unidade" id="insumo-unidade" class="form-control"
+             value="{{ insumo.unidade if insumo else 'm' }}" placeholder="un, m, kg, rolo...">
     </div>
     <div class="col-md-6 mb-3">
       <label class="form-label">Custo por unidade (R$)</label>
-      <input type="text" name="custo_unitario" class="form-control"
-             value="{{ insumo.custo_unitario if insumo else '' }}" placeholder="0,00">
+      <input type="text" name="custo_unitario" id="insumo-custo" class="form-control" data-mask="money"
+             inputmode="numeric" value="{{ ('%.2f'|format(insumo.custo_unitario))|replace('.', ',') if insumo and insumo.custo_unitario else '' }}" placeholder="0,00">
     </div>
   </div>
   <div class="row">
     {% if not insumo %}
     <div class="col-md-6 mb-3">
       <label class="form-label">Estoque inicial</label>
-      <input type="text" name="estoque" class="form-control" placeholder="0">
+      <input type="text" name="estoque" id="insumo-estoque" class="form-control" inputmode="decimal" placeholder="0">
     </div>
     {% endif %}
     <div class="col-md-6 mb-3">
@@ -59,9 +73,57 @@
   {% if insumo %}
   <p class="small text-muted">O estoque atual ({{ insumo.estoque | num }} {{ insumo.unidade }}) é ajustado pelos movimentos de entrada/saída na lista de insumos.</p>
   {% endif %}
+
+  <!-- Total do que está em estoque: quantidade × custo unitário. -->
+  <div class="d-flex justify-content-between align-items-center border-top pt-3 mb-3"
+       id="total-cadastro" data-estoque="{{ insumo.estoque if insumo else 0 }}">
+    <span class="text-muted"><span id="total-formula">—</span></span>
+    <span class="fs-5"><span class="text-muted small">Total: </span><strong id="total-valor">R$ 0,00</strong></span>
+  </div>
+
   <div>
     <button class="btn btn-primary">Salvar</button>
     <a href="{{ url_for('main.listar_insumos') }}" class="btn btn-link">Cancelar</a>
   </div>
 </form>
+<script>
+  (function () {
+    const tipo = document.getElementById('insumo-tipo');
+    const uni = document.getElementById('insumo-unidade');
+    const custo = document.getElementById('insumo-custo');
+    const estoque = document.getElementById('insumo-estoque');   // só no cadastro novo
+    const totalBox = document.getElementById('total-cadastro');
+    const totalVal = document.getElementById('total-valor');
+    const totalForm = document.getElementById('total-formula');
+    const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Custo é sempre "centavos": dígitos/100 (independe da máscara já ter rodado).
+    function custoFloat() { return (parseInt((custo.value || '').replace(/\D/g, ''), 10) || 0) / 100; }
+    function estoqueFloat() {
+      const v = estoque ? estoque.value : (totalBox ? totalBox.dataset.estoque : '0');
+      return parseFloat(String(v || '0').replace(',', '.')) || 0;
+    }
+
+    function recalc() {
+      if (!totalBox) return;
+      const c = custoFloat(), q = estoqueFloat(), u = (uni && uni.value) || 'un';
+      totalVal.textContent = brl.format(q * c);
+      totalForm.textContent = q > 0 ? `${q.toLocaleString('pt-BR')} ${u} × ${brl.format(c)}/${u}` : 'informe estoque e custo';
+    }
+
+    function alternarTipo() {
+      document.querySelectorAll('.tecido-only').forEach(el => { el.hidden = tipo.value !== 'tecido'; });
+      // Sugestão de unidade: tecido → m; demais → un (preserva kg, rolo... customizados).
+      if (uni) {
+        if (tipo.value === 'tecido' && (uni.value === '' || uni.value === 'un')) uni.value = 'm';
+        else if (tipo.value !== 'tecido' && (uni.value === '' || uni.value === 'm')) uni.value = 'un';
+      }
+      recalc();
+    }
+
+    if (tipo) tipo.addEventListener('change', alternarTipo);
+    [custo, estoque, uni].forEach(el => el && el.addEventListener('input', recalc));
+    recalc();
+  })();
+</script>
 {% endblock %}

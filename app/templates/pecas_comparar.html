@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Comparar peças{% endblock %}
+{% block conteudo %}
+<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-link px-0 mb-2">← Voltar</a>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h3 mb-0">Comparar peças <span class="text-muted">({{ pecas | length }})</span></h1>
+</div>
+
+{% if pecas | length < 2 %}
+{{ ui.vazio('bi-bar-chart-line', 'Selecione ao menos 2 peças', 'Volte à lista, marque as peças e clique em Comparar.', '← Voltar às peças', url_for('main.listar_pecas')) }}
+{% else %}
+{% set max_margem = pecas | map(attribute='margem_efetiva') | max %}
+{% set max_lucro = pecas | map(attribute='lucro_etiqueta') | max %}
+{% set min_custo = pecas | map(attribute='custo_total') | min %}
+<div class="card bg-white"><div class="card-body">
+<div class="table-responsive">
+  <table class="table align-middle cmp-table mb-0">
+    <thead>
+      <tr>
+        <th style="min-width:150px"></th>
+        {% for p in pecas %}
+        <th class="text-center" style="min-width:150px">
+          <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="d-block text-reset text-decoration-none">
+            {% set foto = p.foto %}
+            {% if foto %}<img src="{{ url_for('static', filename=(foto | thumb)) }}" alt="" style="width:72px;height:96px;object-fit:cover;border-radius:6px" class="mb-1">
+            {% else %}<div class="text-muted small" style="height:96px;display:flex;align-items:center;justify-content:center">sem foto</div>{% endif %}
+            <div class="fw-bold small">{{ p.nome }}</div>
+            {% if p.colecao %}<div class="small text-muted">{{ p.colecao }}</div>{% endif %}
+          </a>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      <tr><th class="text-muted">Tipo</th>{% for p in pecas %}<td class="text-center">{{ p.tipo or '—' }}</td>{% endfor %}</tr>
+      <tr><th class="text-muted">Custo insumos</th>{% for p in pecas %}<td class="text-center">{{ p.custo_insumos | moeda }}</td>{% endfor %}</tr>
+      <tr><th class="text-muted">Mão de obra</th>{% for p in pecas %}<td class="text-center">{{ p.custo_mao_de_obra | moeda }}</td>{% endfor %}</tr>
+      <tr><th class="text-muted">Custos extras</th>{% for p in pecas %}<td class="text-center">{{ p.custos_extras | moeda }}</td>{% endfor %}</tr>
+      <tr class="border-top">
+        <th>Custo total</th>
+        {% for p in pecas %}<td class="text-center fw-bold {{ 'cmp-best' if p.custo_total == min_custo }}">{{ p.custo_total | moeda }}</td>{% endfor %}
+      </tr>
+      <tr><th class="text-muted">Preço (etiqueta)</th>{% for p in pecas %}<td class="text-center fw-bold">{{ p.preco_base | moeda }}</td>{% endfor %}</tr>
+      <tr>
+        <th>Margem efetiva</th>
+        {% for p in pecas %}<td class="text-center {{ 'cmp-best' if p.margem_efetiva == max_margem }}">{{ p.margem_efetiva | num }}%</td>{% endfor %}
+      </tr>
+      <tr>
+        <th>Lucro por peça</th>
+        {% for p in pecas %}<td class="text-center fw-bold {{ 'cmp-best' if p.lucro_etiqueta == max_lucro else ('text-danger' if p.lucro_etiqueta < 0) }}">{{ p.lucro_etiqueta | moeda }}</td>{% endfor %}
+      </tr>
+      <tr><th class="text-muted">Estoque</th>{% for p in pecas %}<td class="text-center">{{ p.estoque_total | num }}</td>{% endfor %}</tr>
+    </tbody>
+  </table>
+</div>
+</div></div>
+<p class="small text-muted mt-2"><span class="cmp-best px-2 rounded">verde</span> = melhor no critério (menor custo, maior margem/lucro).</p>
+{% endif %}
+
+<style>
+  .cmp-table th:first-child, .cmp-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; }
+  .cmp-best { background: color-mix(in srgb, #4f7d52 16%, transparent); color: #2f5c33; font-weight: 700; }
+</style>
+{% endblock %}

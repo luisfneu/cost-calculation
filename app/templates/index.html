@@ -11,7 +11,7 @@
   </div>
   <div class="d-flex gap-2">
     <a href="{{ url_for('main.registrar_venda') }}" class="btn btn-primary"><i class="bi bi-bag-plus"></i> Nova venda</a>
-    <a href="{{ url_for('main.form_peca') }}" class="btn btn-outline-secondary">+ Peça</a>
+    <a href="{{ url_for('main.form_peca') }}" class="btn btn-outline-secondary"><i class="bi bi-plus-lg"></i> Peça</a>
   </div>
 </div>
 
@@ -179,7 +179,7 @@
         <div class="vitrine-nome">{{ peca.nome }}</div>
         <div class="small text-muted">Custo: {{ peca.custo_total | moeda }}</div>
         <div class="vitrine-preco">{{ peca.preco_etiqueta_efetivo | moeda }}</div>
-        <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary mt-2">Ver</a>
+        <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary mt-2" title="Ver peça"><i class="bi bi-eye"></i></a>
       </div>
     </div>
   </div>

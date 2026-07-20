@@ -34,6 +34,37 @@
 
   <div class="v2-loja">
   {% include "_v2_header.html" %}
+  {% import "_v2_card.html" as vcard %}
+
+  {% if banners and not (q or tipo or colecao or tam_sel) %}
+  <div id="v2-hero" class="carousel slide" data-bs-ride="carousel">
+    <div class="carousel-inner">
+      {% for b in banners %}
+      <div class="carousel-item {{ 'active' if loop.first }}">
+        <a href="{{ b.link }}" class="v2-hero-link" aria-label="{{ b.titulo }}">
+          {% if b.imagem_mobile %}
+          <picture>
+            <source media="(max-width:576px)" srcset="{{ url_for('static', filename='uploads/' ~ b.imagem_mobile) }}">
+            <img src="{{ url_for('static', filename='uploads/' ~ b.imagem) }}" alt="{{ b.titulo }}" class="v2-hero-img">
+          </picture>
+          {% else %}
+          <img src="{{ url_for('static', filename='uploads/' ~ b.imagem) }}" alt="{{ b.titulo }}" class="v2-hero-img">
+          {% endif %}
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% if banners | length > 1 %}
+    <button class="carousel-control-prev" type="button" data-bs-target="#v2-hero" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span></button>
+    <button class="carousel-control-next" type="button" data-bs-target="#v2-hero" data-bs-slide="next"><span class="carousel-control-next-icon"></span></button>
+    <div class="carousel-indicators">
+      {% for b in banners %}
+      <button type="button" data-bs-target="#v2-hero" data-bs-slide-to="{{ loop.index0 }}" class="{{ 'active' if loop.first }}" aria-label="Slide {{ loop.index }}"></button>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <div class="v2-wrap">
     <div class="v2-corpo">
@@ -103,52 +134,7 @@
         {% if pecas %}
         <div class="v2-grid cols-4" id="v2-grid">
           {% for p in pecas %}
-          {% set foto = p.foto or colecao_fotos.get(p.colecao) %}
-          <div class="v2-card{{ ' v2-esgotado' if p.esgotado }}">
-            <div class="v2-thumb">
-              <a class="v2-thumb-link" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}" aria-label="{{ p.nome }}">
-                {% if foto %}
-                  <img src="{{ url_for('static', filename=(foto | thumb)) }}" alt="{{ p.nome }}" loading="lazy" decoding="async">
-                {% else %}
-                  <div class="d-flex align-items-center justify-content-center h-100 text-muted small">sem foto</div>
-                {% endif %}
-              </a>
-              {% if p.em_promocao and p.preco_base %}
-                {% set pct = ((p.preco_base - p.preco_etiqueta_efetivo) / p.preco_base * 100) | round(0, 'floor') | int %}
-                <span class="v2-badge v2-desc">-{{ pct }}%</span>
-              {% endif %}
-              {% if p.esgotado %}<span class="v2-badge v2-esgot">Esgotado</span>
-              {% elif p.sob_encomenda %}<span class="v2-badge v2-enc">sob encomenda</span>
-              {% elif p.disponivel_total <= 2 %}<span class="v2-badge" style="background:#c0392b;color:#fff">últimas unidades</span>
-              {% elif p.id in novos %}<span class="v2-badge v2-novo">Novo</span>{% endif %}
-              <button type="button" class="v2-fav js-fav" aria-label="Favoritar {{ p.nome }}"
-                      data-id="{{ p.id }}" data-nome="{{ p.nome }}" data-preco="{{ p.preco_vitrine }}"
-                      data-foto="{{ url_for('static', filename=(foto | thumb)) if foto else '' }}"
-                      data-url="{{ url_for('publico.peca_publica', peca_id=p.id) }}">
-                <i class="bi bi-heart"></i> <span class="js-fav-txt">Favoritos</span>
-              </button>
-            </div>
-            <div class="v2-info">
-              {% if p.colecao or p.tipo %}<div class="v2-cat">{{ p.colecao or p.tipo }}</div>{% endif %}
-              <a class="v2-nome-link text-reset text-decoration-none" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}"><div class="v2-nome">{{ p.nome }}</div></a>
-              <div class="mt-1">
-                {% if p.esgotado %}
-                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
-                {% elif p.sob_encomenda %}
-                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
-                  <span class="v2-preco-enc" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
-                        title="Sinal de {{ p.preco_encomenda | moeda }} para iniciar a encomenda. O valor cheio da peça é cobrado antes da entrega.">
-                    sinal {{ p.preco_encomenda | moeda }} <i class="bi bi-question-circle"></i>
-                  </span>
-                {% elif p.em_promocao %}
-                  <span class="v2-preco-de">{{ p.preco_base | moeda }}</span>
-                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
-                {% else %}
-                  <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
-                {% endif %}
-              </div>
-            </div>
-          </div>
+            {{ vcard.card(p, colecao_fotos, novos) }}
           {% endfor %}
         </div>
         {% else %}
@@ -162,6 +148,7 @@
       </main>
     </div>
   </div>
+  {% include "_v2_footer.html" %}
   </div><!-- /v2-loja -->
 
   {% include "_v2_scripts.html" %}

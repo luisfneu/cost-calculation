@@ -1,19 +1,37 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block conteudo %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <h1 class="h3 mb-0">Contabilidade</h1>
-  <div class="d-flex align-items-center gap-2">
-    <a href="{{ url_for('main.exportar_receber_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ contas a receber (CSV)</a>
-    <form method="get" class="d-flex align-items-center gap-2">
-      <label class="form-label mb-0 small text-muted">Mês:</label>
-      <select name="mes" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
-        <option value="">Todos</option>
-        {% for m in meses %}
-          <option value="{{ m }}" {{ 'selected' if m == mes_atual }}>{{ mes_label(m) }}</option>
-        {% endfor %}
-      </select>
-    </form>
+  <a href="{{ url_for('main.exportar_receber_csv') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Exportar CSV</a>
+</div>
+
+<!-- Filtro de período -->
+<div class="d-flex align-items-center gap-2 flex-wrap mb-4">
+  <div class="btn-group btn-group-sm" role="group" aria-label="Período">
+    {% for p in presets %}
+      <a href="{{ url_for('main.contabilidade', de=p.de, ate=p.ate) }}" class="btn btn-outline-secondary {{ 'active' if p.ativo }}">{{ p.label }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <input type="date" name="de" class="form-control form-control-sm" style="width:auto" value="{{ de }}" max="{{ ate }}">
+    <span class="text-muted small">até</span>
+    <input type="date" name="ate" class="form-control form-control-sm" style="width:auto" value="{{ ate }}">
+    <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+  </form>
+</div>
+
+<!-- Bônus: compras de insumo (entradas de estoque) no período -->
+<div class="card bg-white mb-4" style="border-left:4px solid var(--gold)">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+    <div>
+      <div class="small text-muted text-uppercase" style="letter-spacing:.5px">Compras de insumo no período</div>
+      <div class="h3 mb-0">{{ compras_total | moeda }}</div>
+    </div>
+    <div class="text-muted small text-end">
+      {{ n_compras }} entrada(s) de estoque<br>
+      Outras despesas pagas: <strong>{{ despesas_total | moeda }}</strong>
+    </div>
   </div>
 </div>
 
@@ -27,21 +45,23 @@
     <div class="ic"><i class="bi bi-arrow-up-circle"></i></div>
     <div><div class="num">{{ kpis.saidas | moeda }}</div><div class="lbl">Saídas</div></div>
   </div></div>
-  <div class="col-6 col-md-3"><div class="stat">
+  <div class="col-6 col-md-3"><div class="stat {{ 'ok' if kpis.saldo_acumulado >= 0 else 'aviso' }}">
     <div class="ic"><i class="bi bi-wallet2"></i></div>
-    <div><div class="num">{{ kpis.saldo | moeda }}</div><div class="lbl">Saldo de caixa</div></div>
+    <div><div class="num">{{ kpis.saldo_acumulado | moeda }}</div><div class="lbl">Saldo de caixa (total)</div></div>
   </div></div>
   <div class="col-6 col-md-3"><a class="stat" href="{{ url_for('main.contas_a_receber') }}">
     <div class="ic"><i class="bi bi-hourglass-split"></i></div>
-    <div><div class="num">{{ kpis.a_receber | moeda }}</div><div class="lbl">A receber (mês)</div></div>
+    <div><div class="num">{{ kpis.a_receber | moeda }}</div><div class="lbl">A receber (período)</div></div>
   </a></div>
 </div>
 <div class="row g-3 mb-4">
-  <div class="col-md-4"><div class="card bg-white h-100"><div class="card-body">
+  <div class="col-6 col-md-3"><div class="card bg-white h-100"><div class="card-body">
+    <div class="h5 mb-0 {{ 'text-success' if kpis.saldo >= 0 else 'text-danger' }}">{{ kpis.saldo | moeda }}</div><div class="small text-muted">Resultado do período</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card bg-white h-100"><div class="card-body">
     <div class="h5 mb-0 text-success">{{ kpis.lucro | moeda }}</div><div class="small text-muted">Lucro do período</div></div></div></div>
-  <div class="col-md-4"><div class="card bg-white h-100"><div class="card-body">
+  <div class="col-6 col-md-3"><div class="card bg-white h-100"><div class="card-body">
     <div class="h5 mb-0">{{ kpis.n_vendas | num }}</div><div class="small text-muted">Vendas no período</div></div></div></div>
-  <div class="col-md-4"><div class="card bg-white h-100"><div class="card-body">
+  <div class="col-6 col-md-3"><div class="card bg-white h-100"><div class="card-body">
     <div class="h5 mb-0">{{ kpis.ticket | moeda }}</div><div class="small text-muted">Ticket médio</div></div></div></div>
 </div>
 
@@ -51,7 +71,7 @@
     <div class="card bg-white">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-          <h2 class="h5 mb-0">Movimentos {{ '· ' ~ mes_label(mes_atual) if mes_atual }}
+          <h2 class="h5 mb-0">Movimentos
             <span class="text-muted small fw-normal">({{ total_movimentos }})</span></h2>
           {{ ui.por_pagina() }}
         </div>
@@ -112,7 +132,7 @@
             <td class="text-end">{{ d.valor | moeda }}</td>
             <td class="text-end">
               <form method="post" action="{{ url_for('main.pagar_despesa', despesa_id=d.id) }}">
-                <button class="btn btn-sm btn-outline-success">✓ pago</button>
+                <button class="btn btn-sm btn-outline-success"><i class="bi bi-check-lg"></i> pago</button>
               </form>
             </td>
           </tr>

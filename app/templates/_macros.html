@@ -1,3 +1,6 @@
+{# Ícone de ajuda "?" com tooltip (padrão dos formulários do ERP). #}
+{% macro ajuda(texto) %}<i class="bi bi-question-circle text-muted small" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ texto }}"></i>{% endmacro %}
+
 {# Estado vazio padrão para listas sem registros. #}
 {% macro vazio(icone, frase, dica='', link_texto='', link_url='') %}
 <div class="estado-vazio">
@@ -10,14 +13,19 @@
 
 {# Dropzone de foto única (arquivo, arrastar ou colar). Mantém input[name=foto]. #}
 {% macro foto_unica(atual='', label='Foto') %}
+{{ foto_unica_nome('foto', atual, label) }}
+{% endmacro %}
+
+{% macro foto_unica_nome(nome, atual='', label='Foto', dica='') %}
 <div class="mb-3 foto-unica">
   <label class="form-label">{{ label }}</label>
-  <input type="file" name="foto" class="d-none foto-unica-input" accept="image/*">
+  <input type="file" name="{{ nome }}" class="d-none foto-unica-input" accept="image/*">
   <div class="fotos-dropzone foto-unica-zone">
     <i class="bi bi-image"></i>
     <div>Clique para escolher, <b>arraste</b> ou <b>cole</b> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) uma imagem</div>
   </div>
   <div class="fotos-grid foto-unica-grid mt-2" data-atual="{{ url_for('static', filename='uploads/' ~ atual) if atual else '' }}"></div>
+  {% if dica %}<div class="form-text">{{ dica }}</div>{% endif %}
 </div>
 {% endmacro %}
 

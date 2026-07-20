@@ -1,0 +1,52 @@
+{# Card de peça da vitrine v2. Reusado na home e na página de campanha.
+   camp = campanha ativa da peça (ou None); preço/badge já consideram o desconto. #}
+{% macro card(p, colecao_fotos={}, novos=set()) %}
+{% set foto = p.foto or colecao_fotos.get(p.colecao) %}
+{% set camp = p.campanha_ativa %}
+<div class="v2-card{{ ' v2-esgotado' if p.esgotado }}">
+  <div class="v2-thumb">
+    <a class="v2-thumb-link" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}" aria-label="{{ p.nome }}">
+      {% if foto %}
+        <img src="{{ url_for('static', filename=(foto | thumb)) }}" alt="{{ p.nome }}" loading="lazy" decoding="async">
+      {% else %}
+        <div class="d-flex align-items-center justify-content-center h-100 text-muted small">sem foto</div>
+      {% endif %}
+    </a>
+    {% if (p.em_promocao or camp) and p.preco_base and not p.sob_encomenda %}
+      {% set pct = ((p.preco_base - p.preco_etiqueta_efetivo) / p.preco_base * 100) | round(0, 'floor') | int %}
+      {% if pct > 0 %}<span class="v2-badge v2-desc">-{{ pct }}%</span>{% endif %}
+    {% endif %}
+    {% if camp and not p.sob_encomenda %}<span class="v2-badge v2-camp">{{ camp.nome }}</span>{% endif %}
+    {% if p.esgotado %}<span class="v2-badge v2-esgot">Esgotado</span>
+    {% elif p.sob_encomenda %}<span class="v2-badge v2-enc">sob encomenda</span>
+    {% elif p.disponivel_total <= 2 %}<span class="v2-badge" style="background:#c0392b;color:#fff">últimas unidades</span>
+    {% elif p.id in novos %}<span class="v2-badge v2-novo">Novo</span>{% endif %}
+    <button type="button" class="v2-fav js-fav" aria-label="Favoritar {{ p.nome }}"
+            data-id="{{ p.id }}" data-nome="{{ p.nome }}" data-preco="{{ p.preco_vitrine }}"
+            data-foto="{{ url_for('static', filename=(foto | thumb)) if foto else '' }}"
+            data-url="{{ url_for('publico.peca_publica', peca_id=p.id) }}">
+      <i class="bi bi-heart"></i> <span class="js-fav-txt">Favoritos</span>
+    </button>
+  </div>
+  <div class="v2-info">
+    {% if p.colecao or p.tipo %}<div class="v2-cat">{{ p.colecao or p.tipo }}</div>{% endif %}
+    <a class="v2-nome-link text-reset text-decoration-none" href="{{ url_for('publico.peca_publica', peca_id=p.id) }}"><div class="v2-nome">{{ p.nome }}</div></a>
+    <div class="mt-1">
+      {% if p.esgotado %}
+        <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+      {% elif p.sob_encomenda %}
+        <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+        <span class="v2-preco-enc" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
+              title="Sinal de {{ p.preco_encomenda | moeda }} para iniciar a encomenda. O valor cheio da peça é cobrado antes da entrega.">
+          sinal {{ p.preco_encomenda | moeda }} <i class="bi bi-question-circle"></i>
+        </span>
+      {% elif p.em_promocao or camp %}
+        <span class="v2-preco-de">{{ p.preco_base | moeda }}</span>
+        <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+      {% else %}
+        <span class="v2-preco-atual">{{ p.preco_etiqueta_efetivo | moeda }}</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endmacro %}

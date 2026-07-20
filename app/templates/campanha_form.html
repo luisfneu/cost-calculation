@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}{{ 'Editar campanha' if campanha else 'Nova campanha' }}{% endblock %}
+{% block conteudo %}
+<a href="{{ url_for('main.listar_campanhas') }}" class="btn btn-link px-0 mb-2">← Voltar</a>
+<h1 class="h3 mb-4">{{ 'Editar campanha' if campanha else 'Nova campanha' }}</h1>
+
+<form method="post" enctype="multipart/form-data" class="card card-body bg-white" style="max-width:760px">
+  <div class="row g-3">
+    <div class="col-sm-7">
+      <label class="form-label">Nome *</label>
+      <input type="text" name="nome" class="form-control" required value="{{ campanha.nome if campanha else '' }}"
+             placeholder="Ex.: Saldão de inverno">
+    </div>
+    <div class="col-sm-5 d-flex align-items-end">
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" role="switch" name="ativa" id="ativa" {{ 'checked' if not campanha or campanha.ativa }}>
+        <label class="form-check-label" for="ativa">Ativa</label>
+      </div>
+    </div>
+  </div>
+  <div class="mb-3 mt-3">
+    <label class="form-label">Subtítulo / chamada</label>
+    <input type="text" name="subtitulo" class="form-control" value="{{ campanha.subtitulo if campanha else '' }}"
+           placeholder="Ex.: até 50% OFF em peças selecionadas">
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label class="form-label">Início</label>
+      <input type="date" name="inicio" class="form-control" value="{{ campanha.inicio.strftime('%Y-%m-%d') if campanha and campanha.inicio else '' }}">
+    </div>
+    <div class="col-sm-6">
+      <label class="form-label">Fim</label>
+      <input type="date" name="fim" class="form-control" value="{{ campanha.fim.strftime('%Y-%m-%d') if campanha and campanha.fim else '' }}">
+    </div>
+  </div>
+
+  {{ ui.foto_unica_nome('banner_hero', campanha.banner_hero if campanha else '', 'Banner da home (carrossel)',
+       'Proporção ~3,6:1 — sugerido 1720×480 px. Aparece no carrossel da home enquanto a campanha estiver no ar.') }}
+  {{ ui.foto_unica_nome('banner_landing', campanha.banner_landing if campanha else '', 'Banner do topo da página da campanha',
+       'Proporção ~3:1 — sugerido 1600×540 px.') }}
+
+  <hr>
+  <h2 class="h6">Desconto <span class="text-muted fw-normal small">(opcional)</span></h2>
+  <p class="small text-muted">Deixe o valor <b>0 ou em branco</b> para uma campanha só de vitrine (banner + página), sem alterar preços.</p>
+  <div class="row g-3 mb-3">
+    <div class="col-sm-5">
+      <label class="form-label">Tipo</label>
+      <select name="desconto_tipo" class="form-select">
+        {% set dt = campanha.desconto_tipo if campanha else 'percentual' %}
+        <option value="percentual" {{ 'selected' if dt == 'percentual' }}>% percentual</option>
+        <option value="valor" {{ 'selected' if dt == 'valor' }}>R$ valor fixo</option>
+      </select>
+    </div>
+    <div class="col-sm-7">
+      <label class="form-label">Valor</label>
+      <input type="text" name="desconto_valor" class="form-control" value="{{ campanha.desconto_valor | num if campanha and campanha.desconto_valor else '' }}" placeholder="0 = sem desconto">
+    </div>
+  </div>
+
+  <hr>
+  <h2 class="h6">Peças da campanha (filtro base)</h2>
+  <p class="small text-muted">O filtro monta o conjunto automático. Depois de salvar, ajuste peça a peça em <b>Peças da campanha</b> (incluir/excluir).
+    <b>Sem nenhum filtro</b>, só entram peças incluídas manualmente.</p>
+  <div class="row g-3">
+    <div class="col-sm-6">
+      <label class="form-label">Coleção</label>
+      <select name="filtro_colecao" class="form-select">
+        <option value="">— qualquer —</option>
+        {% for c in colecoes %}<option value="{{ c }}" {{ 'selected' if campanha and campanha.filtro_colecao == c }}>{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-6">
+      <label class="form-label">Tipo de peça</label>
+      <select name="filtro_tipo" class="form-select">
+        <option value="">— qualquer —</option>
+        {% for t in tipos %}<option value="{{ t }}" {{ 'selected' if campanha and campanha.filtro_tipo == t }}>{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <label class="form-label">Tags (qualquer uma casa)</label>
+      <input type="text" name="filtro_tags" class="form-control" value="{{ campanha.filtro_tags if campanha else '' }}" placeholder="Ex.: inverno, tricô">
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <button class="btn btn-primary">Salvar</button>
+    <a href="{{ url_for('main.listar_campanhas') }}" class="btn btn-link">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

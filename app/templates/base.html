@@ -21,6 +21,10 @@
           <span class="brand-sub">Atelier</span>
         </span>
       </a>
+      <div class="d-flex align-items-center gap-1 d-lg-none ms-auto me-2">
+        <button type="button" class="btn btn-link nav-link p-1 fs-5" data-bs-toggle="modal" data-bs-target="#modal-busca" aria-label="Buscar"><i class="bi bi-search"></i></button>
+        <a class="btn btn-link nav-link p-1 fs-5 {{ 'ativo' if request.endpoint == 'main.index' }}" href="{{ url_for('main.index') }}" aria-label="Painel"><i class="bi bi-house-door"></i></a>
+      </div>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navmenu">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -30,14 +34,15 @@
       {% set g_ven = ['main.listar_vendas','main.registrar_venda','main.visualizar_venda','main.editar_venda','main.listar_encomendas','main.registrar_encomenda','main.listar_cupons','main.listar_vales','main.devolucao_venda'] %}
       {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm','main.listar_leads'] %}
       {% set g_fin = ['main.contabilidade','main.contas_a_receber','main.fluxo_caixa','main.listar_despesas','main.relatorio'] %}
+      {% set g_loja = ['main.listar_campanhas','main.form_campanha','main.gerir_pecas_campanha','main.listar_newsletter'] %}
       {% set g_sys = ['main.listar_usuarios','main.auditoria','main.configuracoes'] %}
       <div class="collapse navbar-collapse justify-content-end" id="navmenu">
-        <button type="button" class="nav-link btn btn-link px-2 me-lg-2" data-bs-toggle="modal" data-bs-target="#modal-busca"
+        <button type="button" class="nav-link btn btn-link px-2 me-lg-2 d-none d-lg-inline-flex" data-bs-toggle="modal" data-bs-target="#modal-busca"
                 aria-label="Buscar" title="Buscar peça, cliente ou pedido (Ctrl/⌘+K)">
-          <i class="bi bi-search"></i><span class="d-lg-none"> Buscar</span>
+          <i class="bi bi-search"></i>
         </button>
         <div class="navbar-nav align-items-lg-center">
-          <a class="nav-link {{ 'ativo' if ep == 'main.index' }}" href="{{ url_for('main.index') }}"><i class="bi bi-house-door"></i> Painel</a>
+          <a class="nav-link d-none d-lg-block {{ 'ativo' if ep == 'main.index' }}" href="{{ url_for('main.index') }}" title="Painel" aria-label="Painel"><i class="bi bi-house-door"></i></a>
           <div class="nav-item dropdown {{ 'ativo' if ep in g_cat }}">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-bag"></i> Catálogo</a>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -48,6 +53,15 @@
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.vitrine' }}" href="{{ url_for('main.vitrine') }}">Vitrine</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_avaliacoes' }}" href="{{ url_for('main.listar_avaliacoes') }}">Avaliações</a></li>
+            </ul>
+          </div>
+          <div class="nav-item dropdown {{ 'ativo' if ep in g_loja }}">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-shop"></i> Loja</a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_campanhas','main.form_campanha','main.gerir_pecas_campanha'] }}" href="{{ url_for('main.listar_campanhas') }}">Campanhas</a></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_newsletter' }}" href="{{ url_for('main.listar_newsletter') }}">Newsletter</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="{{ url_for('publico.vitrine_v2') }}" target="_blank">Abrir loja <i class="bi bi-box-arrow-up-right small"></i></a></li>
             </ul>
           </div>
           <div class="nav-item dropdown {{ 'ativo' if ep in g_est }}">
@@ -177,6 +191,28 @@
       </div>
     </div>
   </div>
+
+  <!-- Zoom da miniatura de upload: clicar na foto abre em tamanho grande. -->
+  <div id="img-zoom" class="img-zoom" hidden>
+    <button type="button" class="img-zoom-close" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+    <img src="" alt="Imagem ampliada">
+  </div>
+  <script>
+    (function () {
+      const box = document.getElementById('img-zoom');
+      if (!box) return;
+      const img = box.querySelector('img');
+      function abrir(src) { img.src = src; box.hidden = false; document.body.style.overflow = 'hidden'; }
+      function fechar() { box.hidden = true; img.src = ''; document.body.style.overflow = ''; }
+      // Clique em qualquer miniatura de upload (foto-unica ou uploader múltiplo).
+      document.addEventListener('click', function (e) {
+        const alvo = e.target.closest('.foto-card img, .foto-unica-grid img');
+        if (alvo && alvo.src) { e.preventDefault(); abrir(alvo.src); return; }
+        if (e.target.closest('.img-zoom-close') || e.target === box) fechar();
+      });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden) fechar(); });
+    })();
+  </script>
 
   <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
   <script src="{{ url_for('static', filename='js/foto-unica.js') }}"></script>

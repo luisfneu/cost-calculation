@@ -16,16 +16,32 @@
     return out;
   }
   window.mascaraTel = fmtTel;  // reutilizável em outros scripts
+
+  // data-mask="money" -> 0,00 (vírgula decimal, ponto de milhar). Formata da
+  // direita p/ esquerda: os 2 últimos dígitos são os centavos.
+  function fmtMoney(v) {
+    let d = String(v || '').replace(/\D/g, '').replace(/^0+/, '');
+    if (!d) return '';
+    while (d.length < 3) d = '0' + d;
+    const cents = d.slice(-2);
+    const int = d.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return int + ',' + cents;
+  }
+  window.mascaraMoney = fmtMoney;
+
   document.addEventListener('input', function (e) {
     const t = e.target;
-    if (t && t.matches && t.matches('[data-mask="tel"]')) {
-      t.value = fmtTel(t.value);
-    }
+    if (!t || !t.matches) return;
+    if (t.matches('[data-mask="tel"]')) t.value = fmtTel(t.value);
+    else if (t.matches('[data-mask="money"]')) t.value = fmtMoney(t.value);
   });
   // Formata valores já preenchidos ao carregar.
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-mask="tel"]').forEach(function (i) {
       if (i.value) i.value = fmtTel(i.value);
+    });
+    document.querySelectorAll('[data-mask="money"]').forEach(function (i) {
+      if (i.value) i.value = fmtMoney(i.value);
     });
   });
 })();

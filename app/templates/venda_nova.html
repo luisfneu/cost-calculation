@@ -6,11 +6,11 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">{% if editar %}Editar pedido #{{ venda.id }}{% elif encomenda %}Nova encomenda{% else %}Nova venda{% endif %}</h1>
   {% if editar %}
-    <a href="{{ url_for('main.visualizar_venda', venda_id=venda.id) }}" class="btn btn-outline-secondary">← Voltar ao pedido</a>
+    <a href="{{ url_for('main.visualizar_venda', venda_id=venda.id) }}" class="btn btn-link px-0">← Voltar ao pedido</a>
   {% elif encomenda %}
-    <a href="{{ url_for('main.listar_encomendas') }}" class="btn btn-outline-secondary">← Encomendas</a>
+    <a href="{{ url_for('main.listar_encomendas') }}" class="btn btn-link px-0">← Encomendas</a>
   {% else %}
-    <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-outline-secondary">← Histórico de vendas</a>
+    <a href="{{ url_for('main.listar_vendas') }}" class="btn btn-link px-0">← Histórico de vendas</a>
   {% endif %}
 </div>
 
@@ -30,7 +30,7 @@
           </select>
         </div>
         <div class="col-md-3">
-          <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-cliente">+ Novo cliente</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-cliente"><i class="bi bi-plus-lg"></i> Novo cliente</button>
         </div>
       </div>
       <div id="cliente-dados" class="mb-3 small" style="display:none"></div>
@@ -49,7 +49,7 @@
       </div>
       <div class="d-flex flex-wrap gap-2 mb-4">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-scan" title="Escanear código / QR"><i class="bi bi-upc-scan"></i></button>
-        <button type="button" class="btn btn-outline-primary btn-sm" id="add-item">+ Adicionar item</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="add-item"><i class="bi bi-plus-lg"></i> Adicionar item</button>
         {% if kits %}
         <button type="button" class="btn btn-outline-primary btn-sm" id="btn-kit"><i class="bi bi-box-seam"></i> Adicionar kit/combo</button>
         {% endif %}
@@ -105,7 +105,7 @@
       </table>
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-        <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento">+ Adicionar pagamento</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="add-pagamento"><i class="bi bi-plus-lg"></i> Adicionar pagamento</button>
         <button type="button" class="btn btn-link btn-sm p-0" id="pagar-tudo">preencher com o valor total</button>
         <span class="ms-auto small">
           Pago: <b id="p-pago">R$ 0,00</b> ·
@@ -135,7 +135,7 @@
             <tr><td>Desconto</td><td class="text-end" id="s-desconto">R$ 0,00</td></tr>
             <tr class="border-top"><td class="h5 mb-0">Valor total</td><td class="text-end h5 mb-0 text-success" id="s-total">R$ 0,00</td></tr>
           </table>
-          <button type="button" class="btn btn-link btn-sm p-0" id="toggle-detalhe">▸ ver custo e lucro</button>
+          <button type="button" class="btn btn-link btn-sm p-0" id="toggle-detalhe"><i class="bi bi-chevron-right"></i> ver custo e lucro</button>
           <div id="resumo-detalhe" class="small text-muted" style="display:none"></div>
         </div>
       </div>
@@ -162,7 +162,7 @@
         <strong>Nenhuma peça com estoque disponível para venda.</strong>
         <p class="mb-2 mt-1 small">A venda mostra apenas peças com estoque. Para vender, <strong>produza peças</strong> (dá entrada no estoque, na tela da peça em “Produzir”), ou registre uma <strong>encomenda</strong> (vende sem estoque e produz depois).</p>
         <a href="{{ url_for('main.listar_pecas') }}" class="btn btn-sm btn-outline-primary">Ver peças / produzir</a>
-        <a href="{{ url_for('main.registrar_encomenda') }}" class="btn btn-sm btn-outline-secondary">+ Nova encomenda</a>
+        <a href="{{ url_for('main.registrar_encomenda') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-plus-lg"></i> Nova encomenda</a>
       </div>
     {% endif %}
     {% endif %}
@@ -370,7 +370,7 @@
       <td><input type="text" name="preco_unitario" class="form-control in-preco" style="width:100px"></td>
       <td><input type="text" name="desconto" class="form-control in-desc" value="0,00" style="width:90px"></td>
       <td class="subtotal">R$ 0,00</td>
-      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-item">×</button></td>`;
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-item" title="Remover"><i class="bi bi-x-lg"></i></button></td>`;
     corpo.appendChild(tr);
     if (inicial && inicial.peca_id) {
       const p = acha(inicial.peca_id) || inicial;
@@ -478,7 +478,7 @@
       <td><input type="text" name="pag_valor" class="form-control form-control-sm pg-valor" value="${valor||''}" style="width:110px"></td>
       <td><input type="text" name="pag_parcelas" class="form-control form-control-sm pg-parc" value="1" style="width:60px"><span class="pg-na text-muted">—</span></td>
       <td><input type="text" name="pag_taxa" class="form-control form-control-sm pg-taxa" value="0" style="width:70px"><span class="pg-na text-muted">—</span></td>
-      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem">×</button></td>`;
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger pg-rem" title="Remover"><i class="bi bi-x-lg"></i></button></td>`;
     corpoPag.appendChild(tr);
     aplicarCartao(tr);
   }
@@ -548,7 +548,7 @@
     const d = document.getElementById('resumo-detalhe');
     const vis = d.style.display !== 'none';
     d.style.display = vis ? 'none' : 'block';
-    this.textContent = vis ? '▸ ver custo e lucro' : '▾ ocultar custo e lucro';
+    this.innerHTML = vis ? '<i class="bi bi-chevron-right"></i> ver custo e lucro' : '<i class="bi bi-chevron-down"></i> ocultar custo e lucro';
   });
   corpo.addEventListener('input', recalcular);
   corpo.addEventListener('change', recalcular);

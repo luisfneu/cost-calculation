@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Newsletter{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <h1 class="h3 mb-0">Newsletter <span class="text-muted">({{ total }} inscrito{{ '' if total == 1 else 's' }})</span></h1>
+  {% if inscritos %}
+  <a href="{{ url_for('main.listar_newsletter', csv=1) }}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Exportar CSV</a>
+  {% endif %}
+</div>
+
+{% if not email_ok %}
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i>
+  Envio de e-mail não configurado (<code>RESEND_API_KEY</code> / <code>MAIL_FROM</code>). A lista funciona, mas o disparo fica indisponível.</div>
+{% endif %}
+
+<!-- Compor e enviar -->
+<form method="post" action="{{ url_for('main.enviar_newsletter') }}" enctype="multipart/form-data" class="card card-body bg-white mb-4" style="max-width:720px"
+      data-confirm="Enviar este e-mail para os {{ total }} inscrito(s) da newsletter?">
+  <h2 class="h5 mb-3"><i class="bi bi-envelope-paper"></i> Enviar campanha por e-mail</h2>
+  <p class="text-muted small mb-3">O e-mail sai com cabeçalho (logo) e rodapé (contato) automáticos. Você monta o miolo abaixo.</p>
+  <div class="mb-3">
+    <label class="form-label">Assunto *</label>
+    <input type="text" name="assunto" class="form-control" required placeholder="Ex.: Chegou a Coleção Botânica 🌿">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Mensagem * {{ ui.ajuda('**negrito**, *itálico*, [link](https://…), títulos com "## " e "### ", listas com "- ", citação com "> ", linha divisória "---", centralizar com "-> texto <-". Linha em branco separa parágrafos.') }}</label>
+    <textarea name="corpo" class="form-control" rows="8" required
+              placeholder="## Título&#10;&#10;Escreva a mensagem com **negrito**, *itálico* e [links](https://...).&#10;&#10;- item de lista&#10;- outro item&#10;&#10;-> texto centralizado <-&#10;---&#10;> uma citação"></textarea>
+    <small class="text-muted">Formatação: <code>## título</code>, <code>**negrito**</code>, <code>*itálico*</code>, <code>[link](url)</code>, <code>- lista</code>, <code>&gt; citação</code>, <code>---</code> (divisória), <code>-&gt; centralizado &lt;-</code>.</small>
+  </div>
+  {{ ui.foto_unica_nome('imagem_corpo', '', 'Imagem no corpo (opcional)',
+       'Inserida no e-mail abaixo do banner da campanha. Ideal ~600px de largura. Clique, arraste ou cole (Ctrl+V).') }}
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6">
+      <label class="form-label">Botão extra — texto {{ ui.ajuda('Cria um botão próprio no e-mail (ex.: “Ver no Instagram”). Precisa do texto e do link.') }}</label>
+      <input type="text" name="cta_texto" class="form-control" placeholder="Ex.: Fale no WhatsApp">
+    </div>
+    <div class="col-sm-6">
+      <label class="form-label">Botão extra — link</label>
+      <input type="url" name="cta_link" class="form-control" placeholder="https://...">
+    </div>
+  </div>
+  <div class="mb-3" style="max-width:360px">
+    <label class="form-label">Vincular a uma campanha (opcional) {{ ui.ajuda('Inclui o banner da campanha no topo e um botão “Ver {campanha}” apontando para a página dela. Só campanhas vigentes aparecem.') }}</label>
+    <select name="campanha_id" class="form-select">
+      <option value="">— sem botão de campanha —</option>
+      {% for c in campanhas %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary" id="btn-previa"><i class="bi bi-eye"></i> Pré-visualizar</button>
+    <button class="btn btn-primary" {{ 'disabled' if not email_ok or not total }}><i class="bi bi-send"></i> Enviar para {{ total }} inscrito(s)</button>
+  </div>
+</form>
+
+<script>
+  // Pré-visualização: envia o formulário (com anexos) para a rota de prévia numa
+  // aba nova, sem disparar o envio nem a confirmação (submit programático não
+  // aciona o handler de 'submit'). Em DOMContentLoaded para o histórico (abaixo)
+  // já existir no DOM ao ligar o "Copiar".
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('form[action$="/newsletter/enviar"]');
+    const btn = document.getElementById('btn-previa');
+    if (!form || !btn) return;
+    btn.addEventListener('click', function () {
+      if (!form.reportValidity()) return;      // exige assunto + mensagem
+      const acaoOrig = form.action, alvoOrig = form.target;
+      form.action = '{{ url_for("main.previa_newsletter") }}';
+      form.target = '_blank';
+      form.submit();
+      form.action = acaoOrig;
+      form.target = alvoOrig || '';
+    });
+
+    // Copiar um envio anterior para o formulário (reaproveitar).
+    document.querySelectorAll('.js-copiar-envio').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const d = b.dataset;
+        const set = (name, val) => { const el = form.elements[name]; if (el) el.value = val || ''; };
+        set('assunto', d.assunto);
+        set('corpo', d.corpo);
+        set('cta_texto', d.ctaTexto);
+        set('cta_link', d.ctaLink);
+        set('campanha_id', d.campanha);
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        form.elements['assunto'].focus();
+      });
+    });
+  });
+</script>
+
+<!-- Histórico de envios -->
+{% if envios %}
+<h2 class="h5 mb-3"><i class="bi bi-clock-history"></i> Enviados</h2>
+<div class="table-responsive mb-4">
+  <table class="table table-hover align-middle bg-white">
+    <thead><tr><th>Data</th><th>Assunto</th><th class="text-center">Destinatários</th><th></th></tr></thead>
+    <tbody>
+    {% for e in envios %}
+      <tr>
+        <td data-label="Data">{{ e.criado_em | dt }}</td>
+        <td data-label="Assunto">{{ e.assunto }}</td>
+        <td data-label="Destinatários" class="text-center">{{ e.total }}</td>
+        <td class="text-nowrap">
+          <a href="{{ url_for('main.visualizar_envio', envio_id=e.id) }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visualizar"><i class="bi bi-eye"></i></a>
+          <button type="button" class="btn btn-sm btn-outline-secondary js-copiar-envio" title="Copiar para o formulário"
+                  data-assunto="{{ e.assunto }}" data-corpo="{{ e.corpo }}"
+                  data-cta-texto="{{ e.cta_texto }}" data-cta-link="{{ e.cta_link }}"
+                  data-campanha="{{ e.campanha_id or '' }}"><i class="bi bi-clipboard"></i></button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Lista -->
+<h2 class="h5 mb-3"><i class="bi bi-people"></i> Inscritos</h2>
+{% if inscritos %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle bg-white">
+    <thead><tr><th>E-mail</th><th>Nome</th><th>Origem</th></tr></thead>
+    <tbody>
+    {% for i in inscritos %}
+      <tr>
+        <td data-label="E-mail">{{ i.email }}</td>
+        <td data-label="Nome">
+          {% if i.cliente_id %}<a href="{{ url_for('main.detalhe_cliente', cliente_id=i.cliente_id) }}">{{ i.nome }}</a>
+          {% else %}{{ i.nome }}{% endif %}
+        </td>
+        <td data-label="Origem">
+          {% if i.origem == 'cliente' %}<span class="badge text-bg-secondary">cliente</span>
+          {% else %}<span class="badge text-bg-light border">avulso</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ ui.vazio('bi-envelope-heart', 'Nenhum inscrito ainda', 'Os e-mails captados no rodapé da loja e os clientes que aceitam novidades aparecem aqui.') }}
+{% endif %}
+{% endblock %}

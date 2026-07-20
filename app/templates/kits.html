@@ -23,7 +23,7 @@
         <thead class="table-light"><tr><th style="width:60%">Peça</th><th>Qtd</th><th></th></tr></thead>
         <tbody class="kit-linhas"></tbody>
       </table>
-      <button type="button" class="btn btn-outline-primary btn-sm mb-2 kit-add">+ Adicionar peça</button>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-2 kit-add"><i class="bi bi-plus-lg"></i> Adicionar peça</button>
       <div class="small text-muted mb-3 kit-economia"></div>
       <div class="text-end"><button class="btn btn-primary">Criar kit</button></div>
       {% else %}
@@ -48,12 +48,12 @@
           <td>{% if k.preco_normal > k.preco %}<span class="text-success">− {{ (k.preco_normal - k.preco) | moeda }}</span>{% else %}—{% endif %}</td>
           <td>{% if k.ativo %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">inativo</span>{% endif %}</td>
           <td class="text-end text-nowrap">
-            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-{{ k.id }}">Editar</button>
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-{{ k.id }}" title="Editar"><i class="bi bi-pencil"></i></button>
             <form method="post" action="{{ url_for('main.toggle_kit', kit_id=k.id) }}" class="d-inline">
               <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if k.ativo else 'Ativar' }}</button>
             </form>
             <form method="post" action="{{ url_for('main.excluir_kit', kit_id=k.id) }}" class="d-inline" data-confirm="Excluir kit?">
-              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+              <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
             </form>
           </td>
         </tr>
@@ -68,7 +68,7 @@
                 <thead class="table-light"><tr><th style="width:60%">Peça</th><th>Qtd</th><th></th></tr></thead>
                 <tbody class="kit-linhas" data-itens='[{% for i in k.itens %}{"peca_id": {{ i.peca_id }}, "quantidade": {{ i.quantidade }}}{{ "," if not loop.last }}{% endfor %}]'></tbody>
               </table>
-              <button type="button" class="btn btn-outline-primary btn-sm mb-2 kit-add">+ Adicionar peça</button>
+              <button type="button" class="btn btn-outline-primary btn-sm mb-2 kit-add"><i class="bi bi-plus-lg"></i> Adicionar peça</button>
               <div class="small text-muted mb-2 kit-economia"></div>
               <div class="text-end"><button class="btn btn-primary btn-sm">Salvar alterações</button></div>
             </form>
@@ -116,7 +116,7 @@
         </div>
       </td>
       <td><input type="text" name="quantidade" class="form-control form-control-sm in-qtd" value="1" style="width:70px"></td>
-      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger kit-rem">×</button></td>`;
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger kit-rem" title="Remover"><i class="bi bi-x-lg"></i></button></td>`;
     tbody.appendChild(tr);
     if (inicial) {
       const p = acha(inicial.peca_id);

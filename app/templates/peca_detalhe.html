@@ -1,22 +1,21 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block conteudo %}
+<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-link px-0 mb-2">← Voltar</a>
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
     <h1 class="h3 mb-1">{{ peca.nome }}{% if peca.colecao %} <span class="badge text-bg-light align-middle">{{ peca.colecao }}</span>{% endif %}{% if not peca.vitrine_publica %} <span class="badge text-bg-secondary align-middle" title="Não aparece na vitrine pública"><i class="bi bi-eye-slash"></i> oculta na vitrine</span>{% endif %}</h1>
     {% if peca.tags_lista %}
       <div class="mb-1">{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>
     {% endif %}
-    {% if peca.descricao %}<p class="text-muted mb-0">{{ peca.descricao }}</p>{% endif %}
+    {% if peca.composicao %}<p class="text-muted mb-0"><i class="bi bi-tags"></i> {{ peca.composicao }}</p>{% endif %}
   </div>
   <div class="text-nowrap">
-    <a href="{{ url_for('main.etiqueta_peca', peca_id=peca.id) }}" class="btn btn-sm btn-primary" target="_blank"><i class="bi bi-qr-code"></i> Etiqueta</a>
-    <form method="post" action="{{ url_for('main.duplicar_peca', peca_id=peca.id) }}" class="d-inline">
-      <button class="btn btn-sm btn-outline-secondary" title="Criar uma cópia desta peça">Duplicar</button>
-    </form>
-    <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+    <a href="{{ url_for('main.etiqueta_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" target="_blank" title="Etiqueta"><i class="bi bi-qr-code"></i></a>
+    <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
     <form method="post" action="{{ url_for('main.excluir_peca', peca_id=peca.id) }}" class="d-inline"
           data-confirm="Excluir esta peça?">
-      <button class="btn btn-sm btn-outline-danger">Excluir</button>
+      <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
     </form>
   </div>
 </div>
@@ -36,7 +35,7 @@
       <div class="position-relative">
         <img src="{{ url_for('static', filename='uploads/' ~ f.arquivo) }}" class="foto-thumb-vert" alt="">
         <form method="post" action="{{ url_for('main.excluir_foto_peca', foto_id=f.id) }}" class="position-absolute top-0 end-0" data-confirm="Remover foto?">
-          <button class="btn btn-sm btn-danger py-0 px-1" title="Remover foto">×</button>
+          <button class="btn btn-sm btn-danger py-0 px-1" title="Remover foto"><i class="bi bi-x-lg"></i></button>
         </form>
       </div>
       {% endfor %}
@@ -46,26 +45,62 @@
     <div class="card bg-white">
       <div class="card-body">
         <h2 class="h6 text-muted">Resumo financeiro</h2>
-        <table class="table table-sm mb-0">
-          <tr><td>Insumos</td><td class="text-end">{{ peca.custo_insumos | moeda }}</td></tr>
-          <tr><td>Mão de obra</td><td class="text-end">{{ peca.custo_mao_de_obra | moeda }}</td></tr>
-          <tr><td>Custos extras</td><td class="text-end">{{ peca.custos_extras | moeda }}</td></tr>
-          <tr class="fw-bold border-top"><td>Custo total</td><td class="text-end">{{ peca.custo_total | moeda }}</td></tr>
-          <tr><td>Margem</td><td class="text-end">{{ peca.margem_percentual | num }}%</td></tr>
-          <tr class="fw-bold text-success"><td>Preço de venda</td><td class="text-end">{{ peca.preco_venda | moeda }}</td></tr>
-          <tr class="text-success"><td>Lucro por peça</td><td class="text-end">{{ peca.lucro | moeda }}</td></tr>
-        </table>
-        <hr>
+        <!-- Margem editável: calculadora de preço, na mesma diagramação da tabela -->
+        <form method="post" action="{{ url_for('main.atualizar_margem', peca_id=peca.id) }}" class="mb-2">
+          <table class="table table-sm mb-1" id="pd-fin" data-custo="{{ peca.custo_total }}">
+            <tr><td>Insumos</td><td class="text-end">{{ peca.custo_insumos | moeda }}</td></tr>
+            <tr><td>Mão de obra</td><td class="text-end">{{ peca.custo_mao_de_obra | moeda }}</td></tr>
+            <tr><td>Custos extras</td><td class="text-end">{{ peca.custos_extras | moeda }}</td></tr>
+            <tr class="fw-bold border-top"><td>Custo total</td><td class="text-end">{{ peca.custo_total | moeda }}</td></tr>
+            <tr>
+              <td>Margem {{ ui.ajuda('Calculadora de preço: defina a margem (%) e veja o preço sugerido. Clique em “usar como etiqueta” para aplicar. Não altera a etiqueta sozinha — a etiqueta é o preço real.') }}</td>
+              <td class="text-end">
+                <span class="d-inline-flex align-items-center gap-1">
+                  <input type="text" name="margem" id="pd-margem" class="form-control form-control-sm text-end" inputmode="decimal" style="width:64px"
+                         value="{{ peca.margem_percentual | num if peca.margem_percentual else '' }}" placeholder="0">
+                  <span class="text-muted">%</span>
+                  <button class="btn btn-sm btn-link p-0 ms-1" title="Salvar margem"><i class="bi bi-check-lg"></i></button>
+                </span>
+              </td>
+            </tr>
+          </table>
+          <div class="d-flex justify-content-between align-items-center small">
+            <span class="text-muted">Preço sugerido: <strong id="pd-sugerido" class="text-success">{{ peca.preco_venda | moeda }}</strong></span>
+            <button type="button" class="btn btn-link btn-sm p-0" id="pd-usar">usar como etiqueta →</button>
+          </div>
+        </form>
+        <hr class="my-2">
+
         <form method="post" action="{{ url_for('main.atualizar_preco_etiqueta', peca_id=peca.id) }}">
           <label class="form-label">Preço etiqueta (comercial)</label>
           <div class="input-group">
             <span class="input-group-text">R$</span>
-            <input type="text" name="preco_etiqueta" class="form-control"
+            <input type="text" name="preco_etiqueta" id="pd-etiqueta" class="form-control"
                    value="{{ '%.2f'|format(peca.preco_etiqueta) if peca.preco_etiqueta else '' }}" placeholder="ajuste manual">
             <button class="btn btn-outline-primary">Salvar</button>
           </div>
-          <small class="text-muted">Usado como preço padrão na venda.</small>
+          <small class="text-muted">Preço real usado na venda e na análise. Lucro por etiqueta: <strong class="{{ 'text-success' if peca.lucro_etiqueta >= 0 else 'text-danger' }}">{{ peca.lucro_etiqueta | moeda }}</strong> ({{ peca.margem_efetiva | num }}%).</small>
         </form>
+        <script>
+          (function () {
+            const fin = document.getElementById('pd-fin');
+            const custo = parseFloat(fin.dataset.custo) || 0;
+            const margem = document.getElementById('pd-margem');
+            const sugerido = document.getElementById('pd-sugerido');
+            const etiqueta = document.getElementById('pd-etiqueta');
+            const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+            function calc() {
+              const m = (parseFloat(String(margem.value).replace(',', '.')) || 0) / 100;
+              return m >= 1 ? 0 : custo / (1 - m);
+            }
+            function atualizar() { sugerido.textContent = brl.format(calc()); }
+            margem.addEventListener('input', atualizar);
+            document.getElementById('pd-usar').addEventListener('click', () => {
+              etiqueta.value = calc().toFixed(2).replace('.', ',');
+              etiqueta.focus();
+            });
+          })();
+        </script>
       </div>
     </div>
 
@@ -207,7 +242,7 @@
                 <form method="post" action="{{ url_for('main.atualizar_qtd_ficha', item_id=item.id) }}" class="input-group input-group-sm" style="width:130px">
                   <input type="text" name="quantidade" class="form-control" value="{{ item.quantidade | num }}">
                   <span class="input-group-text">{{ item.insumo.unidade }}</span>
-                  <button class="btn btn-outline-secondary" title="Atualizar">✓</button>
+                  <button class="btn btn-outline-secondary" title="Atualizar"><i class="bi bi-check-lg"></i></button>
                 </form>
               </td>
               <td>{{ item.insumo.custo_unitario | moeda }}</td>
@@ -215,7 +250,7 @@
               <td class="text-end">
                 <form method="post" action="{{ url_for('main.remover_insumo_peca', item_id=item.id) }}"
                       data-confirm="Remover '{{ item.insumo.nome }}' da ficha técnica?">
-                  <button class="btn btn-sm btn-outline-danger">remover</button>
+                  <button class="btn btn-sm btn-outline-danger" title="Remover da ficha"><i class="bi bi-trash"></i></button>
                 </form>
               </td>
             </tr>
@@ -233,11 +268,15 @@
         <h3 class="h6">Adicionar insumo</h3>
         {% if insumos_disponiveis %}
         <form method="post" action="{{ url_for('main.adicionar_insumo_peca', peca_id=peca.id) }}" class="row g-2" id="form-add-insumo">
-          <div class="col-sm-6">
+          <div class="col">
             <div class="peca-picker" id="insumo-picker">
               <input type="hidden" name="insumo_id" class="picker-value" required>
               <button type="button" class="form-select text-start picker-toggle">Selecione um insumo...</button>
               <div class="picker-menu">
+                <div class="picker-busca" style="position:sticky;top:0;background:#fff;padding:6px;border-bottom:1px solid var(--line);z-index:1">
+                  <input type="text" class="form-control form-control-sm picker-filtro" placeholder="Buscar insumo…" autocomplete="off">
+                </div>
+                <div class="picker-vazio text-muted small p-2" hidden>Nenhum insumo encontrado.</div>
                 {% for insumo in insumos_disponiveis %}
                 <button type="button" class="picker-option" data-id="{{ insumo.id }}"
                         data-nome="{{ insumo.nome|e }}" data-foto="{{ insumo.foto or '' }}">
@@ -253,11 +292,11 @@
               </div>
             </div>
           </div>
-          <div class="col-sm-3">
-            <input type="text" name="quantidade" class="form-control" placeholder="quantidade" required>
+          <div class="col-auto">
+            <input type="text" name="quantidade" class="form-control" placeholder="qtd" required style="width:90px">
           </div>
-          <div class="col-sm-3">
-            <button class="btn btn-outline-primary w-100">Adicionar</button>
+          <div class="col-auto">
+            <button class="btn btn-outline-primary" title="Adicionar insumo"><i class="bi bi-plus-lg"></i></button>
           </div>
         </form>
         <script>
@@ -268,7 +307,24 @@
           const valor = picker.querySelector('.picker-value');
           const toggle = picker.querySelector('.picker-toggle');
           const menu = picker.querySelector('.picker-menu');
-          toggle.addEventListener('click', () => menu.classList.toggle('aberto'));
+          const filtro = picker.querySelector('.picker-filtro');
+          const vazio = picker.querySelector('.picker-vazio');
+          const opcoes = Array.from(picker.querySelectorAll('.picker-option'));
+          function aplicarFiltro() {
+            const q = (filtro.value || '').trim().toLowerCase();
+            let visiveis = 0;
+            opcoes.forEach(o => {
+              const ok = (o.dataset.nome || '').toLowerCase().includes(q);
+              o.hidden = !ok; if (ok) visiveis++;
+            });
+            if (vazio) vazio.hidden = visiveis > 0;
+          }
+          filtro.addEventListener('input', aplicarFiltro);
+          filtro.addEventListener('click', e => e.stopPropagation());
+          toggle.addEventListener('click', () => {
+            menu.classList.toggle('aberto');
+            if (menu.classList.contains('aberto')) { filtro.value = ''; aplicarFiltro(); setTimeout(() => filtro.focus(), 30); }
+          });
           menu.addEventListener('click', function (e) {
             const opt = e.target.closest('.picker-option');
             if (!opt) return;

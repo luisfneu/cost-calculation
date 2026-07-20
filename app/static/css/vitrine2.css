@@ -43,6 +43,8 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .v2-filtros .f-item:hover, .v2-filtros .f-item.on { color: var(--gold); }
 .v2-main { flex: 1; min-width: 0; }
 .v2-barra { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+/* Select "Ordenar por…": garante espaço para a seta não cobrir o texto. */
+.v2-barra .form-select { min-width: 150px; padding-right: 2rem; background-position: right .6rem center; }
 .v2-grid { display: grid; gap: 18px; grid-template-columns: repeat(4, 1fr); }
 .v2-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
 .v2-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
@@ -244,3 +246,125 @@ body { background: var(--mocha); font-family: var(--fonte-corpo); color: var(--i
 .favg-card.favg-esgotado img { filter: grayscale(.5); opacity: .6; }
 .favg-card.favg-esgotado .favg-nome, .favg-card.favg-esgotado .favg-preco { opacity: .6; }
 .favg-badge-esgot { position: absolute; top: 8px; left: 8px; z-index: 2; }
+
+/* Provador virtual: sliders na identidade (thumb dourado, trilho creme) */
+#modal-provador input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  height: 6px; border-radius: 3px; background: var(--line); outline: none; padding: 0;
+}
+#modal-provador input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--gold); border: 3px solid var(--cream); box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+}
+#modal-provador input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--gold);
+  border: 3px solid var(--cream); box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+}
+#modal-provador input[type="range"]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+#modal-provador .btn-outline-secondary { border-color: var(--gold); color: var(--gold); }
+#modal-provador .btn-outline-secondary:hover { background: var(--gold); color: #fff; }
+
+/* Descrição formatada (md_leve) na aba Detalhes */
+.pdp-desc-txt p { margin: 0 0 12px; }
+.pdp-desc-txt p:last-child { margin-bottom: 0; }
+.pdp-desc-txt ul { margin: 0 0 12px; padding-left: 1.4rem; list-style: disc outside; }
+.pdp-desc-txt li { margin-bottom: 4px; list-style: disc; display: list-item; }
+.pdp-desc-txt li::marker { color: var(--gold); }
+
+/* ----- Carrossel de banners (home) + página de campanha ----- */
+#v2-hero { max-width: 1440px; margin: 0 auto 6px; }
+#v2-hero .carousel-item { background: var(--cream-soft); }
+.v2-hero-link { display: block; }
+.v2-hero-img { width: 100%; height: auto; display: block; object-fit: cover; }
+#v2-hero .carousel-indicators { margin-bottom: .6rem; }
+#v2-hero .carousel-indicators [data-bs-target] { width: 8px; height: 8px; border-radius: 50%; border: 0; }
+
+/* Badge de campanha no card: canto inferior esquerdo (não colide com status/-%). */
+.v2-camp {
+  left: 8px; top: auto; bottom: 8px; background: var(--gold); color: #fff;
+  max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Página de campanha */
+.v2-campanha-hero { max-width: 1440px; margin: 0 auto; }
+.v2-campanha-cab { text-align: center; padding: 20px 0 10px; }
+.v2-campanha-tit { font-size: 1.7rem; margin: .3rem 0 .25rem; }
+.v2-campanha-sub { color: var(--ink-soft); margin-bottom: .5rem; }
+.v2-campanha-tag {
+  display: inline-block; background: var(--gold); color: #fff; font-weight: 700;
+  padding: 4px 14px; border-radius: 20px; font-size: .9rem; letter-spacing: .5px;
+}
+.v2-voltar-loja { display: inline-block; margin-bottom: 6px; }
+
+/* ===================== Rodapé da loja ===================== */
+.v2-footer { margin-top: 48px; }
+
+.v2-news { background: var(--cream-soft); border-top: 1px solid var(--line); }
+.v2-news-in { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 26px 22px; flex-wrap: wrap; }
+.v2-news-txt { flex: 1 1 260px; min-width: 240px; }
+.v2-news-txt h3 { font-family: var(--fonte-titulo); font-size: 1.25rem; margin: 0 0 3px; }
+.v2-news-txt p { margin: 0; color: var(--ink-soft); font-size: .9rem; }
+.v2-news-form { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 8px; }
+.v2-news-form .form-control { width: 170px; height: 44px; border-radius: 24px; border-color: var(--line);
+                             background: #fff; padding-inline: 16px; }
+.v2-news-form .form-control:focus { border-color: var(--gold); box-shadow: 0 0 0 .18rem rgba(176,138,79,.18); }
+.v2-news-form .btn { height: 44px; border-radius: 24px; padding-inline: 26px; white-space: nowrap;
+                     letter-spacing: 1px; text-transform: uppercase; font-size: .82rem; }
+.v2-news-form .form-control.is-invalid { border-color: #c0392b; background-image: none; }
+.v2-news-erro { flex: 1 1 100%; text-align: right; color: #c0392b; font-size: .82rem; margin-top: 2px; }
+.v2-news-erro[hidden] { display: none; }
+.v2-news-ok { flex: 1 1 320px; text-align: right; }
+.v2-news-ok[hidden] { display: none; }
+.v2-news-ok-msg { margin: 0; font-weight: 600; color: var(--ink); }
+.v2-news-ok-msg .bi { color: #2e7d32; margin-right: 5px; }
+.v2-news-ok-cad { margin: .4rem 0 0; color: var(--ink-soft); font-size: .88rem; }
+.v2-news-ok-cad[hidden] { display: none; }
+
+.v2-foot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 32px; padding: 44px 22px; }
+.v2-foot-logo { width: 190px; max-width: 65%; margin-bottom: 14px; }
+.v2-foot-social { margin-bottom: 14px; }
+.v2-foot-social a { font-size: 1.15rem; color: var(--ink); margin-right: 14px; text-decoration: none; }
+.v2-foot-social a:hover { color: var(--gold); }
+.v2-foot-cnpj { font-size: .82rem; font-weight: 600; color: var(--ink); margin: 6px 0 2px; }
+.v2-foot-end { font-size: .82rem; color: var(--ink-soft); margin: 0; white-space: pre-line; }
+.v2-foot-col h4 { font-family: var(--fonte-titulo); font-size: 1rem; margin: 0 0 12px; }
+.v2-foot-col a { display: block; color: var(--ink-soft); text-decoration: none; padding: 5px 0; font-size: .9rem; }
+.v2-foot-col a:hover { color: var(--gold); }
+.v2-foot-pay, .v2-foot-seg { display: inline-flex; align-items: center; gap: 7px; font-size: .9rem; color: var(--ink-soft); }
+.v2-foot-pay .bi, .v2-foot-seg .bi { font-size: 1.1rem; color: var(--gold); }
+
+.v2-foot-base { border-top: 1px solid var(--line); background: var(--cream-soft); }
+.v2-foot-base .v2-wrap { text-align: center; padding: 16px 22px; font-size: .82rem; color: var(--ink-soft); }
+
+@media (max-width: 768px) {
+  .v2-foot-grid { grid-template-columns: 1fr 1fr; gap: 24px 18px; padding: 32px 16px; }
+  .v2-foot-marca { grid-column: 1 / -1; }
+  .v2-news-in { padding: 18px 16px; }
+  .v2-news-form { width: 100%; flex-wrap: wrap; }
+  .v2-news-form .form-control { width: 100%; flex: 1 1 100%; }
+  .v2-news-form .btn { width: 100%; }
+}
+
+/* Menu Atendimento (topbar) */
+.v2-atend { position: static; }
+/* Igual ao "Frete grátis": herda uppercase + letter-spacing do topbar, um pouco maior. */
+.v2-atend-toggle { color: var(--cream); text-decoration: none; cursor: pointer; white-space: nowrap;
+                   font-size: .82rem; font-weight: 700; }
+.v2-atend-toggle:hover { color: #fff; }
+.v2-atend-toggle .bi-chevron-down { font-size: .7rem; }
+/* Reset da herança do topbar (uppercase / letter-spacing / fonte minúscula). */
+.v2-atend-menu { min-width: 264px; padding: 16px 18px; border: 0; border-radius: 12px;
+                 box-shadow: 0 12px 32px rgba(0,0,0,.16); text-transform: none; letter-spacing: normal; }
+.v2-atend-menu * { text-transform: none; letter-spacing: normal; }
+.v2-atend-tit { font-family: var(--fonte-titulo); font-size: 1.15rem; font-weight: 600; margin: 0 0 8px;
+                color: var(--ink); }
+.v2-atend-horario { font-size: .88rem; color: var(--ink-soft); margin: 0 0 12px; line-height: 1.55; }
+.v2-atend-linha { display: flex; align-items: center; gap: 11px; padding: 9px 0; color: var(--ink);
+                  text-decoration: none; }
+.v2-atend-linha + .v2-atend-linha { border-top: 1px solid var(--line); }
+.v2-atend-linha .bi { color: var(--gold); font-size: 1.15rem; }
+.v2-atend-info { display: flex; flex-direction: column; line-height: 1.2; }
+.v2-atend-rot { font-size: .72rem; color: var(--ink-soft); font-weight: 400; }
+.v2-atend-num { font-weight: 600; font-size: .98rem; color: var(--ink); }
+.v2-atend-linha:hover .v2-atend-num { color: var(--gold); }
+.v2-atend-linha:hover .v2-atend-rot { color: var(--gold); }

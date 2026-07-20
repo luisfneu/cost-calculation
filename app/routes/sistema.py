@@ -267,6 +267,16 @@ def configuracoes():
         Parametro.definir("aviso_email", request.form.get("aviso_email", "").strip())
         # Guia de medidas exibido nas páginas das peças (texto livre).
         Parametro.definir("guia_medidas", request.form.get("guia_medidas", "").strip())
+        # Dados do rodapé da loja pública.
+        Parametro.definir("razao_social", request.form.get("razao_social", "").strip())
+        Parametro.definir("cnpj", request.form.get("cnpj", "").strip())
+        Parametro.definir("endereco_loja", request.form.get("endereco_loja", "").strip())
+        Parametro.definir("instagram", request.form.get("instagram", "").strip())
+        Parametro.definir("email_loja", request.form.get("email_loja", "").strip())
+        # Central de atendimento (menu da loja).
+        Parametro.definir("telefone_fixo", request.form.get("telefone_fixo", "").strip())
+        Parametro.definir("atend_semana", request.form.get("atend_semana", "").strip())
+        Parametro.definir("atend_sabado", request.form.get("atend_sabado", "").strip())
         db.session.commit()
         flash("Configurações salvas.", "sucesso")
         return redirect(url_for("main.configuracoes"))
@@ -286,6 +296,14 @@ def configuracoes():
         "fuso": Parametro.obter("fuso", "America/Sao_Paulo"),
         "aviso_email": Parametro.obter("aviso_email", ""),
         "guia_medidas": Parametro.obter("guia_medidas", ""),
+        "razao_social": Parametro.obter("razao_social", ""),
+        "cnpj": Parametro.obter("cnpj", ""),
+        "endereco_loja": Parametro.obter("endereco_loja", ""),
+        "instagram": Parametro.obter("instagram", ""),
+        "email_loja": Parametro.obter("email_loja", ""),
+        "telefone_fixo": Parametro.obter("telefone_fixo", ""),
+        "atend_semana": Parametro.obter("atend_semana", "Segunda à sexta das 09hs às 18hs"),
+        "atend_sabado": Parametro.obter("atend_sabado", "Sábados das 09hs às 13hs"),
     }
     fusos = [
         "America/Sao_Paulo", "America/Bahia", "America/Fortaleza", "America/Recife",

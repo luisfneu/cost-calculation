@@ -47,6 +47,8 @@ csrf = CSRFProtect()
 # de create_app acumularia um listener por app criado (ex.: a cada teste).
 from sqlalchemy import event as _sa_event  # noqa: E402
 
+from .models import Campanha as _Campanha  # noqa: E402
+from .models import CampanhaPeca as _CampanhaPeca  # noqa: E402
 from .models import Colecao as _Colecao  # noqa: E402
 from .models import EstoquePeca as _EstoquePeca  # noqa: E402
 from .models import FotoPeca as _FotoPeca  # noqa: E402
@@ -56,7 +58,8 @@ from .models import PecaInsumo as _PecaInsumo  # noqa: E402
 
 # Insumo/PecaInsumo entram porque o preço sob encomenda (custo) e o "esgotado"
 # derivam da ficha técnica e do estoque de insumos.
-_MODELOS_VITRINE = (_Peca, _EstoquePeca, _FotoPeca, _Colecao, Parametro, _Insumo, _PecaInsumo)
+_MODELOS_VITRINE = (_Peca, _EstoquePeca, _FotoPeca, _Colecao, Parametro, _Insumo, _PecaInsumo,
+                    _Campanha, _CampanhaPeca)
 
 
 @_sa_event.listens_for(db.session, "after_flush")
@@ -185,6 +188,119 @@ def create_app(config_class=Config):
             return f"{float(valor):g}"
         except (TypeError, ValueError):
             return valor
+
+    @app.template_filter("md_leve")
+    def md_leve(texto):
+        """Markdown leve e SEGURO (HTML do usuário é escapado). Suporta:
+        **negrito**, *itálico*, links [texto](http…/mailto…), títulos '## '/'### ',
+        listas '- '/'• ', citação '> ', linha divisória '---', centralizado
+        '-> texto <-', parágrafos (linha em branco) e quebras simples."""
+        import re as _re
+
+        from markupsafe import Markup, escape
+
+        def inline(s):
+            s = _re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+            s = _re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", s)
+
+            def _link(m):
+                rot, url = m.group(1), m.group(2)
+                # Só esquemas seguros (o texto já vem escapado; &amp; vira & na URL).
+                alvo = url.replace("&amp;", "&")
+                if not _re.match(r"^(https?:|mailto:)", alvo, _re.I):
+                    return m.group(0)
+                return f'<a href="{alvo}" target="_blank" rel="noopener">{rot}</a>'
+            return _re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", _link, s)
+
+        txt = str(escape(texto or ""))
+        out, para, lista = [], [], []
+
+        def fecha_para():
+            if para:
+                out.append("<p>" + "<br>".join(inline(p) for p in para) + "</p>")
+                para.clear()
+
+        def fecha_lista():
+            if lista:
+                out.append("<ul>" + "".join(f"<li>{inline(i)}</li>" for i in lista) + "</ul>")
+                lista.clear()
+
+        for ln in txt.split("\n"):
+            s = ln.strip()
+            if not s:                                   # linha em branco: fecha blocos
+                fecha_lista()
+                fecha_para()
+            elif _re.match(r"^(---|\*\*\*|___)$", s):   # linha divisória
+                fecha_lista()
+                fecha_para()
+                out.append("<hr>")
+            elif _re.match(r"^###\s+", s):              # subtítulo
+                fecha_lista()
+                fecha_para()
+                out.append("<h3>" + inline(_re.sub(r"^###\s+", "", s)) + "</h3>")
+            elif _re.match(r"^##\s+", s) or _re.match(r"^#\s+", s):   # título
+                fecha_lista()
+                fecha_para()
+                out.append("<h2>" + inline(_re.sub(r"^#{1,2}\s+", "", s)) + "</h2>")
+            elif _re.match(r"^&gt;\s+", s):             # citação (o '>' já vem escapado)
+                fecha_lista()
+                fecha_para()
+                out.append("<blockquote>" + inline(_re.sub(r"^&gt;\s+", "", s)) + "</blockquote>")
+            elif _re.match(r"^-&gt;\s*(.+?)\s*&lt;-$", s):   # centralizado ('->' e '<-' escapados)
+                fecha_lista()
+                fecha_para()
+                m = _re.match(r"^-&gt;\s*(.+?)\s*&lt;-$", s)
+                out.append('<p style="text-align:center">' + inline(m.group(1)) + "</p>")
+            elif _re.match(r"^[-•*]\s+", s):            # item de lista
+                fecha_para()
+                lista.append(_re.sub(r"^[-•*]\s+", "", s))
+            else:                                       # linha de texto
+                fecha_lista()
+                para.append(s)
+        fecha_lista()
+        fecha_para()
+        return Markup("".join(out))
+
+    @app.context_processor
+    def _injetar_medidas():
+        """Constantes da tabela de medidas para os templates (grade + padrão)."""
+        from .models import MEDIDAS_CAMPOS, MEDIDAS_FEMININAS, MEDIDAS_TAMANHOS
+        return {"MEDIDAS_CAMPOS": MEDIDAS_CAMPOS, "MEDIDAS_FEMININAS": MEDIDAS_FEMININAS,
+                "MEDIDAS_TAMANHOS": MEDIDAS_TAMANHOS}
+
+    @app.template_filter("telefone")
+    def telefone_fmt(valor):
+        """Formata um número BR para exibição: (DD) 99999-9999. Ignora DDI 55."""
+        import re as _re
+        d = _re.sub(r"\D", "", str(valor or ""))
+        if d.startswith("55") and len(d) > 11:
+            d = d[2:]
+        if len(d) == 11:
+            return f"({d[:2]}) {d[2:7]}-{d[7:]}"
+        if len(d) == 10:
+            return f"({d[:2]}) {d[2:6]}-{d[6:]}"
+        return valor or ""
+
+    @app.context_processor
+    def _injetar_loja():
+        """Dados de contato/identidade da loja para o rodapé público (editáveis
+        em Configurações via Parametro). Sem valor cadastrado, o rodapé usa o
+        texto padrão do template."""
+        from datetime import date as _date
+
+        from .models import Parametro
+        return {"ano_atual": _date.today().year, "loja": {
+            "whatsapp": Parametro.obter("whatsapp", ""),
+            "instagram": Parametro.obter("instagram", ""),
+            "email": Parametro.obter("email_loja", ""),
+            "cnpj": Parametro.obter("cnpj", ""),
+            "endereco": Parametro.obter("endereco_loja", ""),
+            "razao_social": Parametro.obter("razao_social", ""),
+            "telefone_fixo": Parametro.obter("telefone_fixo", ""),
+            "atend_semana": Parametro.obter("atend_semana", "Segunda à sexta das 09hs às 18hs"),
+            "atend_sabado": Parametro.obter("atend_sabado", "Sábados das 09hs às 13hs"),
+            "site": Parametro.obter("vitrine_url", ""),
+        }}
 
     # ----- Security headers -----
     # CSP completa fica de fora por ora: os templates usam <script> inline em

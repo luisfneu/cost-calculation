@@ -4,9 +4,36 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Inventário de insumos</h1>
-  <a href="{{ url_for('main.inventario') }}" class="btn btn-outline-secondary btn-sm">Inventário de peças →</a>
+  <a href="{{ url_for('main.inventario') }}" class="btn btn-outline-secondary btn-sm">Inventário de peças <i class="bi bi-arrow-right"></i></a>
 </div>
 <p class="text-muted">Preencha a <strong>contagem</strong> real para corrigir o estoque (deixe em branco para não mexer) e o <strong>mínimo</strong> (gera alerta de reposição). A diferença entra como movimento de entrada/saída, sem alterar o custo médio.</p>
+
+<!-- Filtros (GET) — fora do formulário de inventário -->
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+  <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+    <input type="hidden" name="filtrado" value="1">
+    <input type="text" name="q" class="form-control form-control-sm" placeholder="nome" value="{{ q }}" style="width:150px">
+    <select name="tipo" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+      <option value="">Todos os tipos</option>
+      <option value="tecido" {{ 'selected' if tipo == 'tecido' }}>Tecido</option>
+      <option value="aviamento" {{ 'selected' if tipo == 'aviamento' }}>Aviamento</option>
+      <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
+    </select>
+    <select name="situacao" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+      <option value="">Todas as situações</option>
+      <option value="baixo" {{ 'selected' if situacao == 'baixo' }}>Estoque baixo</option>
+      <option value="inativo" {{ 'selected' if situacao == 'inativo' }}>Somente inativos</option>
+    </select>
+    <div class="form-check form-switch mb-0 ms-1">
+      <input class="form-check-input" type="checkbox" role="switch" name="ocultar_inativos" id="ocultar-inativos"
+             {{ 'checked' if ocultar_inativos }} onchange="this.form.submit()">
+      <label class="form-check-label small" for="ocultar-inativos">Ocultar inativos</label>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+    {% if q or tipo or situacao or not ocultar_inativos %}<a href="{{ url_for('main.inventario_insumos') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+  </form>
+  {% if insumos %}{{ ui.por_pagina() }}{% endif %}
+</div>
 
 {% if insumos %}
 <form method="post">
@@ -25,30 +52,31 @@
       <tbody>
       {% for i in insumos %}
         <tr>
-          <td>
+          <td data-label="Insumo">
             <div class="d-flex align-items-center gap-2">
               {% if i.foto %}
-                <img src="{{ url_for('static', filename='uploads/' ~ i.foto) }}" class="foto-thumb" alt="">
+                <img src="{{ url_for('static', filename=(i.foto | thumb)) }}" class="foto-thumb" alt="" loading="lazy">
               {% else %}
                 <span class="foto-thumb sem-foto d-inline-flex align-items-center justify-content-center">—</span>
               {% endif %}
               <div>
                 <a href="{{ url_for('main.form_insumo', insumo_id=i.id) }}" class="link-atelier">{{ i.nome }}</a>
+                {% if not i.ativo %}<span class="badge text-bg-secondary">inativo</span>{% endif %}
                 {% if i.fornecedor %}<div class="small text-muted">{{ i.fornecedor }}</div>{% endif %}
               </div>
             </div>
           </td>
-          <td><span class="badge {{ 'badge-embalagem' if i.tipo == 'embalagem' else 'badge-materia' }}">{{ i.tipo_label }}</span></td>
-          <td class="text-end {{ 'text-danger fw-bold' if i.estoque_baixo }}">{{ i.estoque | num }} {{ i.unidade }}</td>
-          <td>
+          <td data-label="Tipo"><span class="badge {{ {'tecido':'badge-tecido','aviamento':'badge-aviamento','embalagem':'badge-embalagem'}.get(i.tipo, 'badge-materia') }}">{{ i.tipo_label }}</span></td>
+          <td data-label="Em estoque" class="text-end {{ 'text-danger fw-bold' if i.estoque_baixo }}">{{ i.estoque | num }} {{ i.unidade }}</td>
+          <td data-label="Contagem">
             <div class="input-group input-group-sm">
-              <input type="text" name="cont_{{ i.id }}" class="form-control text-end" placeholder="{{ i.estoque | num }}">
+              <input type="text" name="cont_{{ i.id }}" class="form-control text-end" placeholder="{{ i.estoque | num }}" inputmode="decimal">
               <span class="input-group-text">{{ i.unidade }}</span>
             </div>
           </td>
-          <td>
+          <td data-label="Mínimo">
             <div class="input-group input-group-sm">
-              <input type="text" name="min_{{ i.id }}" class="form-control text-end" value="{{ i.estoque_minimo | num if i.estoque_minimo else '' }}" placeholder="mín.">
+              <input type="text" name="min_{{ i.id }}" class="form-control text-end" value="{{ i.estoque_minimo | num if i.estoque_minimo else '' }}" placeholder="mín." inputmode="decimal">
               <span class="input-group-text">{{ i.unidade }}</span>
             </div>
           </td>
@@ -57,12 +85,16 @@
       </tbody>
     </table>
   </div>
+  {% if total_paginas > 1 %}
+  <p class="small text-muted mb-2"><i class="bi bi-info-circle"></i> A contagem é aplicada por página — clique em <strong>Aplicar</strong> antes de trocar de página.</p>
+  {% endif %}
+  {% include "_paginacao.html" %}
   <div class="text-end">
     <button class="btn btn-primary">Aplicar inventário</button>
   </div>
   </div></div>
 </form>
 {% else %}
-{{ ui.vazio('bi-box-seam', 'Nenhum insumo cadastrado', 'Cadastre insumos para controlar o estoque.', '+ Novo insumo', url_for('main.form_insumo')) }}
+{{ ui.vazio('bi-box-seam', 'Nenhum insumo encontrado', 'Ajuste os filtros ou cadastre insumos.', '+ Novo insumo', url_for('main.form_insumo')) }}
 {% endif %}
 {% endblock %}

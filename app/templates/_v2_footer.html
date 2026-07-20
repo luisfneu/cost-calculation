@@ -1,0 +1,132 @@
+{# Rodapé da loja (Vitrine V2). Dados de contato vêm do context processor `loja`
+   (editáveis em Configurações); sem cadastro, usa os padrões abaixo. #}
+{% set ig = loja.instagram or 'https://instagram.com/sabrinahansenatelier' %}
+{% set wa = loja.whatsapp or whatsapp %}
+<footer class="v2-footer">
+
+  <!-- Newsletter -->
+  <div class="v2-news">
+    <div class="v2-wrap v2-news-in">
+      <div class="v2-news-txt">
+        <h3>Inscreva-se na nossa Newsletter</h3>
+        <p>E receba as últimas novidades e lançamentos do ateliê.</p>
+      </div>
+      <div class="v2-news-form" id="v2-news-form" data-url="{{ url_for('publico.newsletter_inscrever') }}">
+        <input type="text" name="news_nome" class="form-control" placeholder="Nome" aria-label="Nome" autocomplete="name">
+        <input type="email" name="news_email" class="form-control" placeholder="E-mail" aria-label="E-mail" autocomplete="email">
+        <button type="button" class="btn btn-primary v2-news-btn">Enviar</button>
+        <div class="v2-news-erro" hidden><i class="bi bi-exclamation-circle"></i> Digite um e-mail válido.</div>
+      </div>
+      <div class="v2-news-ok" id="v2-news-ok" hidden>
+        <p class="v2-news-ok-msg"><i class="bi bi-check-circle-fill"></i> Pronto! Seu e-mail está na nossa newsletter.</p>
+        <p class="v2-news-ok-cad" hidden>Crie sua conta para acompanhar pedidos e favoritos.
+          <button type="button" class="btn btn-sm btn-outline-primary v2-news-cad">Criar conta</button></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Colunas -->
+  <div class="v2-wrap v2-foot-grid">
+    <div class="v2-foot-marca">
+      <img src="{{ url_for('static', filename='logo.svg') }}" alt="Sabrina Hansen Atelier" class="v2-foot-logo">
+      <div class="v2-foot-social">
+        <a href="{{ ig }}" target="_blank" rel="noopener" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+        {% if wa %}<a href="https://wa.me/{{ wa }}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>{% endif %}
+      </div>
+      {% if loja.razao_social or loja.cnpj %}
+      <p class="v2-foot-cnpj">{{ loja.razao_social or 'Sabrina Hansen Atelier' }}{% if loja.cnpj %} — CNPJ {{ loja.cnpj }}{% endif %}</p>
+      {% endif %}
+      {% if loja.endereco %}<p class="v2-foot-end">{{ loja.endereco }}</p>{% endif %}
+    </div>
+
+    <div class="v2-foot-col">
+      <h4>Sua conta</h4>
+      <a href="{{ url_for('publico.conta_painel') }}">Minha conta</a>
+      <a href="{{ url_for('publico.conta_pedidos') }}">Meus pedidos</a>
+      <a href="{{ url_for('publico.conta_favoritos') }}">Lista de desejos</a>
+      <a href="{{ url_for('publico.conta_pedidos') }}">Rastrear pedido</a>
+      <a href="{{ url_for('publico.conta_esqueci') }}">Recuperar senha</a>
+    </div>
+
+    <div class="v2-foot-col">
+      <h4>Atendimento</h4>
+      {% if wa %}<a href="https://wa.me/{{ wa }}" target="_blank" rel="noopener">Fale conosco (WhatsApp)</a>{% endif %}
+      <a href="{{ url_for('publico.politica_privacidade') }}">Política de privacidade</a>
+      <a href="{{ url_for('publico.politica_privacidade') }}">Trocas e devoluções</a>
+      <a href="{{ url_for('publico.politica_privacidade') }}">Dúvidas frequentes</a>
+    </div>
+
+    <div class="v2-foot-col v2-foot-selos">
+      <h4>Formas de pagamento</h4>
+      <div class="v2-foot-pay"><i class="bi bi-qr-code"></i> Pix</div>
+      <h4 class="mt-3">Compra segura</h4>
+      <div class="v2-foot-seg"><i class="bi bi-shield-lock"></i> Site 100% seguro</div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const form = document.getElementById('v2-news-form');
+      if (!form) return;
+      const nome = form.querySelector('[name="news_nome"]');
+      const email = form.querySelector('[name="news_email"]');
+      const btn = form.querySelector('.v2-news-btn');
+      const erro = form.querySelector('.v2-news-erro');
+      const ok = document.getElementById('v2-news-ok');
+      const okCad = ok.querySelector('.v2-news-ok-cad');
+      const RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;   // e-mail simples: algo@algo.algo
+
+      function abrirCadastro() {
+        const modal = document.getElementById('modal-login');
+        if (!modal || !window.bootstrap) return;
+        const set = (sel, val) => { const el = modal.querySelector(sel); if (el && val) el.value = val; };
+        set('[data-auth-pane="signup"] [name="nome"]', (nome.value || '').trim());
+        set('[data-auth-pane="signup"] [name="email"]', (email.value || '').trim());
+        modal.querySelectorAll('[data-auth-pane]').forEach(p => { p.hidden = p.dataset.authPane !== 'signup'; });
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+      }
+
+      btn.addEventListener('click', function () {
+        if (!RE.test((email.value || '').trim())) {
+          email.classList.add('is-invalid');
+          erro.hidden = false;
+          email.focus();
+          return;
+        }
+        email.classList.remove('is-invalid');
+        erro.hidden = true;
+        btn.disabled = true;
+        btn.textContent = 'Enviando…';
+        fetch(form.dataset.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome: (nome.value || '').trim(), email: email.value.trim() }),
+        })
+          .then(r => r.json())
+          .then(d => {
+            if (!d || !d.ok) throw new Error('falha');
+            form.hidden = true;
+            ok.hidden = false;
+            okCad.hidden = !d.sugerir_cadastro;
+          })
+          .catch(() => {
+            btn.disabled = false;
+            btn.textContent = 'Enviar';
+            erro.textContent = 'Não deu para inscrever agora. Tente novamente.';
+            erro.hidden = false;
+          });
+      });
+      email.addEventListener('input', function () {
+        if (RE.test(email.value.trim())) { email.classList.remove('is-invalid'); erro.hidden = true; }
+      });
+      ok.querySelector('.v2-news-cad').addEventListener('click', abrirCadastro);
+    })();
+  </script>
+
+  <!-- Copyright -->
+  <div class="v2-foot-base">
+    <div class="v2-wrap">
+      Sabrina Hansen Atelier © {{ ano_atual }} — Todos os direitos reservados.
+    </div>
+  </div>
+</footer>

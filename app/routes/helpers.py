@@ -52,7 +52,7 @@ from ..models import (
     dinheiro,
 )
 
-__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_date', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_item_baixa_estoque', '_liberar_reservas_pre_pedido', '_notificar_pedido_novo', '_avisar_favoritos_voltou', '_avisar_favoritos_promocao', '_notificar_etapa_cliente', '_link_publico', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes', '_limpar_cache_vitrine']
+__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_int', '_to_date', '_insumos_filtrados', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_item_baixa_estoque', '_liberar_reservas_pre_pedido', '_notificar_pedido_novo', '_avisar_favoritos_voltou', '_avisar_favoritos_promocao', '_notificar_etapa_cliente', '_link_publico', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes', '_limpar_cache_vitrine']
 
 
 def _limpar_cache_vitrine():
@@ -100,6 +100,43 @@ def _to_float(valor, padrao=0.0):
         return padrao
 
 
+def _insumos_filtrados():
+    """Aplica os filtros da URL (q, tipo, situação, ocultar inativos) e devolve
+    (lista, dict_de_estado). Compartilhado pela lista e pelo inventário de insumos.
+    'Ocultar inativos' liga por padrão — o hidden 'filtrado' distingue a primeira
+    carga (checkbox desmarcado nunca manda nada) de o usuário ter desmarcado."""
+    q = request.args.get("q", "").strip()
+    tipo = request.args.get("tipo", "").strip()
+    situacao = request.args.get("situacao", "").strip()  # "" | "baixo" | "inativo"
+    if request.args.get("filtrado"):
+        ocultar_inativos = request.args.get("ocultar_inativos") == "on"
+    else:
+        ocultar_inativos = True
+
+    query = Insumo.query
+    if q:
+        query = query.filter(Insumo.nome.ilike(f"%{q}%"))
+    if tipo in ("tecido", "aviamento", "embalagem"):
+        query = query.filter_by(tipo=tipo)
+    insumos = query.order_by(Insumo.nome).all()
+    if situacao == "baixo":
+        insumos = [i for i in insumos if i.estoque_baixo]
+    elif situacao == "inativo":
+        insumos = [i for i in insumos if not i.ativo]
+    if ocultar_inativos:
+        insumos = [i for i in insumos if i.ativo]
+    insumos.sort(key=lambda i: (not i.ativo, i.nome.lower()))
+    return insumos, {"q": q, "tipo": tipo, "situacao": situacao, "ocultar_inativos": ocultar_inativos}
+
+
+def _to_int(valor, padrao=0):
+    """Converte string de formulário em int, ou o padrão se vazio/inválido."""
+    try:
+        return int(str(valor).strip())
+    except (TypeError, ValueError, AttributeError):
+        return padrao
+
+
 def _to_date(valor):
     """Converte 'YYYY-MM-DD' (input date) em date, ou None."""
     if not valor:
@@ -114,8 +151,9 @@ def _extensao_permitida(nome):
     return "." in nome and nome.rsplit(".", 1)[1].lower() in current_app.config["ALLOWED_EXTENSIONS"]
 
 
-def _salvar_foto(arquivo):
-    """Salva o upload com nome único e retorna o nome do arquivo (ou None)."""
+def _salvar_foto(arquivo, lado_max=1200):
+    """Salva o upload com nome único e retorna o nome do arquivo (ou None).
+    `lado_max` limita o maior lado (banners largos usam 2000)."""
     if not arquivo or arquivo.filename == "":
         return None
     if not _extensao_permitida(arquivo.filename):
@@ -131,7 +169,7 @@ def _salvar_foto(arquivo):
         os.remove(caminho)
         flash("O arquivo enviado não é uma imagem válida.", "erro")
         return None
-    _otimizar_imagem(caminho)
+    _otimizar_imagem(caminho, lado_max)
     _gerar_thumbnail(nome)      # miniatura leve para a grade da vitrine
     return nome
 

@@ -3,7 +3,7 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Insumos / Estoque</h1>
-  <a href="{{ url_for('main.form_insumo') }}" class="btn btn-primary">+ Novo insumo</a>
+  <a href="{{ url_for('main.form_insumo') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Novo insumo</a>
 </div>
 
 <div class="card bg-white">
@@ -11,21 +11,28 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
       <h2 class="h5 mb-0">Estoque de insumos</h2>
       <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+        <input type="hidden" name="filtrado" value="1">
         <input type="text" name="q" class="form-control form-control-sm" placeholder="nome" value="{{ q }}" style="width:150px">
         <select name="tipo" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
           <option value="">Todos os tipos</option>
-          <option value="materia_prima" {{ 'selected' if tipo == 'materia_prima' }}>Matéria-prima</option>
+          <option value="tecido" {{ 'selected' if tipo == 'tecido' }}>Tecido</option>
+          <option value="aviamento" {{ 'selected' if tipo == 'aviamento' }}>Aviamento</option>
           <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
         </select>
         <select name="situacao" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
           <option value="">Todas as situações</option>
-          <option value="ativo" {{ 'selected' if situacao == 'ativo' }}>Ocultar inativos</option>
           <option value="baixo" {{ 'selected' if situacao == 'baixo' }}>Estoque baixo</option>
           <option value="inativo" {{ 'selected' if situacao == 'inativo' }}>Somente inativos</option>
         </select>
+        <div class="form-check form-switch mb-0 ms-1">
+          <input class="form-check-input" type="checkbox" role="switch" name="ocultar_inativos" id="ocultar-inativos"
+                 {{ 'checked' if ocultar_inativos }} onchange="this.form.submit()">
+          <label class="form-check-label small" for="ocultar-inativos">Ocultar inativos</label>
+        </div>
         <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
-        {% if q or tipo or situacao %}<a href="{{ url_for('main.listar_insumos') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
+        {% if q or tipo or situacao or ocultar_inativos %}<a href="{{ url_for('main.listar_insumos') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
       </form>
+      {% if insumos %}{{ ui.por_pagina() }}{% endif %}
     </div>
 
     {% if insumos %}
@@ -42,7 +49,7 @@
         <tr class="{{ 'linha-zerada' if zerado else ('table-warning' if insumo.estoque_baixo) }}">
           <td>
             {% if insumo.foto %}
-              <img src="{{ url_for('static', filename='uploads/' ~ insumo.foto) }}" class="foto-thumb" alt="" loading="lazy">
+              <img src="{{ url_for('static', filename=(insumo.foto | thumb)) }}" class="foto-thumb" alt="" loading="lazy">
             {% else %}
               <div class="foto-thumb sem-foto">—</div>
             {% endif %}
@@ -58,11 +65,12 @@
            data-minimo="{{ insumo.estoque_minimo | num }}"
            data-ativo="{{ 'Sim' if insumo.ativo else 'Não' }}"
            data-fornecedor="{{ insumo.fornecedor or '—' }}"
+           data-composicao="{{ insumo.composicao or '' }}"
            data-baixo="{{ '1' if insumo.estoque_baixo else '' }}"
            data-zerado="{{ '1' if insumo.estoque <= 0 else '' }}"
            data-foto="{{ url_for('static', filename='uploads/' ~ insumo.foto) if insumo.foto else '' }}"
            data-editar="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}">{{ insumo.nome }}</a>
-        <span class="badge {{ 'badge-embalagem' if insumo.tipo == 'embalagem' else 'badge-materia' }}">{{ insumo.tipo_label }}</span>
+        <span class="badge {{ {'tecido':'badge-tecido','aviamento':'badge-aviamento','embalagem':'badge-embalagem'}.get(insumo.tipo, 'badge-materia') }}">{{ insumo.tipo_label }}</span>
         {% if not insumo.ativo %}<span class="badge text-bg-secondary">inativo</span>{% endif %}
         <div class="small text-muted">por {{ insumo.unidade }}{% if insumo.fornecedor %} · {{ insumo.fornecedor }}{% endif %}</div>
       </td>
@@ -77,7 +85,8 @@
         <button type="button" class="btn btn-sm btn-outline-primary btn-mov" title="Movimentar"
                 data-bs-toggle="modal" data-bs-target="#modal-mov"
                 data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}"
-                data-unidade="{{ insumo.unidade }}" data-estoque="{{ insumo.estoque | num }}">
+                data-unidade="{{ insumo.unidade }}" data-estoque="{{ insumo.estoque | num }}"
+                data-estoque-raw="{{ insumo.estoque }}" data-custo="{{ insumo.custo_unitario }}">
           <i class="bi bi-arrow-down-up"></i>
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary btn-hist"
@@ -96,6 +105,7 @@
       </tbody>
     </table>
     </div>
+    {% include "_paginacao.html" %}
     {% else %}
     {{ ui.vazio('bi-box-seam', 'Nenhum insumo cadastrado', 'Comece cadastrando tecidos, etiquetas, linhas, botões etc.', '+ Novo insumo', url_for('main.form_insumo')) }}
     {% endif %}
@@ -118,6 +128,7 @@
         <table class="table table-sm align-middle mb-0">
           <tbody>
             <tr><th class="text-muted" style="width:42%">Tipo</th><td id="in-tipo"></td></tr>
+            <tr id="in-composicao-row"><th class="text-muted">Composição</th><td id="in-composicao"></td></tr>
             <tr><th class="text-muted">Unidade</th><td id="in-unidade"></td></tr>
             <tr><th class="text-muted">Custo médio</th><td id="in-custo"></td></tr>
             <tr><th class="text-muted">Em estoque</th><td id="in-estoque"></td></tr>
@@ -142,6 +153,10 @@
       const set = (id, v) => { document.getElementById(id).textContent = v; };
       set('in-nome', d.nome);
       set('in-tipo', d.tipo);
+      // Composição só para tecido (mostra a linha quando houver).
+      const compRow = document.getElementById('in-composicao-row');
+      if (d.composicao) { set('in-composicao', d.composicao); compRow.style.display = ''; }
+      else { compRow.style.display = 'none'; }
       set('in-unidade', d.unidade);
       set('in-custo', d.custo);
       let est = d.estoque + ' ' + d.unidade;
@@ -184,17 +199,22 @@
           </div>
           <div class="col-6">
             <label class="form-label small">Quantidade</label>
-            <input type="text" name="quantidade" class="form-control" placeholder="0" autocomplete="off">
+            <input type="text" name="quantidade" id="mov-qtd" class="form-control" placeholder="0" autocomplete="off" inputmode="decimal">
           </div>
           <div class="col-12" id="mov-custo-campo">
             <label class="form-label small">Custo unitário na compra (opcional)</label>
-            <input type="text" name="custo_unitario" class="form-control" placeholder="0,00"
-                   title="Atualiza o custo médio do insumo (só entrada)">
+            <input type="text" name="custo_unitario" id="mov-custo" class="form-control" placeholder="0,00" data-mask="money"
+                   inputmode="numeric" title="Atualiza o custo médio do insumo (só entrada)">
           </div>
           <div class="col-12">
             <label class="form-label small">Observação</label>
             <input type="text" name="observacao" class="form-control" placeholder="Ex.: compra fornecedor X">
           </div>
+        </div>
+        <!-- Prévia do movimento: estoque resultante + valor, antes de efetivar. -->
+        <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-3">
+          <span class="small text-muted" id="mov-resumo">—</span>
+          <span><span class="text-muted small">Valor: </span><strong id="mov-valor">R$ 0,00</strong></span>
         </div>
       </div>
       <div class="modal-footer">
@@ -214,11 +234,34 @@
     const estoque = document.getElementById('mov-estoque');
     const tipo = document.getElementById('mov-tipo');
     const custoCampo = document.getElementById('mov-custo-campo');
+    const qtdEl = document.getElementById('mov-qtd');
+    const custoEl = document.getElementById('mov-custo');
+    const resumo = document.getElementById('mov-resumo');
+    const valorEl = document.getElementById('mov-valor');
+    const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    let estoqueAtual = 0, custoMedio = 0, unidade = 'un';
 
     function alternarCusto() {
       custoCampo.style.display = tipo.value === 'entrada' ? '' : 'none';
+      prever();
     }
     tipo.addEventListener('change', alternarCusto);
+
+    // Prévia: estoque resultante + valor do movimento, antes de efetivar.
+    function prever() {
+      const qtd = parseFloat(String(qtdEl.value || '0').replace(',', '.')) || 0;
+      const entrada = tipo.value === 'entrada';
+      // Custo do movimento: na entrada usa o digitado (senão o médio); na saída usa o médio.
+      const custoDigit = (parseInt((custoEl.value || '').replace(/\D/g, ''), 10) || 0) / 100;
+      const custoUse = entrada ? (custoDigit || custoMedio) : custoMedio;
+      const novo = entrada ? estoqueAtual + qtd : estoqueAtual - qtd;
+      valorEl.textContent = brl.format(qtd * custoUse);
+      if (qtd <= 0) { resumo.textContent = `estoque atual: ${estoqueAtual.toLocaleString('pt-BR')} ${unidade}`; return; }
+      const sinal = entrada ? '+' : '−';
+      const alerta = (!entrada && novo < 0) ? '  ⚠ saldo insuficiente' : '';
+      resumo.textContent = `${estoqueAtual.toLocaleString('pt-BR')} ${sinal} ${qtd.toLocaleString('pt-BR')} = ${novo.toLocaleString('pt-BR')} ${unidade}${alerta}`;
+    }
+    [qtdEl, custoEl].forEach(el => el.addEventListener('input', prever));
 
     modal.addEventListener('show.bs.modal', function (ev) {
       const b = ev.relatedTarget;
@@ -227,6 +270,9 @@
         .replace(/\/0\/movimentar$/, `/${b.dataset.id}/movimentar`);
       nome.textContent = b.dataset.nome;
       estoque.textContent = `· estoque atual: ${b.dataset.estoque} ${b.dataset.unidade}`;
+      estoqueAtual = parseFloat(b.dataset.estoqueRaw || '0') || 0;
+      custoMedio = parseFloat(b.dataset.custo || '0') || 0;
+      unidade = b.dataset.unidade || 'un';
       // Limpa os campos manualmente (form.reset() apagaria o token CSRF injetado).
       form.querySelectorAll('input[name="quantidade"],input[name="custo_unitario"],input[name="observacao"]')
         .forEach(i => i.value = '');

@@ -29,9 +29,13 @@ from werkzeug.utils import secure_filename
 from .. import csrf
 from ..extensions import cache, limiter
 from ..models import (
+    MEDIDAS_CAMPOS,
     MEDIDAS_FEMININAS,
+    MEDIDAS_TAMANHOS,
     TAMANHOS,
     Auditoria,
+    Campanha,
+    CampanhaPeca,
     Cliente,
     Colecao,
     Cupom,
@@ -45,6 +49,8 @@ from ..models import (
     Lead,
     MovimentoEstoque,
     MovimentoPeca,
+    NewsletterEnvio,
+    NewsletterInscrito,
     OrdemProducao,
     OrdemProducaoItem,
     Pagamento,
@@ -77,24 +83,10 @@ def vitrine():
 
 @bp.route("/insumos")
 def listar_insumos():
-    q = request.args.get("q", "").strip()
-    tipo = request.args.get("tipo", "").strip()
-    situacao = request.args.get("situacao", "").strip()  # "baixo" | "inativo" | ""
-    query = Insumo.query
-    if q:
-        query = query.filter(Insumo.nome.ilike(f"%{q}%"))
-    if tipo in ("materia_prima", "embalagem"):
-        query = query.filter_by(tipo=tipo)
-    insumos = query.order_by(Insumo.nome).all()
-    if situacao == "baixo":
-        insumos = [i for i in insumos if i.estoque_baixo]
-    elif situacao == "inativo":
-        insumos = [i for i in insumos if not i.ativo]
-    elif situacao == "ativo":
-        insumos = [i for i in insumos if i.ativo]
-    # Inativos vão para o final da lista (mantendo a ordem alfabética dentro de cada grupo).
-    insumos.sort(key=lambda i: (not i.ativo, i.nome.lower()))
-    return render_template("insumos.html", insumos=insumos, q=q, tipo=tipo, situacao=situacao)
+    insumos, filtro = _insumos_filtrados()
+    insumos, pagina, total_paginas = _paginar(insumos)
+    return render_template("insumos.html", insumos=insumos, pagina=pagina,
+                           total_paginas=total_paginas, **filtro)
 
 
 @bp.route("/insumos/novo", methods=["GET", "POST"])
@@ -113,8 +105,15 @@ def form_insumo(insumo_id=None):
             db.session.add(insumo)
 
         insumo.nome = nome
-        tipo = request.form.get("tipo", "materia_prima")
-        insumo.tipo = tipo if tipo in ("materia_prima", "embalagem") else "materia_prima"
+        tipo = request.form.get("tipo", "aviamento")
+        insumo.tipo = tipo if tipo in ("tecido", "aviamento", "embalagem") else "aviamento"
+        # Composição e largura só fazem sentido para tecido.
+        if insumo.tipo == "tecido":
+            insumo.composicao = request.form.get("composicao", "").strip()
+            insumo.largura_cm = _to_float(request.form.get("largura"))
+        else:
+            insumo.composicao = ""
+            insumo.largura_cm = 0.0
         insumo.unidade = request.form.get("unidade", "un").strip() or "un"
         insumo.custo_unitario = dinheiro(_to_float(request.form.get("custo_unitario")))
         insumo.estoque_minimo = _to_float(request.form.get("estoque_minimo"))
@@ -225,6 +224,16 @@ def listar_pecas():
                            vitrine=vitrine, pagina=pagina, total_paginas=total_paginas)
 
 
+@bp.route("/pecas/comparar")
+def comparar_pecas():
+    """Comparação lado a lado de várias peças para análise de custo/preço."""
+    ids = [int(x) for x in request.args.get("ids", "").split(",") if x.strip().isdigit()]
+    pecas = Peca.query.filter(Peca.id.in_(ids)).all() if ids else []
+    ordem = {pid: i for i, pid in enumerate(ids)}
+    pecas.sort(key=lambda p: ordem.get(p.id, 999))
+    return render_template("pecas_comparar.html", pecas=pecas)
+
+
 @bp.route("/pecas/nova", methods=["GET", "POST"])
 @bp.route("/pecas/<int:peca_id>/editar", methods=["GET", "POST"])
 def form_peca(peca_id=None):
@@ -282,7 +291,18 @@ def form_peca(peca_id=None):
         peca.tags = _txt("tags", peca.tags)
         peca.descricao = _txt("descricao", peca.descricao)
         peca.composicao = _txt("composicao", peca.composicao)
-        peca.medidas = _txt("medidas", peca.medidas)
+        zona = request.form.get("zona_corpo", "").strip()
+        if zona in ("superior", "inferior", "inteiro"):
+            peca.zona_corpo = zona
+        # Medidas: grade tamanho × medida → JSON. Só grava quando a grade foi enviada.
+        if any(k.startswith("medida_") for k in request.form):
+            md = {}
+            for tam in MEDIDAS_TAMANHOS:
+                vals = {c: request.form.get(f"medida_{tam}_{c}", "").strip()
+                        for c, _ in MEDIDAS_CAMPOS}
+                if any(vals.values()):
+                    md[tam] = vals
+            peca.medidas = json.dumps(md, ensure_ascii=False) if md else ""
         peca.custo_mao_de_obra = dinheiro(_num("custo_mao_de_obra", peca.custo_mao_de_obra))
         peca.custos_extras = dinheiro(_num("custos_extras", peca.custos_extras))
         peca.margem_percentual = _num("margem_percentual", peca.margem_percentual)
@@ -439,28 +459,6 @@ def atualizar_qtd_ficha(item_id):
     return redirect(url_for("main.detalhe_peca", peca_id=item.peca_id))
 
 
-@bp.route("/pecas/<int:peca_id>/duplicar", methods=["POST"])
-def duplicar_peca(peca_id):
-    orig = Peca.query.get_or_404(peca_id)
-    nova = Peca(
-        nome=f"{orig.nome} (cópia)", colecao=orig.colecao, tags=orig.tags,
-        descricao=orig.descricao, composicao=orig.composicao, medidas=orig.medidas,
-        foto=_copiar_foto(orig.foto),
-        custo_mao_de_obra=orig.custo_mao_de_obra, custos_extras=orig.custos_extras,
-        margem_percentual=orig.margem_percentual, preco_etiqueta=orig.preco_etiqueta,
-        peso_g=orig.peso_g, altura_cm=orig.altura_cm,
-        largura_cm=orig.largura_cm, comprimento_cm=orig.comprimento_cm,
-    )
-    db.session.add(nova)
-    db.session.flush()
-    # Copia a ficha técnica (não copia estoque nem fotos extras).
-    for it in orig.insumos:
-        db.session.add(PecaInsumo(peca=nova, insumo=it.insumo, quantidade=it.quantidade))
-    db.session.commit()
-    flash("Peça duplicada. Ajuste o nome e os dados.", "sucesso")
-    return redirect(url_for("main.form_peca", peca_id=nova.id))
-
-
 @bp.route("/pecas/<int:peca_id>/produzir", methods=["POST"])
 def produzir_peca(peca_id):
     """Produz N unidades de um tamanho: baixa os insumos da ficha e dá
@@ -530,6 +528,16 @@ def atualizar_preco_etiqueta(peca_id):
     peca.preco_etiqueta = _to_float(request.form.get("preco_etiqueta"))
     db.session.commit()
     flash(f"Preço etiqueta atualizado para {peca.preco_etiqueta:.2f}.", "sucesso")
+    return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
+
+
+@bp.route("/pecas/<int:peca_id>/margem", methods=["POST"])
+def atualizar_margem(peca_id):
+    """Atualiza a margem (%) da peça — ferramenta de precificação no detalhe."""
+    peca = Peca.query.get_or_404(peca_id)
+    peca.margem_percentual = _to_float(request.form.get("margem"))
+    db.session.commit()
+    flash(f"Margem atualizada para {peca.margem_percentual:g}%.", "sucesso")
     return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
 
 
@@ -777,13 +785,82 @@ def vitrine_v2():
     og_image = (url_for("static", filename="uploads/" + og_peca.foto, _external=True)
                 if og_peca else None)
 
+    # Slides do carrossel da home: o banner_hero das campanhas vigentes.
+    banners = [
+        {"imagem": camp.banner_hero, "imagem_mobile": None,
+         "titulo": camp.nome, "link": f"/campanha/{camp.slug}"}
+        for camp in Campanha.query.filter_by(ativa=True).order_by(Campanha.criado_em.desc()).all()
+        if camp.vigente and camp.banner_hero
+    ]
+
     resp = make_response(render_template(
         "vitrine2.html", pecas=pecas, tipos=tipos, colecoes=colecoes, tamanhos=TAMANHOS,
         q=request.args.get("q", ""), tipo=tipo, colecao=colecao, ordem=ordem,
         tam_sel=tam_sel, colecao_fotos=colecao_fotos, whatsapp=whatsapp, novos=novos,
-        total=len(pecas), meta_desc=meta_desc, og_image=og_image))
+        total=len(pecas), meta_desc=meta_desc, og_image=og_image, banners=banners))
     if _cliente_esta_logado():
         resp.headers["Cache-Control"] = "no-store"   # página logada: não guardar no navegador
+    return resp
+
+
+@publico_bp.route("/campanha/<slug>")
+@limiter.limit("60 per minute")
+@cache.cached(timeout=60, query_string=True, unless=_cliente_esta_logado)
+def campanha_publica(slug):
+    """Página pública de uma campanha: banner + peças (com os filtros padrão da
+    vitrine, aplicados dentro do conjunto da campanha)."""
+    campanha = Campanha.por_slug(slug)
+    if not campanha or not campanha.vigente:
+        abort(404)
+
+    q = request.args.get("q", "").strip().lower()
+    tipo = request.args.get("tipo", "").strip()
+    colecao = request.args.get("colecao", "").strip()
+    ordem = request.args.get("ordem", "").strip()
+    tam_sel = [t for t in request.args.getlist("tamanho") if t in TAMANHOS]
+
+    publicas = Peca.query.filter_by(vitrine_publica=True).all()
+    base = [p for p in publicas if campanha.inclui(p)]   # conjunto da campanha
+
+    # Opções de filtro vêm só do conjunto da campanha.
+    tipos = sorted({p.tipo for p in base if p.tipo})
+    colecoes = sorted({p.colecao for p in base if p.colecao})
+
+    pecas = base
+    if q:
+        pecas = [p for p in pecas
+                 if q in p.nome.lower() or q in (p.colecao or "").lower() or q in (p.tags or "").lower()]
+    if tipo:
+        pecas = [p for p in pecas if p.tipo == tipo]
+    if colecao:
+        pecas = [p for p in pecas if (p.colecao or "") == colecao]
+    if tam_sel:
+        pecas = [p for p in pecas
+                 if any(p.disponivel_por_tamanho.get(t, 0) > 0 for t in tam_sel)]
+
+    chaves = {"preco_asc": lambda p: p.preco_vitrine,
+              "preco_desc": lambda p: -p.preco_vitrine,
+              "nome": lambda p: p.nome.lower()}
+    chave = chaves.get(ordem, lambda p: p.nome.lower())
+
+    def _grupo(p):
+        if p.esgotado:
+            return 2
+        return 1 if p.sob_encomenda else 0
+    pecas = sorted(pecas, key=lambda p: (_grupo(p), chave(p)))
+
+    colecao_fotos = {c.nome: c.foto for c in Colecao.query.all() if c.foto}
+    whatsapp = Parametro.obter("whatsapp", "")
+    limite_novo = datetime.utcnow() - timedelta(days=21)
+    novos = {p.id for p in publicas if p.criado_em and p.criado_em >= limite_novo}
+
+    resp = make_response(render_template(
+        "campanha.html", campanha=campanha, pecas=pecas, colecao_fotos=colecao_fotos,
+        whatsapp=whatsapp, novos=novos, total=len(pecas), tipos=tipos, colecoes=colecoes,
+        tamanhos=TAMANHOS, q=request.args.get("q", ""), tipo=tipo, colecao=colecao,
+        ordem=ordem, tam_sel=tam_sel))
+    if _cliente_esta_logado():
+        resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -857,6 +934,33 @@ def cupom_publico():
         "desconto": cupom.desconto_para(subtotal),
         "rotulo": _rotulo_cupom(cupom),
     }
+
+
+@publico_bp.route("/publico/newsletter", methods=["POST"])
+@csrf.exempt
+@limiter.limit("10 per minute")
+def newsletter_inscrever():
+    """Inscreve um e-mail na newsletter (rodapé da loja). Se for de um cliente,
+    liga a flag aceita_novidades; senão guarda como inscrito avulso. Sugere criar
+    conta quando o visitante está deslogado ou o e-mail não é de um cliente."""
+    import re as _re
+    dados = request.get_json(silent=True) or {}
+    email = Cliente.normalizar_email(dados.get("email", ""))
+    nome = str(dados.get("nome", "")).strip()[:160]
+    if not _re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        return {"ok": False, "erro": "E-mail inválido."}, 400
+
+    cliente = Cliente.por_email(email)
+    if cliente:
+        cliente.aceita_novidades = True
+    else:
+        existente = NewsletterInscrito.query.filter_by(email=email).first()
+        if not existente:
+            db.session.add(NewsletterInscrito(email=email, nome=nome))
+    db.session.commit()
+
+    sugerir = (not _cliente_esta_logado()) or (cliente is None)
+    return {"ok": True, "sugerir_cadastro": sugerir}
 
 
 def _pix_publico(valor, txid):
@@ -1275,3 +1379,286 @@ def excluir_colecao(colecao_id):
     db.session.commit()
     flash("Coleção excluída. As peças mantêm o nome da coleção.", "sucesso")
     return redirect(url_for("main.listar_colecoes"))
+
+
+# --------------------------------------------------------------------------- #
+# Loja online: banners do carrossel e campanhas com desconto.
+# --------------------------------------------------------------------------- #
+def _slugify(texto):
+    """Gera slug url-safe (minúsculo, sem acento, hífens)."""
+    base = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode()
+    base = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
+    return base or "campanha"
+
+
+def _slug_unico(nome, campanha_id=None):
+    """Slug único a partir do nome (sufixo -2, -3... se colidir)."""
+    base = _slugify(nome)
+    slug = base
+    i = 2
+    while True:
+        existente = Campanha.query.filter_by(slug=slug).first()
+        if not existente or existente.id == campanha_id:
+            return slug
+        slug = f"{base}-{i}"
+        i += 1
+
+
+# ----- Campanhas -----
+@bp.route("/campanhas")
+def listar_campanhas():
+    campanhas = Campanha.query.order_by(Campanha.criado_em.desc()).all()
+    contagem = {c.id: len(c.pecas()) for c in campanhas}
+    return render_template("campanhas.html", campanhas=campanhas, contagem=contagem)
+
+
+@bp.route("/campanhas/nova", methods=["GET", "POST"])
+@bp.route("/campanhas/<int:campanha_id>/editar", methods=["GET", "POST"])
+def form_campanha(campanha_id=None):
+    campanha = Campanha.query.get_or_404(campanha_id) if campanha_id else None
+    tipos = sorted({p.tipo for p in Peca.query.all() if p.tipo})
+    colecoes = sorted({c.nome for c in Colecao.query.all()})
+
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        if not nome:
+            flash("O nome da campanha é obrigatório.", "erro")
+            return render_template("campanha_form.html", campanha=campanha, tipos=tipos, colecoes=colecoes)
+
+        novo = campanha is None
+        if novo:
+            campanha = Campanha()
+
+        campanha.nome = nome
+        # Gera o slug antes de anexar à sessão: a query dentro de _slug_unico
+        # dispara autoflush, e uma campanha nova ainda sem slug violaria o NOT NULL.
+        with db.session.no_autoflush:
+            campanha.slug = _slug_unico(nome, campanha.id)
+        if novo:
+            db.session.add(campanha)
+        campanha.subtitulo = request.form.get("subtitulo", "").strip()
+        campanha.ativa = request.form.get("ativa") == "on"
+        campanha.inicio = _to_date(request.form.get("inicio"))
+        campanha.fim = _to_date(request.form.get("fim"))
+        campanha.filtro_colecao = request.form.get("filtro_colecao", "").strip()
+        campanha.filtro_tipo = request.form.get("filtro_tipo", "").strip()
+        campanha.filtro_tags = request.form.get("filtro_tags", "").strip()
+        dtipo = request.form.get("desconto_tipo", "percentual")
+        campanha.desconto_tipo = dtipo if dtipo in ("percentual", "valor") else "percentual"
+        campanha.desconto_valor = _to_float(request.form.get("desconto_valor"), 0.0)
+
+        nova_h = _salvar_foto(request.files.get("banner_hero"), lado_max=2000)
+        if nova_h:
+            _remover_foto(campanha.banner_hero)
+            campanha.banner_hero = nova_h
+        nova_l = _salvar_foto(request.files.get("banner_landing"), lado_max=2000)
+        if nova_l:
+            _remover_foto(campanha.banner_landing)
+            campanha.banner_landing = nova_l
+
+        db.session.commit()
+        flash("Campanha salva. Ajuste as peças em “Peças da campanha” se precisar.", "sucesso")
+        return redirect(url_for("main.gerir_pecas_campanha", campanha_id=campanha.id))
+
+    return render_template("campanha_form.html", campanha=campanha, tipos=tipos, colecoes=colecoes)
+
+
+@bp.route("/campanhas/<int:campanha_id>/toggle", methods=["POST"])
+def toggle_campanha(campanha_id):
+    campanha = Campanha.query.get_or_404(campanha_id)
+    campanha.ativa = not campanha.ativa
+    db.session.commit()
+    return redirect(url_for("main.listar_campanhas"))
+
+
+@bp.route("/campanhas/<int:campanha_id>/excluir", methods=["POST"])
+def excluir_campanha(campanha_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    campanha = Campanha.query.get_or_404(campanha_id)
+    _remover_foto(campanha.banner_hero)
+    _remover_foto(campanha.banner_landing)
+    db.session.delete(campanha)
+    db.session.commit()
+    flash("Campanha excluída.", "sucesso")
+    return redirect(url_for("main.listar_campanhas"))
+
+
+@bp.route("/campanhas/<int:campanha_id>/pecas")
+def gerir_pecas_campanha(campanha_id):
+    campanha = Campanha.query.get_or_404(campanha_id)
+    pecas = Peca.query.order_by(Peca.colecao, Peca.nome).all()
+    forcado = {e.peca_id: e.incluir for e in campanha.excecoes}
+    linhas = []
+    for p in pecas:
+        casa = campanha.casa_filtro(p)
+        if p.id in forcado:
+            estado = "incluida" if forcado[p.id] else "excluida"
+        else:
+            estado = "auto" if casa else "fora"
+        linhas.append({"peca": p, "casa": casa, "estado": estado,
+                       "dentro": campanha.inclui(p)})
+    return render_template("campanha_pecas.html", campanha=campanha, linhas=linhas)
+
+
+@bp.route("/campanhas/<int:campanha_id>/pecas/<int:peca_id>", methods=["POST"])
+def marcar_peca_campanha(campanha_id, peca_id):
+    campanha = Campanha.query.get_or_404(campanha_id)
+    Peca.query.get_or_404(peca_id)
+    acao = request.form.get("acao", "auto")   # incluir | excluir | auto
+    excecao = CampanhaPeca.query.filter_by(campanha_id=campanha.id, peca_id=peca_id).first()
+
+    if acao == "auto":
+        if excecao:
+            db.session.delete(excecao)
+    else:
+        incluir = acao == "incluir"
+        if excecao:
+            excecao.incluir = incluir
+        else:
+            db.session.add(CampanhaPeca(campanha_id=campanha.id, peca_id=peca_id, incluir=incluir))
+
+    db.session.commit()
+    return redirect(url_for("main.gerir_pecas_campanha", campanha_id=campanha.id))
+
+
+# ----- Newsletter -----
+def _destinatarios_newsletter():
+    """União deduplicada dos inscritos: clientes com opt-in + avulsos. Cliente
+    tem precedência (nome/id). Retorna lista de dicts {email, nome, origem, cliente_id}."""
+    clientes = (Cliente.query.filter_by(aceita_novidades=True)
+                .filter(Cliente.email.isnot(None)).order_by(Cliente.nome).all())
+    avulsos = NewsletterInscrito.query.order_by(NewsletterInscrito.criado_em.desc()).all()
+    vistos, inscritos = set(), []
+    for cli in clientes:
+        e = (cli.email or "").strip().lower()
+        if not e or e in vistos:
+            continue
+        vistos.add(e)
+        inscritos.append({"email": cli.email, "nome": cli.nome, "origem": "cliente", "cliente_id": cli.id})
+    for a in avulsos:
+        e = (a.email or "").strip().lower()
+        if not e or e in vistos:
+            continue
+        vistos.add(e)
+        inscritos.append({"email": a.email, "nome": a.nome or "—", "origem": "avulso", "cliente_id": None})
+    return inscritos
+
+
+@bp.route("/newsletter")
+def listar_newsletter():
+    from ..emails import email_configurado
+    inscritos = _destinatarios_newsletter()
+    if request.args.get("csv"):
+        linhas = [[i["email"], i["nome"], i["origem"]] for i in inscritos]
+        return _csv_response(["E-mail", "Nome", "Origem"], linhas, "newsletter.csv")
+    campanhas = [c for c in Campanha.query.order_by(Campanha.criado_em.desc()).all() if c.vigente]
+    envios = NewsletterEnvio.query.order_by(NewsletterEnvio.criado_em.desc()).limit(30).all()
+    return render_template("newsletter.html", inscritos=inscritos, total=len(inscritos),
+                           campanhas=campanhas, email_ok=email_configurado(), envios=envios)
+
+
+def _montar_newsletter(preview=False):
+    """Monta o e-mail da newsletter a partir do formulário. Retorna (assunto, html)
+    ou (None, mensagem_de_erro). Em preview, a imagem do corpo vira data URI (não
+    grava em disco); no envio real, é salva em uploads."""
+    assunto = request.form.get("assunto", "").strip()
+    corpo = request.form.get("corpo", "").strip()
+    campanha_id = request.form.get("campanha_id", "").strip()
+    cta_texto = request.form.get("cta_texto", "").strip()
+    cta_link = request.form.get("cta_link", "").strip()
+    if not assunto or not corpo:
+        return None, "Preencha o assunto e a mensagem."
+
+    corpo_html = current_app.jinja_env.filters["md_leve"](corpo)   # markdown seguro
+
+    banner_src = banner_link = None
+    botoes = []
+    if campanha_id.isdigit():
+        camp = Campanha.query.get(int(campanha_id))
+        if camp and camp.vigente:
+            banner_link = url_for("publico.campanha_publica", slug=camp.slug, _external=True)
+            img = camp.banner_landing or camp.banner_hero
+            if img:
+                banner_src = url_for("static", filename="uploads/" + img, _external=True)
+            botoes.append({"texto": f"Ver {camp.nome}", "link": banner_link})
+
+    if cta_texto and re.match(r"^https?://", cta_link, re.I):
+        botoes.append({"texto": cta_texto, "link": cta_link})
+
+    img_corpo_src = None
+    arq_up = request.files.get("imagem_corpo")
+    if preview:
+        img_corpo_src = _imagem_data_uri(arq_up)     # inline, sem gravar
+    else:
+        arq = _salvar_foto(arq_up, lado_max=1200)
+        if arq:
+            img_corpo_src = url_for("static", filename="uploads/" + arq, _external=True)
+
+    html = render_template(
+        "email_newsletter.html", corpo_html=corpo_html, banner_src=banner_src,
+        banner_link=banner_link, img_corpo_src=img_corpo_src, botoes=botoes)
+    return assunto, html
+
+
+def _imagem_data_uri(arquivo):
+    """Lê o upload e devolve um data URI base64 (para a prévia, sem tocar o disco).
+    None se não houver arquivo válido."""
+    if not arquivo or arquivo.filename == "":
+        return None
+    import base64
+    dados = arquivo.read()
+    arquivo.seek(0)   # devolve o ponteiro (caso seja lido de novo)
+    if not dados:
+        return None
+    mime = arquivo.mimetype or "image/jpeg"
+    return f"data:{mime};base64," + base64.b64encode(dados).decode()
+
+
+@bp.route("/newsletter/previa", methods=["POST"])
+def previa_newsletter():
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    assunto, html = _montar_newsletter(preview=True)
+    if assunto is None:
+        return f"<p style='font-family:sans-serif;padding:20px'>{html}</p>", 400
+    # Mostra o e-mail exatamente como será enviado (numa aba nova).
+    return html
+
+
+@bp.route("/newsletter/enviar", methods=["POST"])
+def enviar_newsletter():
+    bloqueio = _exigir_admin()   # dispara e-mail externo em massa: só admin
+    if bloqueio:
+        return bloqueio
+    from ..emails import email_configurado, enviar_lote_async
+    if not email_configurado():
+        flash("Envio de e-mail não configurado (RESEND_API_KEY/MAIL_FROM).", "erro")
+        return redirect(url_for("main.listar_newsletter"))
+
+    assunto, html = _montar_newsletter(preview=False)
+    if assunto is None:
+        flash(html, "erro")   # aqui 'html' é a mensagem de erro
+        return redirect(url_for("main.listar_newsletter"))
+
+    emails = [i["email"] for i in _destinatarios_newsletter()]
+    n = enviar_lote_async(emails, assunto, html)
+    # Guarda no histórico (HTML p/ visualizar + campos originais p/ reaproveitar).
+    cid = request.form.get("campanha_id", "").strip()
+    db.session.add(NewsletterEnvio(
+        assunto=assunto, html=html, total=n,
+        corpo=request.form.get("corpo", "").strip(),
+        campanha_id=int(cid) if cid.isdigit() else None,
+        cta_texto=request.form.get("cta_texto", "").strip(),
+        cta_link=request.form.get("cta_link", "").strip()))
+    db.session.commit()
+    flash(f"Enviando a newsletter para {n} inscrito(s). O envio corre ao fundo.", "sucesso")
+    return redirect(url_for("main.listar_newsletter"))
+
+
+@bp.route("/newsletter/envio/<int:envio_id>")
+def visualizar_envio(envio_id):
+    envio = NewsletterEnvio.query.get_or_404(envio_id)
+    return envio.html
