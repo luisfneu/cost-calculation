@@ -3,7 +3,7 @@
 {% block conteudo %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Vendas</h1>
-  <a href="{{ url_for('main.registrar_venda') }}" class="btn btn-primary">+ Nova venda</a>
+  <a href="{{ url_for('main.registrar_venda') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nova venda</a>
 </div>
 
 {# Cor da bolinha (grupo) da jornada: recebido, pagamento, recibo, envio, transporte, entregue #}
@@ -30,7 +30,7 @@
           <button class="btn btn-sm btn-outline-secondary">Filtrar</button>
           {% if q or de or ate or status %}<a href="{{ url_for('main.listar_vendas') }}" class="btn btn-sm btn-link">limpar</a>{% endif %}
         </form>
-        <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary">⬇ CSV</a>
+        <a href="{{ url_for('main.exportar_vendas_csv') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> Exportar CSV</a>
         {{ ui.por_pagina() }}
       </div>
     </div>

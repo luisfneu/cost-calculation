@@ -66,7 +66,7 @@
         <label class="form-label small mb-1">Tamanho habitual</label>
         <select name="tamanho_habitual" class="form-select">
           <option value="">—</option>
-          {% for t in ['PP', 'P', 'M', 'G', 'GG', 'XG'] %}
+          {% for t in ['PP', 'P', 'M', 'G', 'GG'] %}
             <option value="{{ t }}" {{ 'selected' if cliente.tamanho_habitual == t }}>{{ t }}</option>
           {% endfor %}
         </select>

@@ -66,7 +66,7 @@
     <small class="text-muted">Digite e pressione <kbd>,</kbd> ou <kbd>Enter</kbd> para criar cada tag.</small>
   </div>
   <div class="mb-3">
-    <label class="form-label">Descrição {{ ajuda('Texto opcional mostrado na vitrine pública da peça.') }}</label>
+    <label class="form-label">Descrição {{ ajuda('Mostrada na vitrine com a formatação preservada: linha em branco separa parágrafos; linhas começando com "- " viram lista; **negrito** e *itálico*.') }}</label>
     <textarea name="descricao" class="form-control" rows="2">{{ peca.descricao if peca else '' }}</textarea>
   </div>
   <div class="row">
@@ -76,8 +76,44 @@
              value="{{ peca.composicao if peca else '' }}">
     </div>
     <div class="col-md-6 mb-3">
-      <label class="form-label">Medidas {{ ajuda('Medidas específicas desta peça (texto livre). Em branco, a vitrine mostra a tabela de medidas padrão feminina.') }}</label>
-      <textarea name="medidas" class="form-control" rows="2" placeholder="Deixe em branco para usar a tabela padrão">{{ peca.medidas if peca else '' }}</textarea>
+      <label class="form-label">Zona do corpo {{ ajuda('Guia o provador virtual: parte de cima usa busto+cintura; de baixo usa cintura+quadril; corpo inteiro usa as três. Sugerido pelo tipo da peça.') }}</label>
+      <select name="zona_corpo" id="zona-corpo" class="form-select">
+        {% set z = peca.zona_corpo if peca else 'inteiro' %}
+        <option value="inteiro" {{ 'selected' if z == 'inteiro' }}>Corpo inteiro (vestido, macacão…)</option>
+        <option value="superior" {{ 'selected' if z == 'superior' }}>Parte superior (blusa, camisa, colete…)</option>
+        <option value="inferior" {{ 'selected' if z == 'inferior' }}>Parte inferior (calça, saia, short…)</option>
+      </select>
+    </div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label d-block">Medidas da peça (cm) {{ ajuda('Em branco, a vitrine mostra a tabela padrão feminina. Customize só os tamanhos/medidas que quiser — o texto em cinza é o valor padrão (só dica).') }}</label>
+    {% set mt = peca.medidas_tabela if peca else None %}
+    {% set atual = {} %}
+    {% if mt %}{% for r in mt.rows %}{% set _ = atual.update({r.tam: r}) %}{% endfor %}{% endif %}
+    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#medidas-grade"
+            aria-expanded="false" aria-controls="medidas-grade">
+      <i class="bi bi-rulers"></i> {{ 'Ver medidas customizadas' if mt else 'Customizar medidas' }}
+    </button>
+    {% if mt %}<span class="badge text-bg-info ms-2">personalizada</span>{% else %}<span class="text-muted small ms-2">usando a tabela padrão</span>{% endif %}
+    <div class="collapse mt-2" id="medidas-grade">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle" style="max-width:640px">
+          <thead><tr><th>Tamanho</th>{% for k, lbl in MEDIDAS_CAMPOS %}<th class="small">{{ lbl }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for tam in MEDIDAS_TAMANHOS %}
+            {% set pad = MEDIDAS_FEMININAS | selectattr('tam', 'equalto', tam) | first %}
+            <tr>
+              <td class="fw-bold">{{ tam }}</td>
+              {% for k, lbl in MEDIDAS_CAMPOS %}
+              <td><input type="text" name="medida_{{ tam }}_{{ k }}" class="form-control form-control-sm" inputmode="numeric" style="width:84px"
+                         value="{{ atual[tam][k] if atual.get(tam) else '' }}" placeholder="{{ pad[k] if pad else '' }}"></td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="text-muted small mb-0">Deixe tudo em branco para voltar à tabela padrão.</p>
+      </div>
     </div>
   </div>
   <div class="row">
@@ -170,7 +206,7 @@
       </tr>
     </tfoot>
   </table>
-  <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="add-linha">+ Adicionar insumo</button>
+  <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="add-linha"><i class="bi bi-plus-lg"></i> Adicionar insumo</button>
 
   {# Dados dos insumos disponíveis para o JS calcular subtotais #}
   <script id="dados-insumos" type="application/json">
@@ -205,7 +241,7 @@
       <td><select name="insumo_id" class="form-select sel-insumo">${opcoes()}</select></td>
       <td><input type="text" name="quantidade_insumo" class="form-control qtd-insumo" value="1"></td>
       <td class="subtotal">R$ 0,00</td>
-      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-linha">×</button></td>`;
+      <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-linha" title="Remover"><i class="bi bi-x-lg"></i></button></td>`;
     corpo.appendChild(tr);
     recalcular();
   }
@@ -240,4 +276,25 @@
 {% endif %}
 <script src="{{ url_for('static', filename='js/fotos-uploader.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tags-input.js') }}"></script>
+<script>
+  // Sugere a zona do corpo pelo tipo da peça (para de sugerir se escolher manualmente).
+  (function () {
+    const tipo = document.querySelector('input[name="tipo"]');
+    const zona = document.getElementById('zona-corpo');
+    if (!tipo || !zona) return;
+    let manual = false;
+    zona.addEventListener('change', () => { manual = true; });
+    const MAPA = [
+      [/saia|cal[çc]a|short|bermuda|legging/i, 'inferior'],
+      [/blusa|camisa|colete|cropped|top|casaco|jaqueta|camiseta|regata/i, 'superior'],
+      [/vestido|macac[ãa]o|conjunto/i, 'inteiro'],
+    ];
+    tipo.addEventListener('input', () => {
+      if (manual) return;
+      for (const [re, z] of MAPA) {
+        if (re.test(tipo.value)) { zona.value = z; return; }
+      }
+    });
+  })();
+</script>
 {% endblock %}

@@ -1,0 +1,41 @@
+{# E-mail da newsletter. Renderizado no servidor e enviado via Resend.
+   Recebe: corpo_html (Markup), banner_src, banner_link, img_corpo_src, botoes[]. #}
+<div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#333;line-height:1.55;font-size:15px">
+
+  <!-- Cabeçalho fixo: logo -->
+  <div style="text-align:center;padding:24px 0 14px">
+    <img src="{{ url_for('static', filename='logo-email.png', _external=True) }}" width="240" alt="Sabrina Hansen Atelier" style="width:240px;max-width:72%;height:auto;display:inline-block">
+  </div>
+
+  {% if banner_src %}
+  <a href="{{ banner_link }}"><img src="{{ banner_src }}" width="600" alt="" style="width:100%;max-width:600px;height:auto;border-radius:8px;display:block;margin:0 auto 18px"></a>
+  {% endif %}
+
+  {% if img_corpo_src %}
+  <img src="{{ img_corpo_src }}" width="600" alt="" style="width:100%;max-width:600px;height:auto;border-radius:8px;display:block;margin:0 auto 18px">
+  {% endif %}
+
+  <!-- Corpo (markdown formatado) -->
+  <div style="padding:0 8px">{{ corpo_html }}</div>
+
+  <!-- Botões (campanha e/ou CTA próprio) -->
+  {% for b in botoes %}
+  <p style="text-align:center;margin:20px 0">
+    <a href="{{ b.link }}" style="background:#b89a78;color:#ffffff;padding:12px 28px;border-radius:24px;text-decoration:none;display:inline-block;font-weight:bold">{{ b.texto }}</a>
+  </p>
+  {% endfor %}
+
+  <!-- Rodapé fixo -->
+  <hr style="border:none;border-top:1px solid #eee;margin:26px 0 16px">
+  <div style="text-align:center;font-size:12px;color:#999;line-height:1.6">
+    {% set wa = loja.whatsapp %}
+    {% set site = loja.site or url_for('publico.vitrine_v2', _external=True) %}
+    <a href="{{ site }}" style="color:#b89a78;text-decoration:none">Visitar a loja</a><br>
+    {% if wa %}<a href="https://wa.me/{{ wa }}" style="color:#b89a78;text-decoration:none">WhatsApp {{ wa | telefone }}</a><br>{% endif %}
+    {% if loja.instagram %}<a href="{{ loja.instagram }}" style="color:#b89a78;text-decoration:none">Instagram</a><br>{% endif %}
+    {% if loja.razao_social or loja.cnpj %}<div style="margin-top:6px">{{ loja.razao_social }}{% if loja.cnpj %} — CNPJ {{ loja.cnpj }}{% endif %}</div>{% endif %}
+    {% if loja.endereco %}<div>{{ loja.endereco }}</div>{% endif %}
+    <div style="margin-top:10px">Você recebe este e-mail porque se inscreveu na newsletter do Sabrina Hansen Atelier.<br>Para sair, responda este e-mail com “sair”.</div>
+    <div style="margin-top:6px">© {{ ano_atual }} Sabrina Hansen Atelier</div>
+  </div>
+</div>

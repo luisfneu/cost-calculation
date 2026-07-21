@@ -151,12 +151,14 @@ def inventario_insumos():
 
     Campos por insumo: cont_<insumo_id> (contado) e min_<insumo_id> (mínimo).
     A diferença vira um movimento de entrada/saída (sem alterar o custo médio)."""
-    insumos = Insumo.query.order_by(Insumo.nome).all()
     if request.method == "GET":
-        return render_template("inventario_insumos.html", insumos=insumos)
+        insumos, filtro = _insumos_filtrados()
+        insumos, pagina, total_paginas = _paginar(insumos)
+        return render_template("inventario_insumos.html", insumos=insumos,
+                               pagina=pagina, total_paginas=total_paginas, **filtro)
 
     ajustes = 0
-    for insumo in insumos:
+    for insumo in Insumo.query.order_by(Insumo.nome).all():
         cont_raw = request.form.get(f"cont_{insumo.id}", "")
         min_raw = request.form.get(f"min_{insumo.id}", "")
 

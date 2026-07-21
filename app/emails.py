@@ -66,6 +66,29 @@ def email_configurado():
                 and os.environ.get("MAIL_FROM", "").strip())
 
 
+def enviar_lote_async(destinatarios, assunto, html):
+    """Envia o mesmo e-mail para vários destinatários, um a um, numa única thread
+    (não spawna N threads nem bloqueia a requisição). Retorna imediatamente; o
+    envio corre ao fundo. Cada destinatário recebe uma cópia individual (não expõe
+    a lista). Retorna o número de destinatários enfileirados."""
+    import threading
+    import time
+    app = current_app._get_current_object()
+    fila = [d for d in dict.fromkeys(e.strip() for e in destinatarios if e and e.strip())]
+
+    def _job():
+        with app.app_context():
+            enviados = 0
+            for dest in fila:
+                if enviar_email(dest, assunto, html):
+                    enviados += 1
+                time.sleep(0.6)   # respeita limite de taxa do provedor
+            current_app.logger.info("Newsletter: %s de %s e-mails enviados.", enviados, len(fila))
+
+    threading.Thread(target=_job, daemon=True).start()
+    return len(fila)
+
+
 def enviar_email(destino, assunto, html):
     """Envia um e-mail via Resend. Retorna True se aceito. Nunca lança: registra
     warning e devolve False (o fluxo de 'esqueci a senha' não pode quebrar)."""

@@ -6,7 +6,7 @@
     <h1 class="h3 mb-0">Encomendas — a produzir</h1>
     <div class="small text-muted">Itens sem estoque, atrelados às suas vendas. Marque como <strong>produzido</strong> quando a peça ficar pronta.</div>
   </div>
-  <a href="{{ url_for('main.registrar_encomenda') }}" class="btn btn-primary">+ Nova encomenda</a>
+  <a href="{{ url_for('main.registrar_encomenda') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nova encomenda</a>
 </div>
 
 {% if grupos %}
@@ -31,7 +31,7 @@
           · {{ venda.criado_em | dt }}
         </div>
       </div>
-      <a href="{{ url_for('main.visualizar_venda', venda_id=venda.id) }}" class="btn btn-sm btn-outline-primary">Ver pedido</a>
+      <a href="{{ url_for('main.visualizar_venda', venda_id=venda.id) }}" class="btn btn-sm btn-outline-primary" title="Ver pedido"><i class="bi bi-eye"></i></a>
     </div>
     <div class="table-responsive">
     <table class="table table-sm align-middle mb-0 tabela-cartao">

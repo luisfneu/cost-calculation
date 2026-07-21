@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Peças — {{ campanha.nome }}{% endblock %}
+{% block conteudo %}
+<a href="{{ url_for('main.listar_campanhas') }}" class="btn btn-link px-0 mb-2">← Voltar</a>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h3 mb-0">Peças da campanha <span class="text-muted">— {{ campanha.nome }}</span></h1>
+  <a href="{{ url_for('main.form_campanha', campanha_id=campanha.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i> Editar campanha</a>
+</div>
+<p class="small text-muted">
+  <span class="badge text-bg-success">auto</span> entrou pelo filtro ·
+  <span class="badge text-bg-primary">incluída</span> forçada dentro ·
+  <span class="badge text-bg-danger">excluída</span> forçada fora ·
+  <span class="badge text-bg-light border">fora</span> não faz parte.
+  Desconto: {% if campanha.desconto_tipo == 'percentual' %}{{ campanha.desconto_valor | num }}%{% else %}{{ campanha.desconto_valor | moeda }}{% endif %}.
+</p>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle bg-white">
+    <thead><tr><th>Peça</th><th>Coleção / tipo</th><th>Preço</th><th>Com desconto</th><th>Estado</th><th></th></tr></thead>
+    <tbody>
+    {% for l in linhas %}
+      {% set p = l.peca %}
+      <tr class="{{ '' if l.dentro else 'opacity-50' }}">
+        <td data-label="Peça"><strong>{{ p.nome }}</strong></td>
+        <td data-label="Coleção / tipo" class="small text-muted">{{ p.colecao or '—' }}{% if p.tipo %} · {{ p.tipo }}{% endif %}</td>
+        <td data-label="Preço">{{ p.preco_base | moeda }}</td>
+        <td data-label="Com desconto">{{ campanha.aplicar_desconto(p.preco_base) | moeda }}</td>
+        <td data-label="Estado">
+          {% if l.estado == 'auto' %}<span class="badge text-bg-success">auto</span>
+          {% elif l.estado == 'incluida' %}<span class="badge text-bg-primary">incluída</span>
+          {% elif l.estado == 'excluida' %}<span class="badge text-bg-danger">excluída</span>
+          {% else %}<span class="badge text-bg-light border">fora</span>{% endif %}
+        </td>
+        <td class="text-nowrap">
+          {% set act = url_for('main.marcar_peca_campanha', campanha_id=campanha.id, peca_id=p.id) %}
+          {% if not l.dentro %}
+            <form method="post" action="{{ act }}" class="d-inline"><input type="hidden" name="acao" value="incluir">
+              <button class="btn btn-sm btn-outline-primary" title="Incluir na campanha"><i class="bi bi-plus-lg"></i> Incluir</button></form>
+          {% else %}
+            <form method="post" action="{{ act }}" class="d-inline"><input type="hidden" name="acao" value="excluir">
+              <button class="btn btn-sm btn-outline-danger" title="Tirar da campanha"><i class="bi bi-dash-lg"></i> Excluir</button></form>
+          {% endif %}
+          {% if l.estado in ('incluida', 'excluida') %}
+            <form method="post" action="{{ act }}" class="d-inline"><input type="hidden" name="acao" value="auto">
+              <button class="btn btn-sm btn-outline-secondary" title="Voltar ao filtro automático"><i class="bi bi-arrow-counterclockwise"></i></button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

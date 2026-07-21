@@ -85,8 +85,13 @@ class Insumo(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
-    # Categoria do insumo: "materia_prima" ou "embalagem".
-    tipo = db.Column(db.String(20), nullable=False, default="materia_prima")
+    # Categoria do insumo: "tecido", "aviamento" ou "embalagem"
+    # ("materia_prima" é legado, migrado para "aviamento").
+    tipo = db.Column(db.String(20), nullable=False, default="aviamento")
+    # Composição do tecido (só usada quando tipo == "tecido"). Ex.: "95% algodão, 5% elastano".
+    composicao = db.Column(db.Text, default="", server_default="")
+    # Largura do tecido em cm (informativo, só para tipo == "tecido").
+    largura_cm = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
     # Unidade de medida: un, m, cm, kg, g, rolo, etc.
     unidade = db.Column(db.String(20), nullable=False, default="un")
     # Custo por unidade de medida (R$).
@@ -114,10 +119,26 @@ class Insumo(db.Model):
 
     @property
     def tipo_label(self) -> str:
-        return {"embalagem": "Embalagem", "materia_prima": "Matéria-prima"}.get(
-            self.tipo, "Matéria-prima"
-        )
+        return {"tecido": "Tecido", "aviamento": "Aviamento", "embalagem": "Embalagem",
+                "materia_prima": "Matéria-prima"}.get(self.tipo, "Aviamento")
 
+    @property
+    def is_tecido(self) -> bool:
+        return self.tipo == "tecido"
+
+
+# Ordem dos tamanhos na tabela de medidas.
+MEDIDAS_TAMANHOS = ["PP", "P", "M", "G", "GG"]
+# Medidas de uma peça (chave interna, rótulo exibido).
+MEDIDAS_CAMPOS = [("busto", "Busto"), ("cintura", "Cintura"),
+                  ("quadril", "Quadril"), ("comprimento", "Comprimento")]
+
+# Zona do corpo que a peça veste → medidas relevantes para recomendar tamanho.
+ZONAS_CORPO = {
+    "superior": ["busto", "cintura"],             # camisa, colete, blusa...
+    "inferior": ["cintura", "quadril"],           # calça, saia, short...
+    "inteiro": ["busto", "cintura", "quadril"],   # vestido, macacão...
+}
 
 # Tabela de medidas feminina padrão (cm) — usada na vitrine quando a peça não
 # tem medidas próprias cadastradas.
@@ -127,7 +148,6 @@ MEDIDAS_FEMININAS = [
     {"tam": "M", "busto": 98, "cintura": 80, "quadril": 106},
     {"tam": "G", "busto": 104, "cintura": 86, "quadril": 112},
     {"tam": "GG", "busto": 110, "cintura": 92, "quadril": 118},
-    {"tam": "XG", "busto": 116, "cintura": 98, "quadril": 124},
 ]
 
 
@@ -143,6 +163,8 @@ class Peca(db.Model):
     composicao = db.Column(db.Text, default="", server_default="")   # ex.: 95% algodão, 5% elastano
     # Medidas específicas da peça (texto livre). Em branco → usa MEDIDAS_FEMININAS (tabela padrão).
     medidas = db.Column(db.Text, default="", server_default="")
+    # Zona do corpo (superior | inferior | inteiro) — guia o provador virtual.
+    zona_corpo = db.Column(db.String(10), default="inteiro", server_default="inteiro")
     foto = db.Column(db.String(255))  # nome do arquivo salvo em static/uploads
     # Se True, a peça aparece na vitrine PÚBLICA (link do cliente). A vitrine
     # interna mostra todas, independente deste campo.
@@ -293,13 +315,51 @@ class Peca(db.Model):
         return self.preco_etiqueta if self.preco_etiqueta and self.preco_etiqueta > 0 else self.preco_venda
 
     @property
+    def lucro_etiqueta(self) -> float:
+        """Lucro real pelo preço de etiqueta (preço comercial − custo). É o que
+        vale para análise: a listagem e a comparação usam este."""
+        return dinheiro(self.preco_base - self.custo_total)
+
+    @property
+    def margem_efetiva(self) -> float:
+        """Margem (%) real embutida no preço de etiqueta. 0 se sem preço."""
+        p = self.preco_base
+        return round((p - self.custo_total) / p * 100, 1) if p and p > 0 else 0.0
+
+    @property
     def em_promocao(self) -> bool:
         return bool(self.preco_promocional and self.preco_promocional > 0)
 
     @property
     def preco_etiqueta_efetivo(self) -> float:
-        """Preço efetivo de venda: promocional se houver, senão o preço base."""
-        return self.preco_promocional if self.em_promocao else self.preco_base
+        """Preço efetivo de venda: menor entre preço base, promoção manual e
+        desconto de campanha ativa (o cliente sempre leva o menor)."""
+        preco = self.preco_promocional if self.em_promocao else self.preco_base
+        pc = self.preco_com_campanha
+        if pc is not None and pc < preco:
+            preco = pc
+        return preco
+
+    @property
+    def campanha_ativa(self):
+        """Primeira campanha vigente COM DESCONTO que inclui esta peça (ou None).
+        Campanhas de desconto 0 são só vitrine/landing e não afetam o card/preço."""
+        for c in Campanha.query.filter_by(ativa=True).all():
+            if c.desconto_valor and c.desconto_valor > 0 and c.vigente and c.inclui(self):
+                return c
+        return None
+
+    @property
+    def preco_com_campanha(self):
+        """Preço da peça com o desconto da campanha ativa. None se não há campanha."""
+        c = self.campanha_ativa
+        if not c:
+            return None
+        return c.aplicar_desconto(self.preco_base)
+
+    @property
+    def em_campanha(self) -> bool:
+        return self.campanha_ativa is not None
 
     @property
     def sob_encomenda(self) -> bool:
@@ -342,6 +402,39 @@ class Peca(db.Model):
     @property
     def tags_lista(self) -> list:
         return [t.strip() for t in (self.tags or "").split(",") if t.strip()]
+
+    @property
+    def medidas_relevantes(self) -> list:
+        """Medidas do corpo que importam para esta peça (pela zona)."""
+        return ZONAS_CORPO.get(self.zona_corpo or "inteiro", ZONAS_CORPO["inteiro"])
+
+    @property
+    def medidas_tabela(self):
+        """Medidas próprias como tabela: {'rows': [...], 'cols': [(chave,label)...]}.
+        None quando não há medidas estruturadas (aí a vitrine usa a tabela padrão,
+        ou mostra o texto livre antigo se o campo não for JSON)."""
+        import json as _json
+        txt = (self.medidas or "").strip()
+        if not txt:
+            return None
+        try:
+            dados = _json.loads(txt)
+        except ValueError:
+            return None
+        if not isinstance(dados, dict):
+            return None
+        rows = []
+        for tam in MEDIDAS_TAMANHOS:
+            vals = dados.get(tam) or {}
+            if any(str(vals.get(k, "")).strip() for k, _ in MEDIDAS_CAMPOS):
+                linha = {"tam": tam}
+                linha.update({k: str(vals.get(k, "")).strip() for k, _ in MEDIDAS_CAMPOS})
+                rows.append(linha)
+        if not rows:
+            return None
+        cols = [(k, lbl) for k, lbl in MEDIDAS_CAMPOS
+                if any(r.get(k) for r in rows)]
+        return {"rows": rows, "cols": cols}
 
 
 class PecaInsumo(db.Model):
@@ -1515,3 +1608,137 @@ class Colecao(db.Model):
         return Colecao.query.filter(
             db.func.lower(Colecao.nome) == nome.strip().lower()
         ).first()
+
+
+class Campanha(db.Model):
+    """Campanha da loja: banner_hero no carrossel da home + página própria
+    (/campanha/<slug>) com um conjunto de peças. Pode ter desconto (percentual/
+    valor) — desconto 0 = só vitrine/landing, sem alterar preço. O conjunto vem
+    de um filtro (coleção/tipo/tags), ajustável por inclusões/exclusões manuais."""
+
+    __tablename__ = "campanhas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    slug = db.Column(db.String(140), unique=True, nullable=False)
+    subtitulo = db.Column(db.String(255), default="")
+    ativa = db.Column(db.Boolean, nullable=False, default=True)
+    inicio = db.Column(db.Date)
+    fim = db.Column(db.Date)
+    banner_hero = db.Column(db.String(255))                  # imagem no carrossel da home
+    banner_landing = db.Column(db.String(255))               # imagem no topo da página da campanha
+    # Filtro que monta o conjunto base de peças (vazio = nenhuma automática).
+    filtro_colecao = db.Column(db.String(120), default="")
+    filtro_tipo = db.Column(db.String(60), default="")
+    filtro_tags = db.Column(db.String(255), default="")
+    desconto_tipo = db.Column(db.String(12), nullable=False, default="percentual")  # percentual|valor
+    desconto_valor = db.Column(db.Float, nullable=False, default=0.0)
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+    excecoes = db.relationship(
+        "CampanhaPeca", back_populates="campanha", cascade="all, delete-orphan"
+    )
+
+    @staticmethod
+    def por_slug(slug):
+        if not slug:
+            return None
+        return Campanha.query.filter_by(slug=slug.strip().lower()).first()
+
+    @property
+    def vigente(self) -> bool:
+        from datetime import date
+        if not self.ativa:
+            return False
+        hoje = date.today()
+        if self.inicio and self.inicio > hoje:
+            return False
+        if self.fim and self.fim < hoje:
+            return False
+        return True
+
+    def aplicar_desconto(self, preco: float) -> float:
+        """Preço após o desconto da campanha. Nunca negativo."""
+        if not preco or preco <= 0:
+            return preco
+        if self.desconto_tipo == "percentual":
+            return dinheiro(preco * (1 - (self.desconto_valor or 0) / 100.0))
+        return dinheiro(max(0.0, preco - (self.desconto_valor or 0)))
+
+    def casa_filtro(self, peca) -> bool:
+        """A peça casa com o filtro da campanha? Sem filtro definido = nenhuma
+        peça entra automaticamente (evita descontar a loja inteira sem querer)."""
+        if not (self.filtro_colecao or self.filtro_tipo or self.filtro_tags):
+            return False
+        if self.filtro_colecao and (peca.colecao or "") != self.filtro_colecao:
+            return False
+        if self.filtro_tipo and (peca.tipo or "") != self.filtro_tipo:
+            return False
+        if self.filtro_tags:
+            alvo = {t.strip().lower() for t in self.filtro_tags.split(",") if t.strip()}
+            pt = {t.lower() for t in peca.tags_lista}
+            if not (alvo & pt):
+                return False
+        return True
+
+    def inclui(self, peca) -> bool:
+        """Peça faz parte da campanha? Exceção manual manda; senão o filtro."""
+        forcado = {e.peca_id: e.incluir for e in self.excecoes}
+        if peca.id in forcado:
+            return forcado[peca.id]
+        return self.casa_filtro(peca)
+
+    def pecas(self):
+        """Todas as peças da campanha (filtro ∪ incluídas − excluídas)."""
+        return [p for p in Peca.query.all() if self.inclui(p)]
+
+
+class CampanhaPeca(db.Model):
+    """Exceção manual de uma peça numa campanha: força dentro (incluir=True) ou
+    força fora (incluir=False), sobrepondo o filtro."""
+
+    __tablename__ = "campanha_pecas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey("campanhas.id"), nullable=False)
+    peca_id = db.Column(db.Integer, db.ForeignKey("pecas.id"), nullable=False)
+    incluir = db.Column(db.Boolean, nullable=False, default=True)
+
+    campanha = db.relationship("Campanha", back_populates="excecoes")
+    peca = db.relationship("Peca")
+
+    __table_args__ = (
+        db.UniqueConstraint("campanha_id", "peca_id", name="uq_campanha_peca"),
+    )
+
+
+class NewsletterInscrito(db.Model):
+    """Inscrito na newsletter que ainda não é cliente (avulso). Clientes que
+    aceitam novidades entram pela flag Cliente.aceita_novidades; esta tabela
+    guarda só os e-mails avulsos captados no rodapé da loja."""
+
+    __tablename__ = "newsletter_inscritos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(160), unique=True, nullable=False)
+    nome = db.Column(db.String(160), default="")
+    cliente_id = db.Column(db.Integer, db.ForeignKey("clientes.id"))
+    criado_em = db.Column(db.DateTime, default=_agora)
+
+
+class NewsletterEnvio(db.Model):
+    """Histórico de e-mails de newsletter enviados (guarda o HTML montado para
+    revisar/visualizar depois)."""
+
+    __tablename__ = "newsletter_envios"
+
+    id = db.Column(db.Integer, primary_key=True)
+    assunto = db.Column(db.String(200), nullable=False, default="")
+    html = db.Column(db.Text, nullable=False, default="")
+    total = db.Column(db.Integer, nullable=False, default=0)   # destinatários
+    criado_em = db.Column(db.DateTime, default=_agora)
+    # Campos originais do formulário, para reaproveitar ("Copiar" para o form).
+    corpo = db.Column(db.Text, default="", server_default="")
+    campanha_id = db.Column(db.Integer)
+    cta_texto = db.Column(db.String(120), default="", server_default="")
+    cta_link = db.Column(db.String(255), default="", server_default="")

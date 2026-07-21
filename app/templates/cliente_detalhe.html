@@ -66,11 +66,11 @@
     </div>
   </div>
   <div class="text-nowrap">
-    <a href="{{ url_for('main.form_cliente', cliente_id=cliente.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+    <a href="{{ url_for('main.form_cliente', cliente_id=cliente.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
     {% if not cliente.vendas %}
     <form method="post" action="{{ url_for('main.excluir_cliente', cliente_id=cliente.id) }}" class="d-inline"
           data-confirm="Excluir este cliente?">
-      <button class="btn btn-sm btn-outline-danger">Excluir</button>
+      <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
     </form>
     {% elif session.admin %}
     <form method="post" action="{{ url_for('main.anonimizar_cliente', cliente_id=cliente.id) }}" class="d-inline"
@@ -293,7 +293,7 @@
             {% else %}{{ p.disponivel_total | num }} un.{% endif %}
           </td>
           <td class="text-end">
-            <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="btn btn-sm btn-outline-primary">Ver</a>
+            <a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="btn btn-sm btn-outline-primary" title="Ver peça"><i class="bi bi-eye"></i></a>
           </td>
         </tr>
       {% endfor %}
@@ -363,7 +363,7 @@
             {% if v.pago %}<span class="badge text-bg-info">pago</span>{% else %}<span class="badge text-bg-warning">pendente</span>{% endif %}
           </td>
           <td class="text-end fw-bold">{{ v.receita | moeda }}</td>
-          <td class="text-end"><a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+          <td class="text-end"><a href="{{ url_for('main.visualizar_venda', venda_id=v.id) }}" class="btn btn-sm btn-outline-primary" title="Ver venda"><i class="bi bi-eye"></i></a></td>
         </tr>
       {% endfor %}
       </tbody>

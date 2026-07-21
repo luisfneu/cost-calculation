@@ -11,6 +11,12 @@
   padding: .28rem .55rem;
   font-size: .875rem;
 }
+/* O padding compacto acima tira o espaço da setinha do select — devolve à direita
+   para a seta não sobrepor o texto (vale em todos os filtros do ERP). */
+.form-select {
+  padding-right: 1.9rem;
+  background-position: right .55rem center;
+}
 
 /* Painel "dá para produzir N peças" na ficha técnica — dentro da identidade
    (creme + acento dourado). Modificador .vazio quando não há insumo (terracota). */
@@ -382,6 +388,28 @@ main.container { max-width: 1100px; }
 .fotos-dropzone:hover, .fotos-dropzone.arrastando {
   background: #efe7d6; border-color: var(--gold, #b08a4f);
 }
+/* Campo alvo do "colar" quando há mais de uma dropzone na página. */
+.foto-unica-ativo .fotos-dropzone {
+  border-color: var(--gold, #b08a4f); background: #efe7d6;
+  box-shadow: 0 0 0 2px rgba(176, 138, 79, .25);
+}
+
+/* Miniatura de upload clicável para ampliar. */
+.foto-card img, .foto-unica-grid img { cursor: zoom-in; }
+.img-zoom {
+  position: fixed; inset: 0; z-index: 2000; background: rgba(20, 16, 12, .86);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.img-zoom[hidden] { display: none; }
+.img-zoom img {
+  max-width: 95vw; max-height: 92vh; border-radius: 8px; background: #fff;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, .5);
+}
+.img-zoom-close {
+  position: absolute; top: 16px; right: 20px; width: 42px; height: 42px; border-radius: 50%;
+  border: 0; background: rgba(255, 255, 255, .16); color: #fff; cursor: pointer; font-size: 1rem;
+}
+.img-zoom-close:hover { background: rgba(255, 255, 255, .32); }
 .fotos-dropzone .bi { font-size: 1.6rem; color: var(--gold, #b08a4f); display: block; margin-bottom: 4px; }
 .fotos-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .foto-card {
@@ -517,8 +545,10 @@ tr.linha-zerada img { filter: grayscale(1); opacity: .5; }
 }
 .link-insta { font-weight: 500; }
 
-.badge.badge-materia   { background-color: #e6c14a !important; color: #4a3c12 !important; }
-.badge.badge-embalagem { background-color: #6d7a5c !important; color: var(--cream) !important; }
+.badge.badge-materia    { background-color: #e6c14a !important; color: #4a3c12 !important; }
+.badge.badge-aviamento  { background-color: #e6c14a !important; color: #4a3c12 !important; }
+.badge.badge-tecido     { background-color: #a86b8f !important; color: #fff !important; }
+.badge.badge-embalagem  { background-color: #6d7a5c !important; color: var(--cream) !important; }
 /* Tags de peça: mesma cor do botão primário (Nova peça) */
 .badge.badge-tag { background-color: var(--gold) !important; color: var(--cream) !important; font-weight: 400; }
 

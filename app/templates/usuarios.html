@@ -54,7 +54,7 @@
               <button class="btn btn-sm btn-outline-secondary">{{ 'Desativar' if u.ativo else 'Ativar' }}</button>
             </form>
             <form method="post" action="{{ url_for('main.excluir_usuario', usuario_id=u.id) }}" class="d-inline" data-confirm="Excluir usuário?">
-              <button class="btn btn-sm btn-outline-danger">Excluir</button>
+              <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
             </form>
           </td>
         </tr>

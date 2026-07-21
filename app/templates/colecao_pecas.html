@@ -9,7 +9,7 @@
     </h1>
     {% if colecao.slogan %}<div class="text-muted fst-italic">"{{ colecao.slogan }}"</div>{% endif %}
   </div>
-  <a href="{{ url_for('main.listar_colecoes') }}" class="btn btn-outline-secondary btn-sm">← Coleções</a>
+  <a href="{{ url_for('main.listar_colecoes') }}" class="btn btn-link px-0">← Coleções</a>
 </div>
 
 {% if pecas %}
@@ -37,7 +37,7 @@
         <td class="text-center {{ 'text-muted' if not q }}">{{ q | num if q else '·' }}</td>
       {% endfor %}
       <td class="text-end fw-bold">{{ p.estoque_total | num }}</td>
-      <td class="text-end"><a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+      <td class="text-end"><a href="{{ url_for('main.detalhe_peca', peca_id=p.id) }}" class="btn btn-sm btn-outline-primary" title="Ver peça"><i class="bi bi-eye"></i></a></td>
     </tr>
   {% endfor %}
   </tbody>

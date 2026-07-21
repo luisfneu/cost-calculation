@@ -4,8 +4,9 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Peças</h1>
   <div class="d-flex gap-2">
+    <button id="btn-comparar" class="btn btn-outline-primary" disabled title="Selecione 2+ peças para comparar custos"><i class="bi bi-bar-chart-line"></i> Comparar</button>
     <button id="btn-etiquetas" class="btn btn-primary" disabled title="Selecione peças para imprimir etiquetas"><i class="bi bi-tags"></i> Etiquetas</button>
-    <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary">+ Nova peça</a>
+    <a href="{{ url_for('main.form_peca') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nova peça</a>
   </div>
 </div>
 <div class="card bg-white"><div class="card-body">
@@ -33,7 +34,7 @@
 <div class="table-responsive">
 <table class="table table-hover align-middle">
   <thead class="table-light">
-    <tr><th style="width:30px"><input type="checkbox" id="chk-todas-p" aria-label="Selecionar todas"></th><th></th><th>Peça</th><th>Estoque</th><th>Custo total</th><th>Margem</th><th>Preço de venda</th><th>Lucro</th><th></th></tr>
+    <tr><th style="width:30px"><input type="checkbox" id="chk-todas-p" aria-label="Selecionar todas"></th><th></th><th>Peça</th><th>Estoque</th><th>Custo total</th><th>Margem</th><th>Preço (etiqueta)</th><th>Lucro</th><th></th></tr>
   </thead>
   <tbody>
   {% for peca in pecas %}
@@ -49,8 +50,8 @@
       <td>
         <a href="#" class="link-atelier fw-bold btn-peca" data-bs-toggle="modal" data-bs-target="#modal-peca" title="Ver detalhes"
            data-nome="{{ peca.nome }}" data-tipo="{{ peca.tipo or '—' }}" data-colecao="{{ peca.colecao or '—' }}"
-           data-sku="{{ peca.sku }}" data-custo="{{ peca.custo_total | moeda }}" data-preco="{{ peca.preco_etiqueta_efetivo | moeda }}"
-           data-margem="{{ peca.margem_percentual | num }}%" data-lucro="{{ peca.lucro | moeda }}"
+           data-sku="{{ peca.sku }}" data-custo="{{ peca.custo_total | moeda }}" data-preco="{{ peca.preco_base | moeda }}"
+           data-margem="{{ peca.margem_efetiva | num }}%" data-lucro="{{ peca.lucro_etiqueta | moeda }}"
            data-estoque="{{ peca.estoque_total | num }}" data-disponivel="{{ peca.disponivel_total | num }}"
            data-tags="{{ peca.tags_lista | join(', ') }}"
            data-vitrine="{{ 'Sim' if peca.vitrine_publica else 'Não' }}"
@@ -69,9 +70,9 @@
         </div>
       </td>
       <td>{{ peca.custo_total | moeda }}</td>
-      <td>{{ peca.margem_percentual | num }}%</td>
-      <td class="fw-bold text-success">{{ peca.preco_venda | moeda }}</td>
-      <td>{{ peca.lucro | moeda }}</td>
+      <td>{{ peca.margem_efetiva | num }}%</td>
+      <td class="fw-bold text-success">{{ peca.preco_base | moeda }}</td>
+      <td class="{{ 'text-success' if peca.lucro_etiqueta >= 0 else 'text-danger' }}">{{ peca.lucro_etiqueta | moeda }}</td>
       <td class="text-end text-nowrap">
         <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" title="Abrir"><i class="bi bi-eye"></i></a>
         <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
@@ -105,7 +106,7 @@
             <tr><th class="text-muted" style="width:42%">Tipo</th><td id="pc-tipo"></td></tr>
             <tr><th class="text-muted">Coleção</th><td id="pc-colecao"></td></tr>
             <tr><th class="text-muted">SKU</th><td id="pc-sku"></td></tr>
-            <tr><th class="text-muted">Preço de venda</th><td id="pc-preco" class="fw-bold text-success"></td></tr>
+            <tr><th class="text-muted">Preço (etiqueta)</th><td id="pc-preco" class="fw-bold text-success"></td></tr>
             <tr><th class="text-muted">Custo total</th><td id="pc-custo"></td></tr>
             <tr><th class="text-muted">Margem / Lucro</th><td id="pc-margem"></td></tr>
             <tr><th class="text-muted">Estoque</th><td id="pc-estoque"></td></tr>
@@ -145,6 +146,7 @@
   // ---- Seleção para imprimir etiquetas em lote ----
   (function () {
     const btn = document.getElementById('btn-etiquetas');
+    const btnCmp = document.getElementById('btn-comparar');
     const todas = document.getElementById('chk-todas-p');
     const chks = () => [...document.querySelectorAll('.chk-peca')];
     const marcadas = () => chks().filter(c => c.checked).map(c => c.value);
@@ -152,12 +154,18 @@
       const n = marcadas().length;
       btn.disabled = n === 0;
       btn.innerHTML = '<i class="bi bi-tags"></i> Etiquetas' + (n ? ' (' + n + ')' : '');
+      btnCmp.disabled = n < 2;
+      btnCmp.innerHTML = '<i class="bi bi-bar-chart-line"></i> Comparar' + (n ? ' (' + n + ')' : '');
     }
     if (todas) todas.addEventListener('change', () => { chks().forEach(c => c.checked = todas.checked); sync(); });
     document.addEventListener('change', (e) => { if (e.target.classList.contains('chk-peca')) sync(); });
     btn.addEventListener('click', () => {
       const ids = marcadas();
       if (ids.length) window.open("{{ url_for('main.etiquetas_lote') }}?ids=" + ids.join(','), '_blank');
+    });
+    btnCmp.addEventListener('click', () => {
+      const ids = marcadas();
+      if (ids.length >= 2) location.href = "{{ url_for('main.comparar_pecas') }}?ids=" + ids.join(',');
     });
   })();
 </script>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-br">
+{% import "_macros.html" as ui %}
+{% import "_v2_card.html" as vcard %}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ campanha.nome }} · Sabrina Hansen Atelier</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-title" content="Sabrina Hansen">
+  <meta name="theme-color" content="#b89a78">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="description" content="{{ campanha.subtitulo or campanha.nome }}">
+  <link rel="canonical" href="{{ url_for('publico.campanha_publica', slug=campanha.slug, _external=True) }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sabrina Hansen Atelier">
+  <meta property="og:title" content="{{ campanha.nome }}">
+  <meta property="og:description" content="{{ campanha.subtitulo or campanha.nome }}">
+  <meta property="og:url" content="{{ url_for('publico.campanha_publica', slug=campanha.slug, _external=True) }}">
+  {% if campanha.banner_landing %}<meta property="og:image" content="{{ url_for('static', filename='uploads/' ~ campanha.banner_landing, _external=True) }}">{% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/identidade.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vitrine2.css') }}">
+</head>
+<body>
+  <form id="filtros" method="get" action="{{ url_for('publico.campanha_publica', slug=campanha.slug) }}"></form>
+  <div class="v2-loja">
+  {% include "_v2_header.html" %}
+
+  {% if campanha.banner_landing %}
+  <div class="v2-campanha-hero">
+    <img src="{{ url_for('static', filename='uploads/' ~ campanha.banner_landing) }}" alt="{{ campanha.nome }}" class="v2-hero-img">
+  </div>
+  {% endif %}
+
+  <div class="v2-campanha-cab">
+    <a href="{{ url_for('publico.vitrine_v2') }}" class="v2-voltar-loja text-muted text-decoration-none small"><i class="bi bi-arrow-left"></i> Voltar à loja</a>
+    <h1 class="v2-campanha-tit">{{ campanha.nome }}</h1>
+    {% if campanha.subtitulo %}<p class="v2-campanha-sub">{{ campanha.subtitulo }}</p>{% endif %}
+    {% if campanha.desconto_valor %}
+    <span class="v2-campanha-tag">
+      {% if campanha.desconto_tipo == 'percentual' %}{{ campanha.desconto_valor | num }}% OFF{% else %}−{{ campanha.desconto_valor | moeda }}{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  <div class="v2-wrap">
+    <div class="v2-corpo">
+      <!-- Sidebar de filtros -->
+      <aside class="v2-filtros offcanvas-md offcanvas-start" tabindex="-1" id="filtros-oc" aria-labelledby="filtros-tit">
+      <div class="offcanvas-header d-md-none">
+        <h5 class="offcanvas-title" id="filtros-tit"><i class="bi bi-funnel"></i> Filtros</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#filtros-oc" aria-label="Fechar"></button>
+      </div>
+      <div class="offcanvas-body">
+        {% if tipos %}
+        <h3>Categoria</h3>
+        <a class="f-item {{ 'on' if not tipo }}" href="{{ url_for('publico.campanha_publica', slug=campanha.slug, colecao=colecao, ordem=ordem) }}">Todas</a>
+        {% for t in tipos %}
+          <a class="f-item {{ 'on' if tipo == t }}" href="{{ url_for('publico.campanha_publica', slug=campanha.slug, tipo=t, colecao=colecao, ordem=ordem) }}">{{ t }}</a>
+        {% endfor %}
+        {% endif %}
+
+        {% if colecoes %}
+        <h3>Coleção</h3>
+        <a class="f-item {{ 'on' if not colecao }}" href="{{ url_for('publico.campanha_publica', slug=campanha.slug, tipo=tipo, ordem=ordem) }}">Todas</a>
+        {% for c in colecoes %}
+          <a class="f-item {{ 'on' if colecao == c }}" href="{{ url_for('publico.campanha_publica', slug=campanha.slug, tipo=tipo, colecao=c, ordem=ordem) }}">{{ c }}</a>
+        {% endfor %}
+        {% endif %}
+
+        <h3>Tamanho</h3>
+        {% if cliente_logado and cliente_logado.tamanho_preferido in tamanhos %}
+          <a class="f-item fw-bold {{ 'on' if tam_sel == [cliente_logado.tamanho_preferido] }}"
+             href="{{ url_for('publico.campanha_publica', slug=campanha.slug, tamanho=cliente_logado.tamanho_preferido, tipo=tipo, colecao=colecao, ordem=ordem) }}">
+            <i class="bi bi-person-check"></i> Meu tamanho ({{ cliente_logado.tamanho_preferido }})
+          </a>
+        {% endif %}
+        {% for t in tamanhos %}
+          <label class="f-item"><input type="checkbox" name="tamanho" value="{{ t }}" form="filtros"
+                 {{ 'checked' if t in tam_sel }} onchange="document.getElementById('filtros').submit()"> {{ t }}</label>
+        {% endfor %}
+        <input type="hidden" name="q" value="{{ q }}" form="filtros">
+        <input type="hidden" name="tipo" value="{{ tipo }}" form="filtros">
+        <input type="hidden" name="colecao" value="{{ colecao }}" form="filtros">
+        <input type="hidden" name="ordem" value="{{ ordem }}" form="filtros">
+      </div>
+      </aside>
+
+      <!-- Grade -->
+      <main class="v2-main">
+        <div class="v2-barra">
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-primary btn-sm d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#filtros-oc"><i class="bi bi-funnel"></i> Filtros</button>
+            <div class="text-muted small"><strong>{{ total }}</strong> peça{{ '' if total == 1 else 's' }}</div>
+          </div>
+          <div class="d-flex align-items-center gap-3">
+            <div class="v2-colsel d-none d-md-inline-flex" role="group" aria-label="Número de colunas">
+              <button type="button" data-cols="2" title="2 colunas" aria-label="2 colunas"><i class="bi bi-grid"></i></button>
+              <button type="button" data-cols="3" title="3 colunas" aria-label="3 colunas"><i class="bi bi-grid-3x2-gap"></i></button>
+              <button type="button" data-cols="4" title="4 colunas" aria-label="4 colunas"><i class="bi bi-grid-3x3-gap"></i></button>
+            </div>
+            <select class="form-select form-select-sm" style="width:auto" onchange="location.href=this.value">
+              {% set base = url_for('publico.campanha_publica', slug=campanha.slug, q=q, tipo=tipo, colecao=colecao) %}
+              <option value="{{ base }}" {{ 'selected' if not ordem }}>Ordenar por…</option>
+              <option value="{{ base }}&ordem=nome" {{ 'selected' if ordem == 'nome' }}>Nome</option>
+              <option value="{{ base }}&ordem=preco_asc" {{ 'selected' if ordem == 'preco_asc' }}>Menor preço</option>
+              <option value="{{ base }}&ordem=preco_desc" {{ 'selected' if ordem == 'preco_desc' }}>Maior preço</option>
+            </select>
+          </div>
+        </div>
+
+        {% if pecas %}
+        <div class="v2-grid cols-4" id="v2-grid">
+          {% for p in pecas %}
+            {{ vcard.card(p, colecao_fotos, novos) }}
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <p class="mb-2">Nenhuma peça encontrada com esses filtros.</p>
+          <a href="{{ url_for('publico.campanha_publica', slug=campanha.slug) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-counterclockwise"></i> Limpar filtros
+          </a>
+        </div>
+        {% endif %}
+      </main>
+    </div>
+  </div>
+  {% include "_v2_footer.html" %}
+  </div><!-- /v2-loja -->
+
+  {% include "_v2_scripts.html" %}
+  <script>
+    // Seletor de colunas da grade (lembra a escolha).
+    (function () {
+      const grid = document.getElementById('v2-grid');
+      const botoes = document.querySelectorAll('.v2-colsel button');
+      if (!grid || !botoes.length) return;
+      const KEY = 'v2_cols';
+      function aplicar(n) {
+        grid.className = 'v2-grid cols-' + n;
+        botoes.forEach(b => b.classList.toggle('ativo', b.dataset.cols === String(n)));
+        localStorage.setItem(KEY, n);
+      }
+      botoes.forEach(b => b.addEventListener('click', () => aplicar(b.dataset.cols)));
+      aplicar(localStorage.getItem(KEY) || '4');
+    })();
+  </script>
+</body>
+</html>

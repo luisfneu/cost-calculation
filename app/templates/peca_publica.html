@@ -123,6 +123,9 @@
           {% endfor %}
         </div>
         <div id="pdp-banda" class="small mt-1 text-muted d-none"><i class="bi bi-clock"></i> Tamanho sob encomenda — combinamos o prazo no WhatsApp.</div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#modal-provador">
+          <i class="bi bi-rulers"></i> Não sabe seu tamanho? Provador virtual
+        </button>
         {% if guia_medidas %}
         <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-bs-toggle="modal" data-bs-target="#modal-medidas">
           <i class="bi bi-rulers"></i> Guia de medidas
@@ -151,7 +154,7 @@
       </ul>
       <div class="tab-content">
         <div class="tab-pane fade show active" id="tab-det">
-          <div class="pdp-desc-txt">{{ peca.descricao or 'Peça do ateliê Sabrina Hansen. Fale com a gente pelo WhatsApp para detalhes.' }}</div>
+          <div class="pdp-desc-txt">{{ (peca.descricao or 'Peça do ateliê Sabrina Hansen. Fale com a gente pelo WhatsApp para detalhes.') | md_leve }}</div>
         </div>
         <div class="tab-pane fade" id="tab-info">
           <div class="pdp-desc-txt">
@@ -161,8 +164,28 @@
             <div><strong>Disponibilidade:</strong> {{ 'Sob encomenda' if peca.sob_encomenda else 'Pronta entrega' }}</div>
 
             <div class="mt-3"><strong>Medidas</strong></div>
-            {% if peca.medidas %}
-              <div style="white-space:pre-wrap">{{ peca.medidas }}</div>
+            {% set mt = peca.medidas_tabela %}
+            {% if mt %}
+              {# Medidas próprias da peça (grade cadastrada no ERP) #}
+              <div class="text-muted small mb-1">Medidas da peça (cm)</div>
+              <div class="table-responsive">
+                <table style="width:100%; max-width:460px; border-collapse:collapse; color:inherit">
+                  <thead>
+                    <tr style="font-size:.85rem; text-transform:uppercase; letter-spacing:.03em">
+                      <th style="text-align:left; font-weight:600; padding:4px 12px 4px 0">Tamanho</th>
+                      {% for k, lbl in mt.cols %}<th style="text-align:left; font-weight:600; padding:4px 12px">{{ lbl }}</th>{% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in mt.rows %}
+                      <tr style="border-top:1px solid var(--line)">
+                        <td style="padding:5px 12px 5px 0; color:var(--ink); font-weight:600">{{ r.tam }}</td>
+                        {% for k, lbl in mt.cols %}<td style="padding:5px 12px">{{ r[k] or '—' }}</td>{% endfor %}
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             {% else %}
               <div class="text-muted small mb-1">Tabela de medida feminina (cm)</div>
               <div class="table-responsive">
@@ -210,6 +233,7 @@
     {% endif %}
     </div><!-- /pdp-container -->
   </div>
+  {% include "_v2_footer.html" %}
   </div><!-- /v2-loja -->
 
   {% if guia_medidas %}
@@ -226,7 +250,86 @@
   </div>
   {% endif %}
 
+  <!-- Provador virtual (recomendador de tamanho) -->
+  <div class="modal fade" id="modal-provador" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content" style="background:var(--cream)">
+        <div class="modal-header border-0">
+          <h5 class="modal-title" style="font-family:var(--fonte-titulo)"><i class="bi bi-rulers"></i> Provador virtual</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body pt-0">
+          <!-- Passo 1: altura/peso -->
+          <div data-passo="1">
+            <p class="text-muted">Informe altura e peso — vamos sugerir seu tamanho e você ajusta o corpo na próxima tela.</p>
+            <div class="row g-3" style="max-width:420px">
+              <div class="col-6">
+                <label class="form-label small mb-1">Altura (cm)</label>
+                <input type="number" id="pv-altura" class="form-control" placeholder="165" inputmode="numeric">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1">Peso (kg)</label>
+                <input type="number" id="pv-peso" class="form-control" placeholder="65" inputmode="numeric">
+              </div>
+            </div>
+            <div id="pv-erro1" class="text-danger small mt-2"></div>
+            <div class="text-end mt-3"><button type="button" class="btn btn-primary" id="pv-proximo">Próximo</button></div>
+          </div>
+
+          <!-- Passo 2: ajustar corpo -->
+          <div data-passo="2" hidden>
+            <div class="row align-items-center g-3">
+              <div class="col-md-5 text-center">
+                <canvas id="sil-canvas" width="320" height="320"
+                        data-src="{{ url_for('static', filename='corpo-silhueta.svg') }}"
+                        style="height:240px;max-width:100%"></canvas>
+              </div>
+              <div class="col-md-7">
+                <p class="mb-3"><strong>Ajuste seu corpo</strong><br><span class="text-muted small">Arraste os controles (medidas em cm).</span></p>
+                {% set faixas = {'busto': [74, 130], 'cintura': [56, 122], 'quadril': [80, 142]} %}
+                {% for m, lbl in [('busto','Busto'), ('cintura','Cintura'), ('quadril','Quadril')] %}
+                <div class="mb-3" data-medida="{{ m }}">
+                  <div class="d-flex justify-content-between small mb-1"><span>{{ lbl }}</span><span id="val-{{ m }}" class="fw-bold" style="color:var(--ink)"></span></div>
+                  <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-2" data-ajuste="{{ m }}" data-delta="-1" aria-label="Diminuir {{ lbl }}">−</button>
+                    <input type="range" class="form-range flex-grow-1" data-slider="{{ m }}"
+                           min="{{ faixas[m][0] }}" max="{{ faixas[m][1] }}" step="1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-2" data-ajuste="{{ m }}" data-delta="1" aria-label="Aumentar {{ lbl }}">+</button>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="d-flex justify-content-between mt-3">
+              <button type="button" class="btn btn-outline-secondary" id="pv-voltar2">Voltar</button>
+              <button type="button" class="btn btn-primary" id="pv-ver">Ver meu tamanho</button>
+            </div>
+          </div>
+
+          <!-- Passo 3: resultado -->
+          <div data-passo="3" hidden class="text-center py-3">
+            <div class="text-muted">Seu tamanho recomendado</div>
+            <div style="font-family:var(--fonte-titulo); font-size:3rem; line-height:1.1" id="pv-tam">M</div>
+            <div id="pv-caimento" class="fw-bold">caimento ideal</div>
+            <div id="pv-base" class="small text-muted"></div>
+            <p class="text-muted small mt-2 mb-3">Recomendação com base nas suas medidas e na tabela desta peça. Na dúvida, fale com a gente pelo WhatsApp.</p>
+            <button type="button" class="btn btn-primary" id="pv-aplicar">Usar este tamanho</button>
+            <button type="button" class="btn btn-link text-muted" id="pv-refazer">ajustar de novo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.SH_PROVADOR = {
+      padrao: {{ MEDIDAS_FEMININAS | tojson }},
+      peca: {{ (peca.medidas_tabela.rows if peca.medidas_tabela else []) | tojson }},
+      medidas: {{ peca.medidas_relevantes | tojson }},
+    };
+  </script>
+
   {% include "_v2_scripts.html" %}
+  <script src="{{ url_for('static', filename='js/provador.js') }}"></script>
 
   <script>
     // Galeria: troca a principal ao clicar na miniatura + zoom seguindo o mouse.

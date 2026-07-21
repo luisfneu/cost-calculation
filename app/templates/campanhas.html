@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Campanhas{% endblock %}
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <h1 class="h3 mb-0">Campanhas</h1>
+  <a href="{{ url_for('main.form_campanha') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nova campanha</a>
+</div>
+
+{% if campanhas %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle bg-white">
+    <thead><tr>
+      <th>Campanha</th><th>Desconto</th><th>Período</th><th class="text-center">Peças</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for c in campanhas %}
+      <tr>
+        <td data-label="Campanha">
+          <strong>{{ c.nome }}</strong>
+          {% if c.subtitulo %}<div class="small text-muted">{{ c.subtitulo }}</div>{% endif %}
+          <div class="small text-muted">/campanha/{{ c.slug }}</div>
+        </td>
+        <td data-label="Desconto">
+          {% if not c.desconto_valor %}<span class="text-muted">— sem desconto</span>
+          {% elif c.desconto_tipo == 'percentual' %}{{ c.desconto_valor | num }}%
+          {% else %}{{ c.desconto_valor | moeda }}{% endif %}
+        </td>
+        <td data-label="Período" class="small">
+          {{ c.inicio.strftime('%d/%m/%Y') if c.inicio else '…' }} – {{ c.fim.strftime('%d/%m/%Y') if c.fim else '…' }}
+        </td>
+        <td data-label="Peças" class="text-center">{{ contagem[c.id] }}</td>
+        <td data-label="Status">
+          {% if not c.ativa %}<span class="badge text-bg-secondary">inativa</span>
+          {% elif c.vigente %}<span class="badge text-bg-success">no ar</span>
+          {% else %}<span class="badge text-bg-warning">fora do período</span>{% endif %}
+        </td>
+        <td class="text-nowrap">
+          <a href="{{ url_for('main.gerir_pecas_campanha', campanha_id=c.id) }}" class="btn btn-sm btn-outline-primary" title="Peças da campanha"><i class="bi bi-bag"></i></a>
+          <a href="{{ url_for('main.form_campanha', campanha_id=c.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+          <a href="/campanha/{{ c.slug }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver na loja"><i class="bi bi-box-arrow-up-right"></i></a>
+          <form method="post" action="{{ url_for('main.toggle_campanha', campanha_id=c.id) }}" class="d-inline">
+            <button class="btn btn-sm btn-outline-secondary" title="{{ 'Desativar' if c.ativa else 'Ativar' }}"><i class="bi bi-{{ 'toggle-on' if c.ativa else 'toggle-off' }}"></i></button>
+          </form>
+          <form method="post" action="{{ url_for('main.excluir_campanha', campanha_id=c.id) }}" class="d-inline" data-confirm="Excluir a campanha {{ c.nome }}?">
+            <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ ui.vazio('bi-megaphone', 'Nenhuma campanha cadastrada', 'Crie campanhas com banner e desconto sobre um conjunto de peças (por coleção, tipo ou tags).', '+ Nova campanha', url_for('main.form_campanha')) }}
+{% endif %}
+{% endblock %}

@@ -63,6 +63,48 @@
     <small class="text-muted">Em branco = o botão não aparece. Quebras de linha são preservadas.</small>
   </div>
 
+  <h2 class="h5 mb-3 mt-2"><i class="bi bi-shop"></i> Rodapé da loja</h2>
+  <div class="row g-3" style="max-width:640px">
+    <div class="col-sm-7">
+      <label class="form-label">Razão social / nome</label>
+      <input type="text" name="razao_social" class="form-control" value="{{ cfg.razao_social }}" placeholder="Sabrina Hansen Atelier">
+    </div>
+    <div class="col-sm-5">
+      <label class="form-label">CNPJ</label>
+      <input type="text" name="cnpj" class="form-control" value="{{ cfg.cnpj }}" placeholder="00.000.000/0001-00">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Endereço</label>
+      <input type="text" name="endereco_loja" class="form-control" value="{{ cfg.endereco_loja }}" placeholder="Rua, nº, bairro — Cidade/UF · CEP">
+    </div>
+    <div class="col-sm-6">
+      <label class="form-label">Instagram (link)</label>
+      <input type="text" name="instagram" class="form-control" value="{{ cfg.instagram }}" placeholder="https://instagram.com/seu_perfil">
+    </div>
+    <div class="col-sm-6">
+      <label class="form-label">E-mail de contato</label>
+      <input type="email" name="email_loja" class="form-control" value="{{ cfg.email_loja }}" placeholder="contato@sabrinahansen.com.br">
+    </div>
+  </div>
+  <small class="text-muted d-block mb-3">Aparecem no rodapé da loja. Em branco, CNPJ/endereço ficam ocultos e o Instagram usa um link padrão.</small>
+
+  <h2 class="h5 mb-3 mt-2"><i class="bi bi-headset"></i> Central de atendimento (menu da loja)</h2>
+  <div class="row g-3" style="max-width:640px">
+    <div class="col-sm-5">
+      <label class="form-label">Telefone fixo</label>
+      <input type="text" name="telefone_fixo" class="form-control" value="{{ cfg.telefone_fixo }}" placeholder="(17) 3442-4374">
+    </div>
+    <div class="col-sm-7">
+      <label class="form-label">Horário — semana</label>
+      <input type="text" name="atend_semana" class="form-control" value="{{ cfg.atend_semana }}" placeholder="Segunda à sexta das 09h às 18h">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Horário — sábado/extra</label>
+      <input type="text" name="atend_sabado" class="form-control" value="{{ cfg.atend_sabado }}" placeholder="Sábados das 09h às 13h">
+    </div>
+  </div>
+  <small class="text-muted d-block mb-3">O WhatsApp usa o número cadastrado acima. Telefone em branco = não aparece.</small>
+
   <h2 class="h5 mb-3 mt-2"><i class="bi bi-clock"></i> Fuso horário</h2>
   <div class="mb-3" style="max-width:320px">
     <label class="form-label">Fuso para exibir datas e horas</label>

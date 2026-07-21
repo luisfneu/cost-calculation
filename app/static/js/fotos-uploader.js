@@ -41,7 +41,7 @@
       <button type="button" class="foto-star" title="Definir como principal" data-token="${token}">
         <i class="bi ${ehPrincipal ? 'bi-star-fill' : 'bi-star'}"></i>
       </button>
-      <button type="button" class="foto-del" title="Remover" data-token="${token}">&times;</button>
+      <button type="button" class="foto-del" title="Remover" data-token="${token}"><i class="bi bi-x-lg"></i></button>
       ${ehPrincipal ? '<span class="foto-badge">principal</span>' : ''}`;
     return div;
   }
