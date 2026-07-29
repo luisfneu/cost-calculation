@@ -15,7 +15,7 @@ Flask 3 · Flask-SQLAlchemy · SQLite · Alembic/Flask-Migrate · Flask-WTF (CSR
 .venv/bin/ruff check . && .venv/bin/ruff format .
 ```
 Portas: 8000 (5000 é sequestrada pelo AirPlay do macOS → 403).
-Reload sem downtime após deploy de código: `kill -HUP $(pgrep -f "gunicorn.*wsgi:app" | head -1)` (HUP no master recarrega os workers). Túnel Cloudflare roda à parte, não reinicia junto.
+Reload sem downtime após deploy de código: `kill -HUP $(pgrep -f "gunicorn.*wsgi:app" | xargs ps -o pid=,ppid= -p | awk '$2==1{print $1}')` — o master é o processo com **PPID 1**; `pgrep | head -1` pode devolver o worker (ordem é por PID, e o worker antigo pode ter PID menor). Túnel Cloudflare roda à parte, não reinicia junto. A vitrine `/` fica até 60 s servindo HTML do cache após o reload.
 
 ## URLs (importante)
 Dois blueprints:
@@ -27,6 +27,8 @@ Guarda de login protege só o blueprint `main`. Templates usam 100% `url_for` �
 ## Convenções
 - Rotas em `app/routes/*.py` reexportam helpers via `from .helpers import *` (por isso os ignores F403/F405 no ruff). Blueprints `bp` (main) e `publico_bp` vêm de `app/routes/__init__.py`.
 - Dinheiro: `dinheiro()` (Decimal ROUND_HALF_UP); `arredondar_cima(v, base=5)` (teto p/ preço sob-encomenda). Filtro Jinja `| moeda`, `| dt`, `| num`.
+- `url_for('static', ...)` **já** anexa `?v=<mtime>` (hook `@app.url_defaults` em `app/__init__.py`). Nunca acrescentar `?v=N` na mão no template — vira `?v=123?v=N`.
+- Ícones de tela inicial: gerados por `gerar_icones.py` (monograma + `qlmanage` + Pillow) — Loja mocha, ERP ink com selo `ERP`. **Ícone editado à mão nunca é sobrescrito**: o script compara o sha256 com `icones-gerados.json` e pula o que não bater (`--forcar` ignora a proteção). Hoje `apple-touch-icon.png` e `apple-touch-icon-erp.png` são arte manual. PNG do `apple-touch-icon` fica **quadrado e opaco** (iOS arredonda sozinho; canto transparente vira preto); o arredondado vem da moldura interna. Manifests separados: `manifest.webmanifest` (loja, scope `/`) e `manifest-erp.webmanifest` (scope `/console/erp/`).
 - Endpoints públicos POST: `@csrf.exempt`. Cupom pessoal **nunca** aplica na vitrine pública (vaza desconto).
 - Fluxo pedido vitrine: cria **Lead** (pendente) + **Venda** status `pre-pedido`. Confirmar lead só cria/vincula Cliente; confirmar pedido baixa estoque e vira `realizado`. `pre-pedido` **fora** de todos os relatórios/receita.
 
