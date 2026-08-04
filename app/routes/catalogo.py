@@ -16,6 +16,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     make_response,
     redirect,
     render_template,
@@ -232,6 +233,43 @@ def comparar_pecas():
     ordem = {pid: i for i, pid in enumerate(ids)}
     pecas.sort(key=lambda p: ordem.get(p.id, 999))
     return render_template("pecas_comparar.html", pecas=pecas)
+
+
+@bp.route("/calculadora")
+def calculadora():
+    """Simulador de preço: só a tela. Não grava nada — o cálculo roda no
+    navegador (`static/js/calculadora.js`, espelhando as fórmulas de `models.py`)
+    e os insumos podem ser digitados sem existir no cadastro. As listas abaixo
+    são atalhos: insumo do estoque entra com custo/unidade do cadastro e a peça
+    existente entra com a ficha técnica inteira."""
+    insumos = Insumo.query.filter_by(ativo=True).order_by(Insumo.nome).all()
+    pecas = Peca.query.order_by(Peca.nome).all()
+    return render_template("calculadora.html", insumos=insumos, pecas=pecas)
+
+
+@bp.route("/calculadora/peca/<int:peca_id>.json")
+def calculadora_ficha(peca_id):
+    """Ficha de uma peça para carregar na calculadora (leitura pura).
+
+    Copia os VALORES do momento — mexer na simulação não altera a peça.
+    """
+    peca = Peca.query.get_or_404(peca_id)
+    return jsonify({
+        "nome": peca.nome,
+        "insumos": [
+            {
+                "nome": item.insumo.nome,
+                "quantidade": item.quantidade,
+                "unidade": item.insumo.unidade,
+                "custo": item.insumo.custo_unitario,
+            }
+            for item in peca.insumos
+        ],
+        "mao_de_obra": peca.custo_mao_de_obra,
+        "extras": peca.custos_extras,
+        "margem": peca.margem_percentual,
+        "preco": peca.preco_base,
+    })
 
 
 @bp.route("/pecas/nova", methods=["GET", "POST"])

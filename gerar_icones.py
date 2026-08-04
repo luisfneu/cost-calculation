@@ -59,14 +59,21 @@ def monograma() -> tuple[str, tuple[float, float, float, float]]:
 PATH, (MX, MY, MW, MH) = monograma()
 
 
-def _mono(cor: str, largura: float, cy: float) -> str:
-    """Monograma pintado de `cor`, com `largura` px, centrado em (LADO/2, cy)."""
+def _mono(cor: str, largura: float, cy: float, engrossar: float = 0) -> str:
+    """Monograma pintado de `cor`, com `largura` px, centrado em (LADO/2, cy).
+
+    `engrossar` aplica um contorno da mesma cor (nas unidades internas do path):
+    o traço da caligrafia é fino demais para sobreviver a um favicon de 16px.
+    """
     s = largura / MW
     tx = LADO / 2 - largura / 2 - MX * s
     ty = cy - (MH * s) / 2 - MY * s
+    traco = (
+        f' stroke="{cor}" stroke-width="{engrossar}" stroke-linejoin="round"' if engrossar else ""
+    )
     return (
         f'<g fill="{cor}" transform="translate({tx:.2f},{ty:.2f}) scale({s:.5f})">'
-        f'<g transform="translate(0,1024) scale(0.1,-0.1)"><path d="{PATH}"/></g></g>'
+        f'<g transform="translate(0,1024) scale(0.1,-0.1)"><path d="{PATH}"{traco}/></g></g>'
     )
 
 
@@ -78,6 +85,7 @@ def svg_icone(
     cor_texto: str = GOLD_SOFT,
     mono_largura: float = 0.66,
     cantos: int = 0,
+    engrossar: float = 0,
 ) -> str:
     """Monta o SVG do ícone.
 
@@ -95,7 +103,7 @@ def svg_icone(
             f'fill="none" stroke="{moldura}" stroke-width="10" opacity="0.85"/>'
         )
     cy = 452 if texto else 512
-    partes.append(_mono(tinta, LADO * mono_largura, cy))
+    partes.append(_mono(tinta, LADO * mono_largura, cy, engrossar))
     if texto:
         partes.append(
             f'<text x="{LADO / 2 + 16}" y="740" text-anchor="middle" '
@@ -137,6 +145,13 @@ def rasterizar(svg: Path) -> Image.Image:
 
 
 def salvar(img: Image.Image, nome: str, lado: int, alfa: bool = False) -> None:
+    if nome.endswith(".ico"):
+        # .ico guarda vários tamanhos; o navegador escolhe o da aba.
+        img.resize((256, 256), Image.LANCZOS).save(
+            ESTATICO / nome, sizes=[(16, 16), (32, 32), (48, 48)]
+        )
+        print(f"  {nome} (16/32/48)")
+        return
     fora = img.resize((lado, lado), Image.LANCZOS)
     if not alfa:
         fora = fora.convert("RGB")
@@ -171,6 +186,13 @@ ICONES = {
     "icone-erp-maskable.svg": (
         dict(fundo=INK, tinta=CREAM, moldura=None, texto="ERP", mono_largura=0.50),
         [("icon-erp-maskable-512.png", 512, False)],
+    ),
+    # Favicon do ERP: fundo escuro para a aba do console não se confundir com a
+    # da loja (que fica no favicon.ico claro, mantido à mão). Sem moldura nem
+    # selo "ERP" — em 16px viram sujeira; o que diferencia é a cor.
+    "icone-erp-favicon.svg": (
+        dict(fundo=INK, tinta=CREAM, moldura=None, mono_largura=2.35, cantos=140, engrossar=90),
+        [("favicon-erp.ico", 48, True), ("favicon-erp-180.png", 180, False)],
     ),
 }
 
