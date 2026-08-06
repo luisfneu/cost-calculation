@@ -26,6 +26,7 @@ from werkzeug.utils import secure_filename
 from ..extensions import cache
 from ..models import (
     TAMANHOS,
+    TIPOS_INSUMO,
     Auditoria,
     Cliente,
     Cupom,
@@ -116,7 +117,7 @@ def _insumos_filtrados():
     query = Insumo.query
     if q:
         query = query.filter(Insumo.nome.ilike(f"%{q}%"))
-    if tipo in ("tecido", "aviamento", "embalagem"):
+    if tipo in TIPOS_INSUMO:
         query = query.filter_by(tipo=tipo)
     insumos = query.order_by(Insumo.nome).all()
     if situacao == "baixo":

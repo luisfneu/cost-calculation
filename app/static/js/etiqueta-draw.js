@@ -8,6 +8,54 @@
 
   function conteudoQR(sku, tam) { return tam ? `${sku}--${tam}` : sku; }
 
+  // ---- salvar a etiqueta como imagem ----
+
+  /** PNG do canvas como File, pronto para compartilhar ou baixar. */
+  window.pngDoCanvas = function (canvas, nome) {
+    return new Promise(function (resolve) {
+      canvas.toBlob(function (blob) {
+        resolve(blob ? new File([blob], nome, { type: "image/png" }) : null);
+      }, "image/png");
+    });
+  };
+
+  function baixar(arquivo) {
+    const url = URL.createObjectURL(arquivo);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = arquivo.name;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  }
+
+  /** Salva a imagem.
+   *
+   * O Safari do iPhone **ignora o atributo `download`** do link — por isso o
+   * botão não fazia nada no iOS. Lá o caminho é a folha de compartilhamento
+   * (Web Share com arquivo), que traz "Salvar em Fotos" e "Salvar em Arquivos".
+   * No desktop segue o download normal.
+   *
+   * O arquivo precisa chegar pronto: chamar `share()` depois de um `await`
+   * longo faz o iOS recusar por perder o gesto do usuário.
+   */
+  window.salvarPng = function (arquivo) {
+    if (!arquivo) return Promise.resolve(false);
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      return navigator.share({ files: [arquivo], title: arquivo.name })
+        .then(function () { return true; })
+        .catch(function (e) {
+          if (e && e.name === "AbortError") return true;   // usuário cancelou
+          baixar(arquivo);
+          return true;
+        });
+    }
+    baixar(arquivo);
+    return Promise.resolve(true);
+  };
+
   function qrCanvas(qrBox, texto) {
     qrBox.innerHTML = '';
     new QRCode(qrBox, { text: texto || ' ', width: 240, height: 240,

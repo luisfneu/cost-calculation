@@ -11,12 +11,13 @@
   </div>
   <div class="row">
     <div class="col-md-6 mb-3">
-      <label class="form-label">Tipo de insumo</label>
+      <label class="form-label">Tipo de insumo {{ ui.ajuda('Peça pronta = roupa comprada acabada para revender com a sua etiqueta. Entra na ficha técnica como insumo, com o custo de compra.') }}</label>
       <select name="tipo" id="insumo-tipo" class="form-select">
         {% set t = insumo.tipo if insumo else 'tecido' %}
         <option value="tecido" {{ 'selected' if t == 'tecido' }}>Tecido</option>
         <option value="aviamento" {{ 'selected' if t == 'aviamento' }}>Aviamento</option>
         <option value="embalagem" {{ 'selected' if t == 'embalagem' }}>Embalagem</option>
+        <option value="peca" {{ 'selected' if t == 'peca' }}>Peça pronta (revenda)</option>
       </select>
     </div>
     <div class="col-md-6 mb-3">
@@ -25,13 +26,14 @@
              value="{{ insumo.fornecedor if insumo else '' }}" placeholder="Ex.: Armarinho Central...">
     </div>
   </div>
-  <div class="row tecido-only" id="campo-composicao" {{ 'hidden' if (insumo.tipo if insumo else 'tecido') != 'tecido' }}>
+  {% set t_atual = insumo.tipo if insumo else 'tecido' %}
+  <div class="row composicao-only" id="campo-composicao" {{ 'hidden' if t_atual not in ('tecido', 'peca') }}>
     <div class="col-md-8 mb-3">
-      <label class="form-label">Composição do tecido {{ ui.ajuda('Ex.: 95% algodão, 5% elastano. Só para insumos do tipo Tecido.') }}</label>
+      <label class="form-label">Composição {{ ui.ajuda('Ex.: 95% algodão, 5% elastano. Vale para tecido e para peça pronta (vai na etiqueta e na vitrine).') }}</label>
       <input type="text" name="composicao" class="form-control"
              value="{{ insumo.composicao if insumo else '' }}" placeholder="Ex.: 95% algodão, 5% elastano">
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-4 mb-3 tecido-only" {{ 'hidden' if t_atual != 'tecido' }}>
       <label class="form-label">Largura (cm) {{ ui.ajuda('Largura do rolo de tecido. Informativo, não entra em cálculo por enquanto.') }}</label>
       <input type="text" name="largura" class="form-control" inputmode="decimal"
              value="{{ insumo.largura_cm | num if insumo and insumo.largura_cm else '' }}" placeholder="Ex.: 150">
@@ -63,6 +65,22 @@
              value="{{ insumo.estoque_minimo if insumo else '' }}" placeholder="0">
     </div>
   </div>
+
+  {# Frete da compra: entra no custo real, rateado pela quantidade que veio. #}
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <label class="form-label" for="insumo-frete">Frete da compra (R$) {{ ui.ajuda('Valor total do frete pago nessa compra. Rateado pela quantidade abaixo, entra no custo de cada unidade e no custo das peças que usam este insumo.') }}</label>
+      <input type="text" name="frete_compra" id="insumo-frete" class="form-control" data-mask="money"
+             inputmode="numeric" placeholder="0,00"
+             value="{{ ('%.2f'|format(insumo.frete_compra))|replace('.', ',') if insumo and insumo.frete_compra else '' }}">
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label" for="insumo-frete-qtd">Quantidade que o frete cobriu {{ ui.ajuda('Quantas unidades vieram nessa compra. É por ela que o frete é dividido — em branco ou zero, o frete é ignorado.') }}</label>
+      <input type="text" name="frete_qtd" id="insumo-frete-qtd" class="form-control" inputmode="decimal"
+             placeholder="{{ 'igual ao estoque inicial' if not insumo else '0' }}"
+             value="{{ insumo.frete_qtd | num if insumo and insumo.frete_qtd else '' }}">
+    </div>
+  </div>
   <div class="form-check form-switch mb-3">
     <input class="form-check-input" type="checkbox" role="switch" name="ativo" id="ativo"
            {{ 'checked' if not insumo or insumo.ativo }}>
@@ -77,7 +95,10 @@
   <!-- Total do que está em estoque: quantidade × custo unitário. -->
   <div class="d-flex justify-content-between align-items-center border-top pt-3 mb-3"
        id="total-cadastro" data-estoque="{{ insumo.estoque if insumo else 0 }}">
-    <span class="text-muted"><span id="total-formula">—</span></span>
+    <span class="text-muted">
+      <span id="total-formula">—</span>
+      <small class="d-block" id="frete-rateio" hidden></small>
+    </span>
     <span class="fs-5"><span class="text-muted small">Total: </span><strong id="total-valor">R$ 0,00</strong></span>
   </div>
 
@@ -104,25 +125,51 @@
       return parseFloat(String(v || '0').replace(',', '.')) || 0;
     }
 
+    const frete = document.getElementById('insumo-frete');
+    const freteQtd = document.getElementById('insumo-frete-qtd');
+    const freteLinha = document.getElementById('frete-rateio');
+
+    function freteFloat() { return (parseInt((frete.value || '').replace(/\D/g, ''), 10) || 0) / 100; }
+    function freteQtdFloat() {
+      // Sem quantidade informada, rateia pelo estoque inicial (o que veio na compra).
+      const v = parseFloat(String(freteQtd.value || '').replace(',', '.')) || 0;
+      return v > 0 ? v : (estoque ? estoqueFloat() : 0);
+    }
+
     function recalc() {
       if (!totalBox) return;
       const c = custoFloat(), q = estoqueFloat(), u = (uni && uni.value) || 'un';
-      totalVal.textContent = brl.format(q * c);
-      totalForm.textContent = q > 0 ? `${q.toLocaleString('pt-BR')} ${u} × ${brl.format(c)}/${u}` : 'informe estoque e custo';
+      const f = freteFloat(), fq = freteQtdFloat();
+      const fUnit = f > 0 && fq > 0 ? f / fq : 0;
+      totalVal.textContent = brl.format(q * (c + fUnit));
+      totalForm.textContent = q > 0
+        ? `${q.toLocaleString('pt-BR')} ${u} × ${brl.format(c + fUnit)}/${u}`
+        : 'informe estoque e custo';
+      if (freteLinha) {
+        freteLinha.hidden = fUnit <= 0;
+        freteLinha.textContent = fUnit > 0
+          ? `Custo com frete: ${brl.format(c)} + ${brl.format(fUnit)} de frete = ${brl.format(c + fUnit)}/${u}`
+          : '';
+      }
     }
 
     function alternarTipo() {
-      document.querySelectorAll('.tecido-only').forEach(el => { el.hidden = tipo.value !== 'tecido'; });
+      const t = tipo.value;
+      // Composição vale para tecido e para peça pronta; largura, só para o rolo.
+      document.querySelectorAll('.composicao-only').forEach(el => {
+        el.hidden = !(t === 'tecido' || t === 'peca');
+      });
+      document.querySelectorAll('.tecido-only').forEach(el => { el.hidden = t !== 'tecido'; });
       // Sugestão de unidade: tecido → m; demais → un (preserva kg, rolo... customizados).
       if (uni) {
-        if (tipo.value === 'tecido' && (uni.value === '' || uni.value === 'un')) uni.value = 'm';
-        else if (tipo.value !== 'tecido' && (uni.value === '' || uni.value === 'm')) uni.value = 'un';
+        if (t === 'tecido' && (uni.value === '' || uni.value === 'un')) uni.value = 'm';
+        else if (t !== 'tecido' && (uni.value === '' || uni.value === 'm')) uni.value = 'un';
       }
       recalc();
     }
 
     if (tipo) tipo.addEventListener('change', alternarTipo);
-    [custo, estoque, uni].forEach(el => el && el.addEventListener('input', recalc));
+    [custo, estoque, uni, frete, freteQtd].forEach(el => el && el.addEventListener('input', recalc));
     recalc();
   })();
 </script>

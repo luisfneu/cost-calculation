@@ -216,7 +216,7 @@
               <select id="insumo-estoque" class="form-select">
                 <option value="">— insumo do estoque —</option>
                 {% for i in insumos %}
-                <option value="{{ i.nome }}">{{ i.nome }} — {{ i.custo_unitario | moeda }}/{{ i.unidade }}</option>
+                <option value="{{ i.nome }}">{{ i.nome }} — {{ i.custo_com_frete | moeda }}/{{ i.unidade }}</option>
                 {% endfor %}
               </select>
               <button type="button" class="btn btn-outline-secondary" id="add-estoque">
@@ -229,7 +229,7 @@
             {% for i in insumos %}<option value="{{ i.nome }}">{% endfor %}
           </datalist>
           <script id="dados-insumos" type="application/json">
-            [{% for i in insumos %}{"nome": {{ i.nome | tojson }}, "custo": {{ i.custo_unitario }}, "unidade": {{ i.unidade | tojson }}}{{ "," if not loop.last }}{% endfor %}]
+            [{% for i in insumos %}{"nome": {{ i.nome | tojson }}, "custo": {{ i.custo_com_frete }}, "unidade": {{ i.unidade | tojson }}}{{ "," if not loop.last }}{% endfor %}]
           </script>
           <p class="text-muted small mt-2 mb-0 no-print">
             <i class="bi bi-box-seam"></i> marca o insumo vindo do estoque — o custo é o do cadastro.

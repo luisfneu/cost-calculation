@@ -1,0 +1,47 @@
+{# Fragmento: peças que usam este insumo na ficha técnica (modal via fetch). #}
+{% if itens %}
+<table class="table table-sm align-middle mb-2">
+  <thead class="table-light">
+    <tr>
+      <th>Peça</th>
+      <th class="text-end">Qtd por peça</th>
+      <th class="text-end">Custo na peça</th>
+      <th class="text-end">Estoque</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in itens %}
+    <tr>
+      <td>
+        {{ item.peca.nome }}
+        {% if item.peca.colecao %}<span class="badge text-bg-light">{{ item.peca.colecao }}</span>{% endif %}
+        {% if not item.peca.vitrine_publica %}
+          <span class="badge text-bg-secondary" title="Não aparece na vitrine pública"><i class="bi bi-eye-slash"></i></span>
+        {% endif %}
+      </td>
+      <td class="text-end">{{ item.quantidade | num }} {{ insumo.unidade }}</td>
+      <td class="text-end">{{ item.subtotal | moeda }}</td>
+      <td class="text-end">{{ item.peca.estoque_total | num }}</td>
+      <td class="text-end">
+        <a href="{{ url_for('main.detalhe_peca', peca_id=item.peca.id) }}"
+           class="btn btn-sm btn-outline-primary" title="Abrir peça"><i class="bi bi-eye"></i></a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if total_paginas > 1 %}
+<nav>
+  <ul class="pagination pagination-sm mb-0 flex-wrap">
+    {% for p in range(1, total_paginas + 1) %}
+      <li class="page-item {{ 'active' if p == pagina }}">
+        <a class="page-link hist-page" href="{{ url_for('main.pecas_do_insumo', insumo_id=insumo.id, pagina=p) }}">{{ p }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+{% else %}
+<p class="text-muted mb-0">Este insumo ainda não está na ficha técnica de nenhuma peça.</p>
+{% endif %}

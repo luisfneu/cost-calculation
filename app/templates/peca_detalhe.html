@@ -8,11 +8,15 @@
     {% if peca.tags_lista %}
       <div class="mb-1">{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>
     {% endif %}
-    {% if peca.composicao %}<p class="text-muted mb-0"><i class="bi bi-tags"></i> {{ peca.composicao }}</p>{% endif %}
+    {% if peca.composicao_efetiva %}<p class="text-muted mb-0"><i class="bi bi-tags"></i> {{ peca.composicao_efetiva }}</p>{% endif %}
   </div>
   <div class="text-nowrap">
     <a href="{{ url_for('main.etiqueta_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" target="_blank" title="Etiqueta"><i class="bi bi-qr-code"></i></a>
     <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+    <form method="post" action="{{ url_for('main.duplicar_peca', peca_id=peca.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-outline-secondary"
+              title="Duplicar: copia dados e ficha técnica, sem as fotos"><i class="bi bi-copy"></i></button>
+    </form>
     <form method="post" action="{{ url_for('main.excluir_peca', peca_id=peca.id) }}" class="d-inline"
           data-confirm="Excluir esta peça?">
       <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
@@ -245,7 +249,7 @@
                   <button class="btn btn-outline-secondary" title="Atualizar"><i class="bi bi-check-lg"></i></button>
                 </form>
               </td>
-              <td>{{ item.insumo.custo_unitario | moeda }}</td>
+              <td>{{ item.insumo.custo_com_frete | moeda }}</td>
               <td>{{ item.subtotal | moeda }}</td>
               <td class="text-end">
                 <form method="post" action="{{ url_for('main.remover_insumo_peca', item_id=item.id) }}"
@@ -286,7 +290,17 @@
                     <span class="foto-thumb sem-foto me-2 d-inline-flex">—</span>
                   {% endif %}
                   <span>{{ insumo.nome }} <span class="small text-muted">({{ insumo.tipo_label }})</span></span>
-                  <span class="small text-muted ms-auto">{{ insumo.custo_unitario | moeda }}/{{ insumo.unidade }}</span>
+                  {# Custo e o que há em estoque: evita montar ficha com insumo que acabou. #}
+                  <span class="small ms-auto text-end lh-sm">
+                    <span class="text-muted d-block">{{ insumo.custo_com_frete | moeda }}/{{ insumo.unidade }}</span>
+                    {% if insumo.estoque <= 0 %}
+                      <span class="text-danger">sem estoque</span>
+                    {% elif insumo.estoque_baixo %}
+                      <span class="text-warning-emphasis">{{ insumo.estoque | num }} {{ insumo.unidade }} · baixo</span>
+                    {% else %}
+                      <span class="text-muted">{{ insumo.estoque | num }} {{ insumo.unidade }} em estoque</span>
+                    {% endif %}
+                  </span>
                 </button>
                 {% endfor %}
               </div>

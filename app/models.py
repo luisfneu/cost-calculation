@@ -80,13 +80,19 @@ def cpf_valido(cpf) -> bool:
     return True
 
 
+# Categorias de insumo aceitas no cadastro e nos filtros (ordem de exibição).
+TIPOS_INSUMO = ("tecido", "aviamento", "embalagem", "peca")
+
+
 class Insumo(db.Model):
     __tablename__ = "insumos"
 
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
-    # Categoria do insumo: "tecido", "aviamento" ou "embalagem"
+    # Categoria do insumo: "tecido", "aviamento", "embalagem" ou "peca"
     # ("materia_prima" é legado, migrado para "aviamento").
+    # "peca" = peça pronta comprada para revenda (reetiquetada com a marca):
+    # entra na ficha técnica como qualquer insumo, com o custo de compra.
     tipo = db.Column(db.String(20), nullable=False, default="aviamento")
     # Composição do tecido (só usada quando tipo == "tecido"). Ex.: "95% algodão, 5% elastano".
     composicao = db.Column(db.Text, default="", server_default="")
@@ -94,8 +100,13 @@ class Insumo(db.Model):
     largura_cm = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
     # Unidade de medida: un, m, cm, kg, g, rolo, etc.
     unidade = db.Column(db.String(20), nullable=False, default="un")
-    # Custo por unidade de medida (R$).
+    # Custo por unidade de medida (R$), sem frete.
     custo_unitario = db.Column(db.Float, nullable=False, default=0.0)
+    # Frete pago na compra (valor total do envio) e quantidade que ele cobriu.
+    # Rateado por unidade, entra no custo real do insumo — comprar 10 peças com
+    # R$120 de frete deixa cada uma R$12 mais cara.
+    frete_compra = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
+    frete_qtd = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
     # Onde o insumo foi comprado (fornecedor/loja).
     fornecedor = db.Column(db.String(160), default="")
     # Foto do insumo (nome do arquivo em static/uploads).
@@ -120,11 +131,30 @@ class Insumo(db.Model):
     @property
     def tipo_label(self) -> str:
         return {"tecido": "Tecido", "aviamento": "Aviamento", "embalagem": "Embalagem",
+                "peca": "Peça pronta",
                 "materia_prima": "Matéria-prima"}.get(self.tipo, "Aviamento")
+
+    @property
+    def frete_unitario(self) -> float:
+        """Frete diluído por unidade. Sem quantidade de rateio, não há frete."""
+        if not self.frete_compra or not self.frete_qtd or self.frete_qtd <= 0:
+            return 0.0
+        return dinheiro(self.frete_compra / self.frete_qtd)
+
+    @property
+    def custo_com_frete(self) -> float:
+        """Custo real de uso: o que foi pago pelo material mais o frete rateado.
+        É o custo que entra na ficha técnica das peças."""
+        return dinheiro(self.custo_unitario + self.frete_unitario)
 
     @property
     def is_tecido(self) -> bool:
         return self.tipo == "tecido"
+
+    @property
+    def is_peca_pronta(self) -> bool:
+        """Peça comprada pronta para revenda (só reetiquetada com a marca)."""
+        return self.tipo == "peca"
 
 
 # Ordem dos tamanhos na tabela de medidas.
@@ -274,6 +304,29 @@ class Peca(db.Model):
     def custo_total(self) -> float:
         """Custo de produção da peça."""
         return dinheiro(self.custo_insumos + self.custo_mao_de_obra + self.custos_extras)
+
+    @property
+    def composicao_herdada(self) -> str:
+        """Composição vinda da ficha técnica: do tecido ou da peça pronta usada.
+
+        Composições repetidas contam uma vez; várias diferentes (forro, aviamento
+        de tecido) aparecem separadas por ' · '.
+        """
+        vistas = []
+        for item in self.insumos:
+            insumo = item.insumo
+            if not insumo or insumo.tipo not in ("tecido", "peca"):
+                continue
+            c = (insumo.composicao or "").strip()
+            if c and c not in vistas:
+                vistas.append(c)
+        return " · ".join(vistas)
+
+    @property
+    def composicao_efetiva(self) -> str:
+        """O que aparece para o cliente: o texto digitado na peça manda; sem ele,
+        herda a composição do tecido/peça pronta da ficha."""
+        return (self.composicao or "").strip() or self.composicao_herdada
 
     def _rendimentos(self):
         """(rendimento, item) para cada insumo da ficha que é consumido — quantas
@@ -452,7 +505,8 @@ class PecaInsumo(db.Model):
 
     @property
     def subtotal(self) -> float:
-        return dinheiro(self.quantidade * self.insumo.custo_unitario)
+        # custo_com_frete: o frete da compra faz parte do custo do material.
+        return dinheiro(self.quantidade * self.insumo.custo_com_frete)
 
 
 class EstoquePeca(db.Model):
@@ -567,7 +621,7 @@ class OrdemProducao(db.Model):
             if falta > 0.0001:
                 compras.append({
                     "insumo": ins, "precisa": precisa, "estoque": ins.estoque,
-                    "comprar": falta, "custo": falta * ins.custo_unitario,
+                    "comprar": falta, "custo": falta * ins.custo_com_frete,
                 })
         return sorted(compras, key=lambda x: x["insumo"].nome)
 

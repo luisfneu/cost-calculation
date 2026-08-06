@@ -160,7 +160,7 @@
           <div class="pdp-desc-txt">
             {% if peca.tipo %}<div><strong>Tipo:</strong> {{ peca.tipo }}</div>{% endif %}
             {% if peca.colecao %}<div><strong>Coleção:</strong> {{ peca.colecao }}</div>{% endif %}
-            {% if peca.composicao %}<div><strong>Composição:</strong> {{ peca.composicao }}</div>{% endif %}
+            {% if peca.composicao_efetiva %}<div><strong>Composição:</strong> {{ peca.composicao_efetiva }}</div>{% endif %}
             <div><strong>Disponibilidade:</strong> {{ 'Sob encomenda' if peca.sob_encomenda else 'Pronta entrega' }}</div>
 
             <div class="mt-3"><strong>Medidas</strong></div>
