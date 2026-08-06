@@ -549,6 +549,31 @@ tr.linha-zerada img { filter: grayscale(1); opacity: .5; }
 .badge.badge-aviamento  { background-color: #e6c14a !important; color: #4a3c12 !important; }
 .badge.badge-tecido     { background-color: #a86b8f !important; color: #fff !important; }
 .badge.badge-embalagem  { background-color: #6d7a5c !important; color: var(--cream) !important; }
+/* Peça pronta (revenda): tom da marca, para destacar do material de produção */
+.badge.badge-peca       { background-color: var(--gold) !important; color: var(--cream) !important; }
+/* Paginação — o padrão do Bootstrap é azul; aqui usa a identidade.
+   Página ativa: fundo dourado com texto ink (contraste 4.7:1, passa AA).
+   Cream sobre dourado daria só 2.8:1, por isso o texto ativo é escuro. */
+.pagination {
+  --bs-pagination-color: var(--ink-soft);
+  --bs-pagination-bg: #fff;
+  --bs-pagination-border-color: var(--line);
+  --bs-pagination-hover-color: var(--ink);
+  --bs-pagination-hover-bg: rgba(176, 138, 79, .12);
+  --bs-pagination-hover-border-color: var(--gold-soft);
+  --bs-pagination-focus-color: var(--ink);
+  --bs-pagination-focus-bg: rgba(176, 138, 79, .12);
+  --bs-pagination-focus-box-shadow: 0 0 0 .2rem rgba(176, 138, 79, .3);
+  --bs-pagination-active-color: var(--ink);
+  --bs-pagination-active-bg: var(--gold);
+  --bs-pagination-active-border-color: var(--gold);
+  --bs-pagination-disabled-color: var(--ink-soft);
+  --bs-pagination-disabled-bg: var(--cream-soft);
+  --bs-pagination-disabled-border-color: var(--line);
+}
+.pagination .page-link { font-family: var(--fonte-corpo); }
+.pagination .page-item.active .page-link { font-weight: 600; }
+
 /* Tags de peça: mesma cor do botão primário (Nova peça) */
 .badge.badge-tag { background-color: var(--gold) !important; color: var(--cream) !important; font-weight: 400; }
 

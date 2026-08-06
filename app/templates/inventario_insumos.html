@@ -18,6 +18,7 @@
       <option value="tecido" {{ 'selected' if tipo == 'tecido' }}>Tecido</option>
       <option value="aviamento" {{ 'selected' if tipo == 'aviamento' }}>Aviamento</option>
       <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
+      <option value="peca" {{ 'selected' if tipo == 'peca' }}>Peça pronta</option>
     </select>
     <select name="situacao" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
       <option value="">Todas as situações</option>
@@ -66,7 +67,7 @@
               </div>
             </div>
           </td>
-          <td data-label="Tipo"><span class="badge {{ {'tecido':'badge-tecido','aviamento':'badge-aviamento','embalagem':'badge-embalagem'}.get(i.tipo, 'badge-materia') }}">{{ i.tipo_label }}</span></td>
+          <td data-label="Tipo"><span class="badge {{ {'tecido':'badge-tecido','aviamento':'badge-aviamento','embalagem':'badge-embalagem','peca':'badge-peca'}.get(i.tipo, 'badge-materia') }}">{{ i.tipo_label }}</span></td>
           <td data-label="Em estoque" class="text-end {{ 'text-danger fw-bold' if i.estoque_baixo }}">{{ i.estoque | num }} {{ i.unidade }}</td>
           <td data-label="Contagem">
             <div class="input-group input-group-sm">

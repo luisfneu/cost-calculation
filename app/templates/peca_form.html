@@ -71,9 +71,17 @@
   </div>
   <div class="row">
     <div class="col-md-6 mb-3">
-      <label class="form-label">Composição {{ ajuda('Ex.: 95% algodão, 5% elastano. Aparece nos detalhes da peça na vitrine.') }}</label>
-      <input type="text" name="composicao" class="form-control" placeholder="Ex.: 95% algodão, 5% elastano"
+      {% set herdada = peca.composicao_herdada if peca else '' %}
+      <label class="form-label">Composição {{ ajuda('Ex.: 95% algodão, 5% elastano. Aparece nos detalhes da peça na vitrine. Em branco, usa a composição do tecido ou da peça pronta da ficha técnica.') }}</label>
+      <input type="text" name="composicao" class="form-control"
+             placeholder="{{ herdada if herdada else 'Ex.: 95% algodão, 5% elastano' }}"
              value="{{ peca.composicao if peca else '' }}">
+      {% if herdada %}
+      <small class="text-muted">
+        <i class="bi bi-diagram-2"></i> Da ficha técnica: <b>{{ herdada }}</b>.
+        Deixe em branco para usar essa; preencha para escrever outra.
+      </small>
+      {% endif %}
     </div>
     <div class="col-md-6 mb-3">
       <label class="form-label">Zona do corpo {{ ajuda('Guia o provador virtual: parte de cima usa busto+cintura; de baixo usa cintura+quadril; corpo inteiro usa as três. Sugerido pelo tipo da peça.') }}</label>
@@ -210,7 +218,7 @@
 
   {# Dados dos insumos disponíveis para o JS calcular subtotais #}
   <script id="dados-insumos" type="application/json">
-    [{% for i in insumos %}{"id": {{ i.id }}, "nome": "{{ i.nome|e }}", "custo": {{ i.custo_unitario }}, "unidade": "{{ i.unidade|e }}", "estoque": {{ i.estoque }}}{{ "," if not loop.last }}{% endfor %}]
+    [{% for i in insumos %}{"id": {{ i.id }}, "nome": "{{ i.nome|e }}", "custo": {{ i.custo_com_frete }}, "unidade": "{{ i.unidade|e }}", "estoque": {{ i.estoque }}}{{ "," if not loop.last }}{% endfor %}]
   </script>
   {% else %}
   <p class="text-muted">Nenhum insumo cadastrado ainda. <a href="{{ url_for('main.form_insumo') }}">Cadastre insumos</a> para poder selecioná-los aqui.</p>
@@ -232,7 +240,13 @@
 
   function opcoes() {
     return '<option value="">Selecione...</option>' +
-      insumos.map(i => `<option value="${i.id}">${i.nome} — ${brl(i.custo)}/${i.unidade}</option>`).join('');
+      insumos.map(i => {
+        // Estoque no rótulo: dá para ver na hora se o insumo escolhido acabou.
+        const est = i.estoque > 0
+          ? `${i.estoque.toLocaleString('pt-BR')} ${i.unidade} em estoque`
+          : 'sem estoque';
+        return `<option value="${i.id}">${i.nome} — ${brl(i.custo)}/${i.unidade} · ${est}</option>`;
+      }).join('');
   }
 
   function novaLinha() {

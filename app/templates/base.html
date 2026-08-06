@@ -5,7 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block titulo %}CRM{% endblock %} · Sabrina Hansen Atelier</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <!-- Favicon escuro: separa a aba do ERP da aba da loja (que usa o claro). -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon-erp.ico') }}" type="image/x-icon">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icone-erp-favicon.svg') }}">
+  <!-- Ícone próprio do ERP (diferente do site) ao salvar na tela inicial do iOS. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-erp.png') }}">
+  <meta name="apple-mobile-web-app-title" content="SH ERP">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#2c2620">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest-erp.webmanifest') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fontes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.min.css') }}">
@@ -29,7 +38,7 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       {% set ep = request.endpoint %}
-      {% set g_cat = ['main.listar_pecas','main.form_peca','main.detalhe_peca','main.listar_insumos','main.form_insumo','main.detalhe_insumo','main.listar_kits','main.vitrine','main.listar_colecoes','main.form_colecao'] %}
+      {% set g_cat = ['main.listar_pecas','main.form_peca','main.detalhe_peca','main.listar_insumos','main.form_insumo','main.detalhe_insumo','main.listar_kits','main.vitrine','main.listar_colecoes','main.form_colecao','main.calculadora'] %}
       {% set g_est = ['main.inventario','main.inventario_insumos','main.listar_ordens','main.detalhe_ordem','main.nova_ordem','main.nova_ordem_from_minimos','main.historico'] %}
       {% set g_ven = ['main.listar_vendas','main.registrar_venda','main.visualizar_venda','main.editar_venda','main.listar_encomendas','main.registrar_encomenda','main.listar_cupons','main.listar_vales','main.devolucao_venda'] %}
       {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm','main.listar_leads'] %}
@@ -50,6 +59,8 @@
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_insumos' }}" href="{{ url_for('main.listar_insumos') }}">Insumos</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_kits' }}" href="{{ url_for('main.listar_kits') }}">Kits / combos</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep in ['main.listar_colecoes','main.form_colecao'] }}" href="{{ url_for('main.listar_colecoes') }}">Coleções</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item {{ 'ativo' if ep == 'main.calculadora' }}" href="{{ url_for('main.calculadora') }}">Calculadora de preço</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.vitrine' }}" href="{{ url_for('main.vitrine') }}">Vitrine</a></li>
               <li><a class="dropdown-item {{ 'ativo' if ep == 'main.listar_avaliacoes' }}" href="{{ url_for('main.listar_avaliacoes') }}">Avaliações</a></li>
@@ -273,26 +284,62 @@
     })();
 
     // ---- Confirmação bonita: forms com data-confirm abrem um modal ----
+    // Também exposta como confirmarAcao(msg, acao) para telas que confirmam algo
+    // fora de um form (botão que apaga o que está na tela, por exemplo).
     (function () {
       const el = document.getElementById('modal-confirmar');
       if (!el) return;
       const modal = bootstrap.Modal.getOrCreateInstance(el);
       const msg = document.getElementById('confirmar-msg');
       const ok = document.getElementById('confirmar-ok');
-      let alvo = null;
+      let aoConfirmar = null;
+
+      window.confirmarAcao = function (mensagem, acao) {
+        msg.textContent = mensagem || 'Tem certeza?';
+        aoConfirmar = acao;
+        modal.show();
+      };
+
       document.addEventListener('submit', function (e) {
         const f = e.target;
         if (f.matches && f.matches('form[data-confirm]') && !f.dataset._ok) {
           e.preventDefault();
-          alvo = f;
-          msg.textContent = f.getAttribute('data-confirm') || 'Tem certeza?';
-          modal.show();
+          window.confirmarAcao(f.getAttribute('data-confirm'), function () {
+            f.dataset._ok = '1';
+            f.submit();
+          });
         }
       }, true);
+
       ok.addEventListener('click', function () {
-        if (alvo) { alvo.dataset._ok = '1'; modal.hide(); alvo.submit(); alvo = null; }
+        const acao = aoConfirmar;
+        aoConfirmar = null;
+        modal.hide();
+        if (acao) acao();
       });
+      // Fechar sem confirmar não pode deixar a ação pendurada.
+      el.addEventListener('hidden.bs.modal', function () { aoConfirmar = null; });
     })();
+
+    // ---- Aviso avulso: mesmo toast das mensagens flash, disparado pelo JS ----
+    window.avisar = function (mensagem, tipo) {
+      const caixa = document.querySelector('.toast-container');
+      if (!caixa) return;
+      const erro = tipo === 'erro';
+      const el = document.createElement('div');
+      el.className = 'toast atelier-toast align-items-center' + (erro ? ' erro' : '');
+      el.setAttribute('role', 'alert');
+      el.dataset.bsDelay = '4500';
+      el.innerHTML =
+        '<div class="d-flex"><div class="toast-body">' +
+        '<i class="bi ' + (erro ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill') + ' ic"></i>' +
+        '<span></span></div>' +
+        '<button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+      el.querySelector('span').textContent = mensagem;
+      caixa.appendChild(el);
+      bootstrap.Toast.getOrCreateInstance(el, { autohide: true }).show();
+      el.addEventListener('hidden.bs.toast', function () { el.remove(); });
+    };
   </script>
 </body>
 </html>

@@ -16,6 +16,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     make_response,
     redirect,
     render_template,
@@ -33,6 +34,7 @@ from ..models import (
     MEDIDAS_FEMININAS,
     MEDIDAS_TAMANHOS,
     TAMANHOS,
+    TIPOS_INSUMO,
     Auditoria,
     Campanha,
     CampanhaPeca,
@@ -106,17 +108,24 @@ def form_insumo(insumo_id=None):
 
         insumo.nome = nome
         tipo = request.form.get("tipo", "aviamento")
-        insumo.tipo = tipo if tipo in ("tecido", "aviamento", "embalagem") else "aviamento"
-        # Composição e largura só fazem sentido para tecido.
-        if insumo.tipo == "tecido":
+        insumo.tipo = tipo if tipo in TIPOS_INSUMO else "aviamento"
+        # Composição serve a tecido e a peça pronta (vai para a etiqueta e para a
+        # vitrine); largura é só do rolo de tecido.
+        if insumo.tipo in ("tecido", "peca"):
             insumo.composicao = request.form.get("composicao", "").strip()
-            insumo.largura_cm = _to_float(request.form.get("largura"))
         else:
             insumo.composicao = ""
-            insumo.largura_cm = 0.0
+        insumo.largura_cm = _to_float(request.form.get("largura")) if insumo.tipo == "tecido" else 0.0
         insumo.unidade = request.form.get("unidade", "un").strip() or "un"
         insumo.custo_unitario = dinheiro(_to_float(request.form.get("custo_unitario")))
         insumo.estoque_minimo = _to_float(request.form.get("estoque_minimo"))
+        # Frete da compra: rateado pela quantidade que veio. Sem quantidade
+        # informada, usa o estoque inicial (no cadastro) ou o atual (na edição).
+        insumo.frete_compra = dinheiro(_to_float(request.form.get("frete_compra")))
+        frete_qtd = _to_float(request.form.get("frete_qtd"))
+        if frete_qtd <= 0 and insumo.frete_compra > 0:
+            frete_qtd = _to_float(request.form.get("estoque")) if insumo_id is None else insumo.estoque
+        insumo.frete_qtd = max(0.0, frete_qtd)
         insumo.ativo = request.form.get("ativo") == "on"
         insumo.fornecedor = request.form.get("fornecedor", "").strip()
         # Estoque inicial só é definido na criação; depois é alterado por movimentos.
@@ -199,6 +208,25 @@ def movimentos_insumo(insumo_id):
     )
 
 
+@bp.route("/insumos/<int:insumo_id>/pecas")
+def pecas_do_insumo(insumo_id):
+    """Fragmento HTML (para modal) com as peças que usam este insumo na ficha.
+
+    Mostra quanto cada peça consome e quanto isso custa nela — é o outro lado da
+    ficha técnica: dá para ver o que quebra ao mudar o custo deste insumo.
+    """
+    insumo = Insumo.query.get_or_404(insumo_id)
+    itens = (
+        PecaInsumo.query.filter_by(insumo_id=insumo_id)
+        .join(Peca).order_by(Peca.nome).all()
+    )
+    itens, pagina, total_paginas = _paginar(itens, por_pagina=15)
+    return render_template(
+        "_pecas_do_insumo.html", insumo=insumo, itens=itens,
+        pagina=pagina, total_paginas=total_paginas,
+    )
+
+
 @bp.route("/pecas")
 def listar_pecas():
     q = request.args.get("q", "").strip()
@@ -232,6 +260,43 @@ def comparar_pecas():
     ordem = {pid: i for i, pid in enumerate(ids)}
     pecas.sort(key=lambda p: ordem.get(p.id, 999))
     return render_template("pecas_comparar.html", pecas=pecas)
+
+
+@bp.route("/calculadora")
+def calculadora():
+    """Simulador de preço: só a tela. Não grava nada — o cálculo roda no
+    navegador (`static/js/calculadora.js`, espelhando as fórmulas de `models.py`)
+    e os insumos podem ser digitados sem existir no cadastro. As listas abaixo
+    são atalhos: insumo do estoque entra com custo/unidade do cadastro e a peça
+    existente entra com a ficha técnica inteira."""
+    insumos = Insumo.query.filter_by(ativo=True).order_by(Insumo.nome).all()
+    pecas = Peca.query.order_by(Peca.nome).all()
+    return render_template("calculadora.html", insumos=insumos, pecas=pecas)
+
+
+@bp.route("/calculadora/peca/<int:peca_id>.json")
+def calculadora_ficha(peca_id):
+    """Ficha de uma peça para carregar na calculadora (leitura pura).
+
+    Copia os VALORES do momento — mexer na simulação não altera a peça.
+    """
+    peca = Peca.query.get_or_404(peca_id)
+    return jsonify({
+        "nome": peca.nome,
+        "insumos": [
+            {
+                "nome": item.insumo.nome,
+                "quantidade": item.quantidade,
+                "unidade": item.insumo.unidade,
+                "custo": item.insumo.custo_com_frete,
+            }
+            for item in peca.insumos
+        ],
+        "mao_de_obra": peca.custo_mao_de_obra,
+        "extras": peca.custos_extras,
+        "margem": peca.margem_percentual,
+        "preco": peca.preco_base,
+    })
 
 
 @bp.route("/pecas/nova", methods=["GET", "POST"])
@@ -457,6 +522,36 @@ def atualizar_qtd_ficha(item_id):
     else:
         flash("Quantidade inválida.", "erro")
     return redirect(url_for("main.detalhe_peca", peca_id=item.peca_id))
+
+
+@bp.route("/pecas/<int:peca_id>/duplicar", methods=["POST"])
+def duplicar_peca(peca_id):
+    """Cria uma cópia da peça com os dados e a ficha técnica — sem as fotos.
+
+    Não vem junto: fotos (principal e extras), estoque, visualizações e o preço
+    promocional (promoção é da peça original, não da nova). A cópia nasce fora
+    da vitrine pública para não expor um rascunho na loja.
+    """
+    orig = Peca.query.get_or_404(peca_id)
+    nova = Peca(
+        nome=f"{orig.nome} (cópia)", tipo=orig.tipo, colecao=orig.colecao, tags=orig.tags,
+        descricao=orig.descricao, composicao=orig.composicao, medidas=orig.medidas,
+        zona_corpo=orig.zona_corpo, vitrine_publica=False,
+        custo_mao_de_obra=orig.custo_mao_de_obra, custos_extras=orig.custos_extras,
+        margem_percentual=orig.margem_percentual, preco_etiqueta=orig.preco_etiqueta,
+        peso_g=orig.peso_g, altura_cm=orig.altura_cm,
+        largura_cm=orig.largura_cm, comprimento_cm=orig.comprimento_cm,
+    )
+    db.session.add(nova)
+    db.session.flush()
+    nova.sku = Peca.gerar_sku(nova.id)
+    for item in orig.insumos:
+        db.session.add(PecaInsumo(peca=nova, insumo=item.insumo, quantidade=item.quantidade))
+    db.session.commit()
+    _log("peca", f"duplicou '{orig.nome}' → '{nova.nome}' (#{nova.id})")
+    flash("Peça duplicada sem as fotos. Ajuste o nome, adicione fotos e publique na vitrine.",
+          "sucesso")
+    return redirect(url_for("main.form_peca", peca_id=nova.id))
 
 
 @bp.route("/pecas/<int:peca_id>/produzir", methods=["POST"])

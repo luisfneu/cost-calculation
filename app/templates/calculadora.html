@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Calculadora de preço{% endblock %}
+{% block conteudo %}
+
+<style>
+  /* ---- Calculadora ----
+     Mobile primeiro: a tabela de insumos é larga demais para o celular, então
+     vira uma ficha empilhada (rótulo em cima do campo) e só volta a ser tabela
+     a partir de 768px. Impressão sai como relatório de 1 folha A4. */
+
+  /* A <table> guarda a largura mínima das colunas mesmo com as linhas em grid —
+     por isso ela também vira bloco aqui, senão a página ganha rolagem lateral. */
+  .calc .tabela-insumos,
+  .calc .tabela-insumos tbody { display: block; width: 100%; }
+  .calc .tabela-insumos thead { display: none; }
+  .calc .tabela-insumos tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .5rem .6rem;
+    padding: .85rem 0;
+    border-bottom: 1px solid var(--line, #e5dcc9);
+  }
+  .calc .tabela-insumos td { display: block; border: 0; padding: 0; }
+  .calc .tabela-insumos td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    display: block;
+    font-size: .68rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--ink-soft, #6b5f52);
+    margin-bottom: .2rem;
+  }
+  .calc .td-nome { grid-column: 1 / -1; }
+  .calc .td-sub  { grid-column: 1 / 3; }
+  .calc .td-acao { grid-column: 3; justify-self: end; align-self: center; }
+  .calc .tabela-insumos .td-sub { font-weight: 600; }
+  /* Alvo de toque confortável e 16px para o iOS não dar zoom ao focar. */
+  .calc .tabela-insumos .form-control,
+  .calc .tabela-insumos .form-select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .calc .tabela-insumos .rem-linha { min-width: 44px; min-height: 44px; }
+  .calc .rodape-insumos {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-weight: 600;
+    padding-top: .85rem;
+  }
+
+  @media (min-width: 768px) {
+    .calc .tabela-insumos { display: table; }
+    .calc .tabela-insumos tbody { display: table-row-group; }
+    .calc .tabela-insumos thead { display: table-header-group; }
+    .calc .tabela-insumos tr {
+      display: table-row;
+      padding: 0;
+      border-bottom: 0;
+    }
+    .calc .tabela-insumos td {
+      display: table-cell;
+      padding: .5rem;
+      border-bottom: 1px solid var(--line, #e5dcc9);
+      vertical-align: middle;
+    }
+    .calc .tabela-insumos td[data-rotulo]::before { content: none; }
+    .calc .td-sub { text-align: right; }
+    .calc .td-acao { text-align: right; }
+    .calc .tabela-insumos .form-control { min-height: 0; font-size: .875rem; }
+    .calc .tabela-insumos .rem-linha { min-width: 0; min-height: 0; }
+    /* Qtd, unidade e custo têm largura de sobra; o nome do insumo é que corta.
+       table-layout fixed faz as larguras do cabeçalho valerem e sobra vai
+       toda para a primeira coluna. */
+    .calc .tabela-insumos { table-layout: fixed; }
+    .calc .td-nome .ins-nome { flex: 1 1 auto; min-width: 0; }
+  }
+
+  @media print {
+    @page { size: A4 portrait; margin: 10mm 12mm; }
+    .atelier-nav, .navbar, footer, .btn, .alert, .no-print,
+    .bi-question-circle, .form-text { display: none !important; }
+    body { background: #fff !important; font-size: 9.5pt; }
+    main, .container { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+    .calc-cabecalho-print { display: flex !important; }
+    /* Duas colunas na folha: entradas à esquerda, resultado à direita. */
+    .calc-grid {
+      display: grid !important;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 6mm;
+      align-items: start;
+    }
+    .calc-grid > * { width: 100% !important; max-width: none !important; flex: none !important; }
+    .calc .card {
+      border: 1px solid #ddd6c6 !important;
+      box-shadow: none !important;
+      padding: 3mm !important;
+      margin-bottom: 3mm !important;
+      break-inside: avoid;
+    }
+    /* Campo preenchido vira texto: papel não precisa de caixa de input. */
+    .calc input.form-control, .calc select.form-select {
+      border: 0 !important;
+      padding: 0 !important;
+      background: transparent !important;
+      font-weight: 600;
+      min-height: 0 !important;
+      height: auto !important;
+      font-size: 9.5pt !important;
+      color: #000 !important;
+    }
+    .calc .form-label { margin-bottom: 0; font-size: 8pt; color: #555 !important; }
+    .calc .table td, .calc .table th { padding: .15rem .3rem !important; }
+    .calc .section-titulo { margin-top: 0; }
+    .calc .tabela-insumos thead { display: table-header-group; }
+    .calc .tabela-insumos tr { display: table-row; padding: 0; border: 0; }
+    .calc .tabela-insumos td {
+      display: table-cell;
+      border-bottom: 1px solid #eee;
+      padding: .15rem .3rem !important;
+    }
+    .calc .tabela-insumos td[data-rotulo]::before { content: none; }
+    /* As larguras fixas do cabeçalho espremem o nome do insumo na folha. */
+    .calc .tabela-insumos th { width: auto !important; }
+    .calc .tabela-insumos .td-nome { width: 45%; }
+    .calc .mb-3, .calc .mb-2 { margin-bottom: .35rem !important; }
+    .calc .fs-5 { font-size: 1rem !important; }
+  }
+</style>
+
+<div class="calc">
+
+  <a href="{{ url_for('main.listar_pecas') }}" class="btn btn-link px-0"><i class="bi bi-arrow-left"></i> Voltar</a>
+
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+    <h1 class="h3 mb-0">Calculadora de preço</h1>
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="imprimir">
+        <i class="bi bi-printer"></i> Imprimir / PDF
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="copiar">
+        <i class="bi bi-clipboard"></i> Copiar resumo
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="limpar">
+        <i class="bi bi-arrow-counterclockwise"></i> Limpar
+      </button>
+    </div>
+  </div>
+
+  <p class="text-muted no-print">
+    Simule o preço de uma peça sem cadastrar nada.
+    {{ ui.ajuda('Os insumos são digitados à mão e não precisam existir no estoque. Nada é salvo no sistema — o rascunho fica só neste navegador. Para virar produto de verdade, cadastre em Peças › Nova peça.') }}
+  </p>
+
+  {# Cabeçalho que só existe no papel: identifica a simulação impressa. #}
+  <div class="calc-cabecalho-print d-none justify-content-between border-bottom pb-2 mb-3">
+    <strong>Simulação de preço — <span id="print-nome">sem nome</span></strong>
+    <span id="print-data"></span>
+  </div>
+
+  <form id="calc-form" autocomplete="off">
+    <div class="row g-3 calc-grid">
+
+      {# ---------- coluna esquerda: entradas ---------- #}
+      <div class="col-lg-8">
+
+        <div class="card card-body bg-white mb-3">
+          <div class="row">
+            <div class="col-sm-6 mb-3 no-print">
+              <label class="form-label" for="peca_nome">Nome da simulação {{ ui.ajuda('Só para você se achar e para o resumo copiado. Não vira cadastro.') }}</label>
+              <input type="text" id="peca_nome" class="form-control" placeholder="Ex.: Vestido midi linho">
+            </div>
+            <div class="col-sm-6 mb-3 no-print">
+              <label class="form-label" for="peca_origem">Copiar de uma peça {{ ui.ajuda('Traz a ficha técnica inteira da peça cadastrada (insumos, mão de obra, custos e margem) para você simular mudanças. A peça original não é alterada.') }}</label>
+              <div class="input-group">
+                <select id="peca_origem" class="form-select">
+                  <option value="">— escolher peça —</option>
+                  {% for p in pecas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-primary" id="copiar-peca"
+                        data-url-base="{{ url_for('main.calculadora') }}/peca/">
+                  <i class="bi bi-box-arrow-in-down"></i> <span class="d-none d-sm-inline">Carregar</span>
+                </button>
+              </div>
+              {% if not pecas %}<small class="text-muted">Nenhuma peça cadastrada ainda.</small>{% endif %}
+            </div>
+          </div>
+
+          <div class="section-titulo">Insumos {{ ui.ajuda('Materiais usados na peça. Digite livremente — não precisa estar cadastrado. Se o nome bater com um insumo do estoque, custo e unidade vêm preenchidos.') }}</div>
+          <table class="table align-middle mb-0 tabela-insumos">
+            <thead>
+              <tr>
+                <th>Insumo</th>
+                <th class="text-end" style="width:74px">Qtd</th>
+                <th style="width:88px">Unidade</th>
+                <th class="text-end" style="width:112px">Custo unit. (R$)</th>
+                <th class="text-end" style="width:104px">Subtotal</th>
+                <th style="width:48px"></th>
+              </tr>
+            </thead>
+            <tbody id="linhas-insumos"></tbody>
+          </table>
+
+          <div class="rodape-insumos border-top">
+            <span>Custo de insumos</span>
+            <span id="r-insumos-tabela">R$ 0,00</span>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 align-items-center mt-3 no-print">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="add-linha">
+              <i class="bi bi-plus-lg"></i> Adicionar insumo
+            </button>
+            {% if insumos %}
+            <div class="input-group input-group-sm" style="max-width:min(420px, 100%)">
+              <select id="insumo-estoque" class="form-select">
+                <option value="">— insumo do estoque —</option>
+                {% for i in insumos %}
+                <option value="{{ i.nome }}">{{ i.nome }} — {{ i.custo_com_frete | moeda }}/{{ i.unidade }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-outline-secondary" id="add-estoque">
+                <i class="bi bi-box-seam"></i> Usar
+              </button>
+            </div>
+            {% endif %}
+          </div>
+          <datalist id="lista-insumos">
+            {% for i in insumos %}<option value="{{ i.nome }}">{% endfor %}
+          </datalist>
+          <script id="dados-insumos" type="application/json">
+            [{% for i in insumos %}{"nome": {{ i.nome | tojson }}, "custo": {{ i.custo_com_frete }}, "unidade": {{ i.unidade | tojson }}}{{ "," if not loop.last }}{% endfor %}]
+          </script>
+          <p class="text-muted small mt-2 mb-0 no-print">
+            <i class="bi bi-box-seam"></i> marca o insumo vindo do estoque — o custo é o do cadastro.
+            Editar o valor desfaz o vínculo.
+          </p>
+        </div>
+
+        <div class="card card-body bg-white mb-3">
+          <div class="section-titulo">Mão de obra e outros custos</div>
+          <div class="row">
+            <div class="col-6 col-md-4 mb-3">
+              <label class="form-label" for="mo_hora">Valor da hora (R$) {{ ui.ajuda('Quanto vale a sua hora de trabalho. Multiplicado pelas horas gastas na peça.') }}</label>
+              <input type="text" inputmode="decimal" id="mo_hora" class="form-control" placeholder="0,00">
+            </div>
+            <div class="col-6 col-md-4 mb-3">
+              <label class="form-label" for="mo_horas">Horas na peça</label>
+              <input type="text" inputmode="decimal" id="mo_horas" class="form-control" placeholder="Ex.: 2,5">
+            </div>
+            <div class="col-12 col-md-4 mb-3">
+              <label class="form-label" for="mo_fixo">Mão de obra fixa (R$) {{ ui.ajuda('Valor fechado que você paga por peça (costureira terceirizada, por exemplo). Soma ao cálculo por hora.') }}</label>
+              <input type="text" inputmode="decimal" id="mo_fixo" class="form-control" placeholder="0,00">
+            </div>
+          </div>
+          <div class="mb-1">
+            <label class="form-label" for="extras">Custos extras (R$) {{ ui.ajuda('Embalagem, etiqueta, energia, frete do material — tudo que entra no custo da peça e não é insumo nem mão de obra.') }}</label>
+            <input type="text" inputmode="decimal" id="extras" class="form-control" placeholder="0,00">
+          </div>
+        </div>
+
+        <div class="card card-body bg-white mb-3">
+          <div class="section-titulo">Teste de preço {{ ui.ajuda('Digite o preço que pensa em cobrar e veja o que sobra depois de desconto, taxa da maquininha e frete bancado por você.') }}</div>
+          <div class="row">
+            <div class="col-6 col-md-3 mb-3">
+              <label class="form-label" for="praticado">Preço praticado (R$)</label>
+              <input type="text" inputmode="decimal" id="praticado" class="form-control" placeholder="0,00">
+            </div>
+            <div class="col-6 col-md-3 mb-3">
+              <label class="form-label" for="desconto">Desconto (%) {{ ui.ajuda('Cupom ou desconto de campanha aplicado sobre o preço.') }}</label>
+              <input type="text" inputmode="decimal" id="desconto" class="form-control" placeholder="0">
+            </div>
+            <div class="col-6 col-md-3 mb-3">
+              <label class="form-label" for="taxa">Taxa de recebimento (%) {{ ui.ajuda('Taxa do gateway/maquininha sobre o valor já com desconto. Pix costuma ser ~1%; cartão parcelado passa de 4%.') }}</label>
+              <input type="text" inputmode="decimal" id="taxa" class="form-control" placeholder="0">
+            </div>
+            <div class="col-6 col-md-3 mb-3">
+              <label class="form-label" for="frete">Frete bancado (R$) {{ ui.ajuda('Frete que você paga do próprio bolso (frete grátis). Sai direto do lucro.') }}</label>
+              <input type="text" inputmode="decimal" id="frete" class="form-control" placeholder="0,00">
+            </div>
+          </div>
+
+          <table class="table table-sm align-middle mb-0">
+            <tbody>
+              <tr><td>Lucro bruto (preço − custo)</td><td class="text-end" id="t-bruto">R$ 0,00</td></tr>
+              <tr><td>Margem bruta</td><td class="text-end" id="t-margem-bruta">0%</td></tr>
+              <tr><td>Markup</td><td class="text-end" id="t-markup">0×</td></tr>
+              <tr class="table-light"><td>Você recebe (após desconto, taxa e frete)</td><td class="text-end" id="t-recebido">R$ 0,00</td></tr>
+              <tr class="fw-bold"><td>Lucro real</td><td class="text-end" id="t-lucro">R$ 0,00</td></tr>
+              <tr class="fw-bold"><td>Margem real</td><td class="text-end" id="t-margem">0%</td></tr>
+            </tbody>
+          </table>
+          <div class="alert alert-warning mt-3 mb-0 d-none" id="t-aviso">
+            <i class="bi bi-exclamation-triangle"></i> Nesse preço você não cobre o custo — o lucro real ficou zero ou negativo.
+          </div>
+        </div>
+
+      </div>
+
+      {# ---------- coluna direita: resultado ---------- #}
+      <div class="col-lg-4">
+        <div class="card card-body bg-white mb-3">
+          <div class="section-titulo">Custo da peça</div>
+          <dl class="row mb-0">
+            <dt class="col-7 fw-normal">Insumos</dt><dd class="col-5 text-end" id="r-insumos">R$ 0,00</dd>
+            <dt class="col-7 fw-normal">Mão de obra</dt><dd class="col-5 text-end" id="r-mo">R$ 0,00</dd>
+            <dt class="col-7 fw-normal">Custos extras</dt><dd class="col-5 text-end" id="r-extras">R$ 0,00</dd>
+            <dt class="col-7 border-top pt-2">Custo total</dt>
+            <dd class="col-5 text-end border-top pt-2 fw-bold fs-5" id="r-custo">R$ 0,00</dd>
+          </dl>
+        </div>
+
+        <div class="card card-body bg-white mb-3">
+          <div class="section-titulo">Preço sugerido {{ ui.ajuda('Mesma conta do cadastro de peça: preço = custo ÷ (1 − margem). Margem é sobre o preço de venda, não sobre o custo.') }}</div>
+          <div class="mb-3">
+            <label class="form-label" for="margem">Margem desejada (%)</label>
+            <input type="text" inputmode="decimal" id="margem" class="form-control" placeholder="Ex.: 50">
+          </div>
+          <dl class="row mb-0">
+            <dt class="col-7 fw-normal">Preço calculado</dt>
+            <dd class="col-5 text-end fw-bold fs-5" id="r-sugerido">R$ 0,00</dd>
+            <dt class="col-7 fw-normal">Arredondado (R$5) {{ ui.ajuda('Teto no próximo múltiplo de R$5 — a mesma regra que a vitrine usa no preço sob encomenda.') }}</dt>
+            <dd class="col-5 text-end" id="r-redondo">—</dd>
+            <dt class="col-7 fw-normal">Lucro</dt><dd class="col-5 text-end" id="r-lucro-sug">R$ 0,00</dd>
+            <dt class="col-7 fw-normal">Markup</dt><dd class="col-5 text-end" id="r-markup">—</dd>
+          </dl>
+          <button type="button" class="btn btn-outline-primary btn-sm mt-3" id="usar-sugerido">
+            <i class="bi bi-arrow-down"></i> Testar este preço
+          </button>
+        </div>
+
+        <div class="card card-body bg-white">
+          <div class="section-titulo">Cenários</div>
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr><th>Margem</th><th class="text-end">Preço</th><th class="text-end">Redondo</th><th class="text-end">Lucro</th></tr>
+            </thead>
+            <tbody id="cenarios"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </form>
+</div>
+
+<script src="{{ url_for('static', filename='js/calculadora.js') }}"></script>
+{% endblock %}

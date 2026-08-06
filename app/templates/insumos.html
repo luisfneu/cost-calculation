@@ -18,6 +18,7 @@
           <option value="tecido" {{ 'selected' if tipo == 'tecido' }}>Tecido</option>
           <option value="aviamento" {{ 'selected' if tipo == 'aviamento' }}>Aviamento</option>
           <option value="embalagem" {{ 'selected' if tipo == 'embalagem' }}>Embalagem</option>
+          <option value="peca" {{ 'selected' if tipo == 'peca' }}>Peça pronta</option>
         </select>
         <select name="situacao" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
           <option value="">Todas as situações</option>
@@ -60,7 +61,7 @@
            data-nome="{{ insumo.nome }}"
            data-tipo="{{ insumo.tipo_label }}"
            data-unidade="{{ insumo.unidade }}"
-           data-custo="{{ insumo.custo_unitario | moeda }}"
+           data-custo="{{ insumo.custo_com_frete | moeda }}"
            data-estoque="{{ insumo.estoque | num }}"
            data-minimo="{{ insumo.estoque_minimo | num }}"
            data-ativo="{{ 'Sim' if insumo.ativo else 'Não' }}"
@@ -70,11 +71,17 @@
            data-zerado="{{ '1' if insumo.estoque <= 0 else '' }}"
            data-foto="{{ url_for('static', filename='uploads/' ~ insumo.foto) if insumo.foto else '' }}"
            data-editar="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}">{{ insumo.nome }}</a>
-        <span class="badge {{ {'tecido':'badge-tecido','aviamento':'badge-aviamento','embalagem':'badge-embalagem'}.get(insumo.tipo, 'badge-materia') }}">{{ insumo.tipo_label }}</span>
+        <span class="badge {{ {'tecido':'badge-tecido','aviamento':'badge-aviamento','embalagem':'badge-embalagem','peca':'badge-peca'}.get(insumo.tipo, 'badge-materia') }}">{{ insumo.tipo_label }}</span>
         {% if not insumo.ativo %}<span class="badge text-bg-secondary">inativo</span>{% endif %}
         <div class="small text-muted">por {{ insumo.unidade }}{% if insumo.fornecedor %} · {{ insumo.fornecedor }}{% endif %}</div>
       </td>
-      <td>{{ insumo.custo_unitario | moeda }}</td>
+      <td>
+        {{ insumo.custo_com_frete | moeda }}
+        {% if insumo.frete_unitario %}
+        <i class="bi bi-truck text-muted small" data-bs-toggle="tooltip"
+           title="{{ insumo.custo_unitario | moeda }} + {{ insumo.frete_unitario | moeda }} de frete rateado"></i>
+        {% endif %}
+      </td>
       <td>
         {{ insumo.estoque | num }} {{ insumo.unidade }}
         {% if zerado %}<span class="badge text-bg-secondary">zerado</span>
@@ -93,6 +100,11 @@
                 data-bs-toggle="modal" data-bs-target="#modal-hist"
                 data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}" title="Ver movimentação">
           <i class="bi bi-clock-history"></i>
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary btn-pecas"
+                data-bs-toggle="modal" data-bs-target="#modal-pecas"
+                data-id="{{ insumo.id }}" data-nome="{{ insumo.nome }}" title="Peças que usam este insumo">
+          <i class="bi bi-bag"></i>
         </button>
         <a href="{{ url_for('main.form_insumo', insumo_id=insumo.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
         <form method="post" action="{{ url_for('main.excluir_insumo', insumo_id=insumo.id) }}" class="d-inline"
@@ -297,28 +309,54 @@
   </div>
 </div>
 
+<!-- Peças que usam o insumo (mesmo formato do histórico: fragmento via fetch) -->
+<div class="modal fade" id="modal-pecas" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Peças que usam · <span id="pecas-nome"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="pecas-body">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   (function () {
-    const modal = document.getElementById('modal-hist');
-    if (!modal) return;
-    const body = document.getElementById('hist-body');
-    const nome = document.getElementById('hist-nome');
+    // Um só carregador para os dois modais (histórico e peças): ambos trazem um
+    // fragmento HTML e paginam pelos links .hist-page de dentro dele.
+    function ligarModal(idModal, idBody, idNome, urlBase, sufixo) {
+      const modal = document.getElementById(idModal);
+      if (!modal) return;
+      const body = document.getElementById(idBody);
+      const nome = document.getElementById(idNome);
 
-    function carregar(url) {
-      body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>';
-      fetch(url).then(r => r.text()).then(html => { body.innerHTML = html; });
+      function carregar(url) {
+        body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>';
+        fetch(url)
+          .then(r => r.text())
+          .then(html => { body.innerHTML = html; })
+          .catch(() => { body.innerHTML = '<p class="text-danger mb-0">Não foi possível carregar.</p>'; });
+      }
+
+      modal.addEventListener('show.bs.modal', function (ev) {
+        const b = ev.relatedTarget;
+        nome.textContent = b.dataset.nome;
+        carregar(urlBase.replace(`/0/${sufixo}`, `/${b.dataset.id}/${sufixo}`));
+      });
+      body.addEventListener('click', function (e) {
+        const a = e.target.closest('a.hist-page');
+        if (a) { e.preventDefault(); carregar(a.getAttribute('href')); }
+      });
     }
-    modal.addEventListener('show.bs.modal', function (ev) {
-      const b = ev.relatedTarget;
-      nome.textContent = b.dataset.nome;
-      carregar("{{ url_for('main.movimentos_insumo', insumo_id=0) }}"
-        .replace(/\/0\/movimentos$/, `/${b.dataset.id}/movimentos`));
-    });
-    // Paginação dentro do modal (intercepta os links do fragmento).
-    body.addEventListener('click', function (e) {
-      const a = e.target.closest('a.hist-page');
-      if (a) { e.preventDefault(); carregar(a.getAttribute('href')); }
-    });
+
+    ligarModal('modal-hist', 'hist-body', 'hist-nome',
+      "{{ url_for('main.movimentos_insumo', insumo_id=0) }}", 'movimentos');
+    ligarModal('modal-pecas', 'pecas-body', 'pecas-nome',
+      "{{ url_for('main.pecas_do_insumo', insumo_id=0) }}", 'pecas');
   })();
 </script>
 {% endblock %}

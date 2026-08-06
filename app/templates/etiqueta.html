@@ -72,8 +72,20 @@
         img.src = MONO;
       });
     }
+    // O PNG fica pronto assim que a etiqueta é desenhada: no iOS, gerar a imagem
+    // só depois do clique faz a folha de compartilhamento ser recusada (o gesto
+    // do usuário "expira" durante o await).
+    let arquivoPng = null;
+
+    function nomeArquivo() {
+      const tam = selTam.value;
+      return `etiqueta-${DADOS.sku || 'peca'}${tam ? '-' + tam : ''}.png`;
+    }
+
     function redesenhar() {
       desenharEtiqueta(canvas, { ...DADOS, tam: selTam.value }, monoImg, qrBox);
+      arquivoPng = null;
+      pngDoCanvas(canvas, nomeArquivo()).then((f) => { arquivoPng = f; });
     }
     async function boot() {
       await carregarMono();
@@ -81,11 +93,9 @@
       redesenhar();
       selTam.addEventListener('change', redesenhar);
       document.getElementById('btn-png').addEventListener('click', () => {
-        const tam = selTam.value;
-        const a = document.createElement('a');
-        a.download = `etiqueta-${DADOS.sku || 'peca'}${tam ? '-' + tam : ''}.png`;
-        a.href = canvas.toDataURL('image/png');
-        a.click();
+        if (arquivoPng) { salvarPng(arquivoPng); return; }
+        // Ainda gerando (clique logo ao abrir): espera e salva assim que sair.
+        pngDoCanvas(canvas, nomeArquivo()).then((f) => { arquivoPng = f; salvarPng(f); });
       });
     }
     boot();
