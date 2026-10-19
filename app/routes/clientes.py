@@ -603,51 +603,8 @@ def confirmar_lead(lead_id):
         flash("Este lead já foi confirmado.", "erro")
         return redirect(url_for("main.listar_leads"))
 
-    # Evita duplicar: casa por WhatsApp e, se não achar, pelo e-mail do checkout.
-    cliente = None
-    if lead.whatsapp_numero:
-        cliente = next(
-            (c for c in Cliente.query.all() if c.whatsapp_numero == lead.whatsapp_numero),
-            None,
-        )
-    if cliente is None and lead.email:
-        cliente = Cliente.por_email(lead.email)
-    if cliente is None:
-        # E-mail do lead só entra se não pertencer a outro cadastro (UNIQUE).
-        email_livre = lead.email and Cliente.por_email(lead.email) is None
-        cliente = Cliente(
-            nome=lead.nome, instagram=lead.instagram, telefone=lead.telefone,
-            email=(lead.email if email_livre else None),
-            cep=lead.cep, logradouro=lead.logradouro, numero=lead.numero,
-            complemento=lead.complemento, bairro=lead.bairro,
-            cidade=lead.cidade, uf=lead.uf,
-        )
-        db.session.add(cliente)
-        db.session.flush()
-    else:
-        # Cliente já existe (mesmo WhatsApp/e-mail): completa só os campos vazios
-        # com o que o lead trouxe — nunca sobrescreve dados que o ateliê já tinha.
-        for campo in ("instagram", "telefone", "cep", "logradouro", "numero",
-                      "complemento", "bairro", "cidade", "uf"):
-            if not (getattr(cliente, campo) or "").strip():
-                valor = (getattr(lead, campo) or "").strip()
-                if valor:
-                    setattr(cliente, campo, valor)
-        # E-mail: preenche se o cliente não tem e o do lead está livre.
-        if not cliente.email and lead.email and Cliente.por_email(lead.email) is None:
-            cliente.email = lead.email
-
-    # Vincula o cliente ao(s) pré-pedido(s) que este lead gerou (não efetiva a venda;
-    # o pedido é confirmado depois na própria tela do pedido).
+    cliente = _confirmar_lead(lead)
     vendas_lead = Venda.query.filter_by(lead_id=lead.id).all()
-    for v in vendas_lead:
-        if not v.cliente_id:
-            v.cliente_id = cliente.id
-            v.comprador = cliente.nome
-
-    lead.status = "confirmado"
-    lead.cliente_id = cliente.id
-    lead.confirmado_em = datetime.now()
     db.session.commit()
     _log("lead_confirmado", f"lead #{lead.id} → cliente #{cliente.id} ({cliente.nome})")
     flash(f"Cliente {cliente.nome} confirmado.", "sucesso")

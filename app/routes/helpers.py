@@ -1,6 +1,8 @@
 """Funções auxiliares compartilhadas entre as rotas."""
 import calendar
 import csv
+import hashlib
+import hmac
 import io
 import math
 import os
@@ -53,7 +55,7 @@ from ..models import (
     dinheiro,
 )
 
-__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_int', '_to_date', '_insumos_filtrados', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_item_baixa_estoque', '_liberar_reservas_pre_pedido', '_notificar_pedido_novo', '_avisar_favoritos_voltou', '_avisar_favoritos_promocao', '_notificar_etapa_cliente', '_link_publico', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes', '_limpar_cache_vitrine']
+__all__ = ['_usuario_atual', '_is_admin', '_log', '_to_float', '_to_int', '_to_date', '_insumos_filtrados', '_extensao_permitida', '_salvar_foto', '_otimizar_imagem', '_remover_foto', '_copiar_foto', '_linha_estoque_peca', '_paginar', '_item_baixa_estoque', '_liberar_reservas_pre_pedido', '_notificar_pedido_novo', '_avisar_favoritos_voltou', '_avisar_favoritos_promocao', '_notificar_etapa_cliente', '_link_publico', '_validar_estoque_pecas', '_baixar_estoque_venda', '_restaurar_estoque_venda', '_registrar_movimento', '_itens_ordem_do_form', '_pecas_para_venda', '_dados_pedido_do_form', '_itens_do_form', '_pagamentos_do_form', '_aplicar_pagamentos', '_agrupar', '_itens_crus_do_form', '_render_historico', '_pecas_com_estoque', '_render_form_pedido', '_pfnum', '_prefill_de_venda', '_processar_pedido', '_brl', '_rotulo_cupom', '_pix_ascii', '_emv', '_pix_crc16', '_pix_payload', '_pix_da_venda', '_texto_recibo', '_exigir_admin', '_add_meses', '_gerar_parcelas', '_mes_de', '_mes_label', '_csv_response', '_gerar_codigo_vale', '_salvar_itens_kit', '_frete_opcoes', '_limpar_cache_vitrine', '_confirmar_lead', '_confirmar_pedido', '_mp_configurado', '_mp_request', '_mp_consultar_pagamento', '_mp_verificar_assinatura']
 
 
 def _limpar_cache_vitrine():
@@ -152,9 +154,9 @@ def _extensao_permitida(nome):
     return "." in nome and nome.rsplit(".", 1)[1].lower() in current_app.config["ALLOWED_EXTENSIONS"]
 
 
-def _salvar_foto(arquivo, lado_max=1200):
+def _salvar_foto(arquivo, lado_max=1600):
     """Salva o upload com nome único e retorna o nome do arquivo (ou None).
-    `lado_max` limita o maior lado (banners largos usam 2000)."""
+    `lado_max` limita o maior lado (fotos de peça usam 2000; banners, 2000)."""
     if not arquivo or arquivo.filename == "":
         return None
     if not _extensao_permitida(arquivo.filename):
@@ -170,7 +172,9 @@ def _salvar_foto(arquivo, lado_max=1200):
         os.remove(caminho)
         flash("O arquivo enviado não é uma imagem válida.", "erro")
         return None
-    _otimizar_imagem(caminho, lado_max)
+    # A otimização pode trocar a extensão (PNG de foto vira JPEG).
+    caminho = _otimizar_imagem(caminho, lado_max)
+    nome = os.path.basename(caminho)
     _gerar_thumbnail(nome)      # miniatura leve para a grade da vitrine
     return nome
 
@@ -190,20 +194,55 @@ def _imagem_valida(caminho):
         return False
 
 
-def _otimizar_imagem(caminho, lado_max=1200):
-    """Redimensiona a imagem para no máx. `lado_max` px (se Pillow disponível)."""
+def _otimizar_imagem(caminho, lado_max=1600):
+    """Redimensiona e comprime a imagem. Devolve o caminho final (pode mudar de
+    extensão, quando um PNG sem transparência vira JPEG).
+
+    Três cuidados que o `save()` cru não tem:
+    - **EXIF do iPhone**: a foto vem com a orientação só na tag; sem aplicar,
+      sai deitada (o `thumbnail` descarta o EXIF).
+    - **Qualidade**: sem `quality`, o Pillow grava JPEG em 75 — agressivo demais
+      para tecido. 85 com `optimize` dobra o arquivo e mantém o detalhe.
+    - **PNG de foto**: sem perdas, pesa ~4x o equivalente em JPEG. Vira JPEG,
+      a não ser que tenha transparência de verdade.
+    """
     try:
-        from PIL import Image
+        from PIL import Image, ImageFile, ImageOps
     except ImportError:
-        return
+        return caminho
     try:
         with Image.open(caminho) as img:
-            if max(img.size) <= lado_max:
-                return
-            img.thumbnail((lado_max, lado_max))
-            img.save(caminho)
+            img = ImageOps.exif_transpose(img)        # respeita a orientação
+            if max(img.size) > lado_max:
+                img.thumbnail((lado_max, lado_max), Image.LANCZOS)
+
+            tem_alfa = img.mode in ("RGBA", "LA") or (
+                img.mode == "P" and "transparency" in img.info
+            )
+            if tem_alfa:
+                img.save(caminho, optimize=True)      # mantém o formato original
+                return caminho
+
+            # quality 92 + subsampling 4:4:4: em tecido estampado e estampa com
+            # vermelho, o 4:2:0 (padrão) borra a cor e a imagem parece "suja".
+            # Manter o croma cheio custa ~40% de arquivo e tira o artefato.
+            destino = f"{caminho.rsplit('.', 1)[0]}.jpg"
+            rgb = img.convert("RGB")
+            opcoes = dict(quality=92, optimize=True, subsampling=0)
+            # `optimize` e `progressive` montam a imagem inteira em memória: com
+            # o buffer padrão, foto muito detalhada falha com "broken data
+            # stream". 4 bytes por pixel cobre o pior caso; se ainda falhar,
+            # grava sem os dois (arquivo maior, mas o upload não se perde).
+            ImageFile.MAXBLOCK = max(ImageFile.MAXBLOCK, rgb.size[0] * rgb.size[1] * 4)
+            try:
+                rgb.save(destino, "JPEG", progressive=True, **opcoes)
+            except OSError:
+                rgb.save(destino, "JPEG", quality=92, subsampling=0)
+        if destino != caminho:
+            os.remove(caminho)
+        return destino
     except Exception:  # noqa: BLE001 — otimização é best-effort
-        pass
+        return caminho
 
 
 def _nome_thumb(nome):
@@ -228,8 +267,13 @@ def _gerar_thumbnail(nome, lado=500):
     try:
         with Image.open(origem) as img:
             img = img.convert("RGB")
-            img.thumbnail((lado, lado))
-            img.save(destino, "JPEG", quality=82, optimize=True)
+            img.thumbnail((lado, lado), Image.LANCZOS)
+            # A grade da vitrine é o que o cliente mais olha: vale o croma cheio
+            # (subsampling=0) para a estampa não esborrachar. ~45 KB em vez de 29.
+            try:
+                img.save(destino, "JPEG", quality=88, optimize=True, subsampling=0)
+            except OSError:   # mesmo limite de buffer do `optimize` (ver acima)
+                img.save(destino, "JPEG", quality=88, subsampling=0)
         return _nome_thumb(nome)
     except Exception:  # noqa: BLE001 — miniatura é best-effort
         return None
@@ -1023,3 +1067,167 @@ def _frete_opcoes(cep_destino, peso_g=0.0, altura_cm=0.0, largura_cm=0.0,
             if o is not rapida:
                 selecionadas.append(o)
     return selecionadas, None
+
+
+def _confirmar_lead(lead):
+    """Confirma um lead: cria ou casa o Cliente e vincula os pré-pedidos dele.
+    Não comita — quem chama decide (rota comita sozinha; o webhook do cartão
+    comita junto do pagamento). Reutilizado por clientes.confirmar_lead e pelo
+    webhook de pagamento online (cliente paga e o lead confirma sozinho)."""
+    if lead.status == "confirmado" and lead.cliente_id:
+        return Cliente.query.get(lead.cliente_id)
+
+    # Evita duplicar: casa por WhatsApp e, se não achar, pelo e-mail do checkout.
+    cliente = None
+    if lead.whatsapp_numero:
+        cliente = next(
+            (c for c in Cliente.query.all() if c.whatsapp_numero == lead.whatsapp_numero),
+            None,
+        )
+    if cliente is None and lead.email:
+        cliente = Cliente.por_email(lead.email)
+    if cliente is None:
+        # E-mail do lead só entra se não pertencer a outro cadastro (UNIQUE).
+        email_livre = lead.email and Cliente.por_email(lead.email) is None
+        cliente = Cliente(
+            nome=lead.nome, instagram=lead.instagram, telefone=lead.telefone,
+            email=(lead.email if email_livre else None),
+            cep=lead.cep, logradouro=lead.logradouro, numero=lead.numero,
+            complemento=lead.complemento, bairro=lead.bairro,
+            cidade=lead.cidade, uf=lead.uf,
+        )
+        db.session.add(cliente)
+        db.session.flush()
+    else:
+        # Cliente já existe (mesmo WhatsApp/e-mail): completa só os campos vazios
+        # com o que o lead trouxe — nunca sobrescreve dados que o ateliê já tinha.
+        for campo in ("instagram", "telefone", "cep", "logradouro", "numero",
+                      "complemento", "bairro", "cidade", "uf"):
+            if not (getattr(cliente, campo) or "").strip():
+                valor = (getattr(lead, campo) or "").strip()
+                if valor:
+                    setattr(cliente, campo, valor)
+        # E-mail: preenche se o cliente não tem e o do lead está livre.
+        if not cliente.email and lead.email and Cliente.por_email(lead.email) is None:
+            cliente.email = lead.email
+
+    # Vincula o cliente ao(s) pré-pedido(s) que este lead gerou (não efetiva a venda).
+    for v in Venda.query.filter_by(lead_id=lead.id).all():
+        if not v.cliente_id:
+            v.cliente_id = cliente.id
+            v.comprador = cliente.nome
+
+    lead.status = "confirmado"
+    lead.cliente_id = cliente.id
+    lead.confirmado_em = datetime.now()
+    return cliente
+
+
+def _confirmar_pedido(venda):
+    """Confirma um pré-pedido da vitrine: efetiva a venda (baixa o estoque dos
+    itens disponíveis; os sem estoque viram 'produzir' e seguem via Encomendas).
+    Não comita — quem chama decide. Reutilizado por vendas.confirmar_pedido e
+    pelo webhook de pagamento online. Retorna quantos itens migraram p/ produção."""
+    # Libera as reservas do pré-pedido primeiro — senão a própria reserva
+    # derrubaria o "disponível" na revalidação abaixo.
+    _liberar_reservas_pre_pedido(venda)
+    # Revalida a disponibilidade AGORA (pode ter vendido no balcão desde o
+    # pré-pedido). Item sem estoque suficiente vira 'produzir' em vez de deixar
+    # o estoque negativo em silêncio.
+    disponiveis = {}
+    movidos = 0
+    for it in venda.itens:
+        if it.produzir:
+            continue   # item de encomenda: baixa/produz depois (tela de Encomendas)
+        chave = (it.peca_id, it.tamanho)
+        if chave not in disponiveis:
+            disponiveis[chave] = it.peca.disponivel_por_tamanho.get(it.tamanho, 0.0)
+        if it.quantidade > disponiveis[chave]:
+            it.produzir = True
+            movidos += 1
+            continue
+        disponiveis[chave] -= it.quantidade
+        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
+        linha.quantidade -= it.quantidade
+        db.session.add(MovimentoPeca(
+            peca=it.peca, tamanho=it.tamanho, tipo="saida", quantidade=it.quantidade,
+            observacao=f"Venda #{venda.id} (vitrine)",
+        ))
+    venda.estoque_baixado = True
+    venda.status = "realizado"
+    venda.sincronizar_etapa()
+    # Consome o uso do cupom só agora (pedido efetivado) — pré-pedido descartado
+    # não queima o limite de usos do cupom.
+    if venda.cupom_codigo:
+        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == venda.cupom_codigo.upper()).first()
+        if cupom:
+            cupom.usos += 1
+    return movidos
+
+
+def _mp_configurado():
+    """Mercado Pago (pagamento com cartão na vitrine) tem access token no .env?"""
+    return bool(os.environ.get("MP_ACCESS_TOKEN", "").strip())
+
+
+def _mp_request(metodo, caminho, payload=None):
+    """Chama a API REST do Mercado Pago. Levanta em caso de erro — quem chama
+    decide o fallback (mesmo estilo de _frete_opcoes, sem SDK)."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    token = os.environ.get("MP_ACCESS_TOKEN", "").strip()
+    req = urllib.request.Request(
+        f"https://api.mercadopago.com{caminho}",
+        data=_json.dumps(payload).encode() if payload is not None else None,
+        method=metodo,
+        headers={
+            "Content-Type": "application/json", "Accept": "application/json",
+            "Authorization": f"Bearer {token}", "User-Agent": "cost-calculation",
+        },
+    )
+    # ProxyHandler({}) explícito: NÃO consulta o proxy do sistema (evita o
+    # crash de fork-safety do Obj-C no macOS dentro do worker do Gunicorn).
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(req, timeout=10) as resp:
+            return _json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        corpo = e.read().decode(errors="replace")
+        raise RuntimeError(f"Mercado Pago {e.code}: {corpo}") from e
+
+
+def _mp_consultar_pagamento(payment_id):
+    """Busca o pagamento direto na API do Mercado Pago — nunca confia no corpo
+    do webhook. Retorna o dict ou None em caso de erro."""
+    try:
+        return _mp_request("GET", f"/v1/payments/{payment_id}")
+    except Exception as e:  # noqa: BLE001
+        current_app.logger.warning(
+            "Falha ao consultar pagamento %s no Mercado Pago: %s", payment_id, e)
+        return None
+
+
+def _mp_verificar_assinatura(req):
+    """Valida a assinatura HMAC do webhook do Mercado Pago (header x-signature,
+    segredo MP_WEBHOOK_SECRET). Sem segredo configurado, aceita sem validar
+    (dev/sandbox) — mas avisa no log; em produção, configure o segredo."""
+    segredo = os.environ.get("MP_WEBHOOK_SECRET", "").strip()
+    if not segredo:
+        current_app.logger.warning(
+            "MP_WEBHOOK_SECRET não configurado — webhook do Mercado Pago aceito sem validar assinatura.")
+        return True
+    partes = {}
+    for p in req.headers.get("x-signature", "").split(","):
+        if "=" in p:
+            k, v = p.split("=", 1)
+            partes[k.strip()] = v.strip()
+    ts, v1 = partes.get("ts", ""), partes.get("v1", "")
+    if not ts or not v1:
+        return False
+    data_id = req.args.get("data.id", "")
+    request_id = req.headers.get("x-request-id", "")
+    manifesto = f"id:{data_id};request-id:{request_id};ts:{ts};"
+    esperado = hmac.new(segredo.encode(), manifesto.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(esperado, v1)

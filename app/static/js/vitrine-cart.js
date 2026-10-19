@@ -375,16 +375,17 @@
     };
   }
 
-  document.getElementById('cart-enviar-pedido').addEventListener('click', () => {
+  function enviarPedido(pagamento) {
     const cli = dadosCliente();
     pcMsg.className = 'small mb-2';
     if (!cli.nome) { pcMsg.className = 'small mb-2 text-danger'; pcMsg.textContent = 'Informe seu nome.'; return; }
     if (cli.telefone.replace(/\D/g, '').length < 10) { pcMsg.className = 'small mb-2 text-danger'; pcMsg.textContent = 'Informe um WhatsApp válido com DDD.'; return; }
-    const btn = document.getElementById('cart-enviar-pedido');
-    btn.disabled = true; pcMsg.textContent = 'Enviando…';
+    document.getElementById('cart-enviar-pedido').disabled = true;
+    document.getElementById('cart-pagar-cartao').disabled = true;
+    pcMsg.textContent = pagamento === 'cartao' ? 'Preparando pagamento…' : 'Enviando…';
     fetch(URLS.pedido, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        cliente: cli,
+        cliente: cli, pagamento,
         itens: Object.values(cart).map(it => ({ id: it.id, tam: it.tam, qtd: it.qtd })),
         frete: frete ? { nome: frete.nome, preco: frete.preco } : null,
         cupom: cupom ? { codigo: cupom.codigo } : null,
@@ -392,6 +393,16 @@
       .then(r => r.json().then(d => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok || !d.ok) { pcMsg.className = 'small mb-2 text-danger'; pcMsg.textContent = d.erro || 'Não foi possível enviar o pedido.'; return; }
+        if (pagamento === 'cartao' && d.mp_checkout_url) {
+          // Carrinho só é esvaziado na volta (pedido já existe no servidor; se o
+          // cliente cancelar o pagamento, o carrinho local ainda está intacto).
+          window.location.href = d.mp_checkout_url;
+          return;
+        }
+        if (pagamento === 'cartao') {
+          pcMsg.className = 'small mb-2 text-danger';
+          pcMsg.textContent = 'Pagamento online indisponível agora — use o Pix abaixo ou o WhatsApp.';
+        }
         ultimoEnvio = { resumo: d.resumo, whatsapp: d.whatsapp, pix: d.pix, nome: cli.nome };
         cart = {}; cupom = null; salvar(); salvarFreteCupom();
         formEl.hidden = true;
@@ -404,8 +415,36 @@
         render(); abrirWhats();
       })
       .catch(() => { pcMsg.className = 'small mb-2 text-danger'; pcMsg.textContent = 'Falha de conexão.'; })
-      .finally(() => { btn.disabled = false; });
-  });
+      .finally(() => {
+        document.getElementById('cart-enviar-pedido').disabled = false;
+        document.getElementById('cart-pagar-cartao').disabled = false;
+      });
+  }
+  document.getElementById('cart-enviar-pedido').addEventListener('click', () => enviarPedido('pix'));
+  document.getElementById('cart-pagar-cartao').addEventListener('click', () => enviarPedido('cartao'));
+
+  // Volta do checkout do Mercado Pago (?pedido=ID&pagamento=ok|pendente|erro):
+  // o status real vem do webhook (servidor a servidor) — isto é só feedback visual.
+  (function mostrarRetornoPagamento() {
+    const qs = new URLSearchParams(window.location.search);
+    const status = qs.get('pagamento');
+    if (!status) return;
+    const msgs = {
+      ok: ['alert-success', 'Pagamento aprovado! Seu pedido foi confirmado.'],
+      pendente: ['alert-warning', 'Pagamento em análise. Avisamos quando for aprovado.'],
+      erro: ['alert-danger', 'Pagamento não foi concluído. Tente de novo ou use o Pix/WhatsApp.'],
+    };
+    const [classe, texto] = msgs[status] || [];
+    if (!texto) return;
+    const div = document.createElement('div');
+    div.className = `alert ${classe} alert-dismissible fade show m-2`;
+    div.innerHTML = texto + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>';
+    const alvo = document.querySelector('.v2-loja') || document.body;
+    alvo.insertBefore(div, alvo.firstChild);
+    qs.delete('pagamento'); qs.delete('pedido');
+    const resto = qs.toString();
+    history.replaceState(null, '', window.location.pathname + (resto ? '?' + resto : ''));
+  })();
 
   function abrirWhats() {
     if (!ultimoEnvio || !ultimoEnvio.whatsapp) return;
