@@ -348,7 +348,7 @@
 
   function opcoesMenu() {
     return PECAS.map(p => `
-      <button type="button" class="picker-option" data-id="${p.id}">
+      <button type="button" class="picker-option" data-id="${p.id}" data-nome="${(p.nome + ' ' + (p.sku || '')).replace(/"/g, '&quot;')}">
         ${thumb(p)} <span>${p.nome}${p.sku ? ` <small class="text-muted">${p.sku}</small>` : ''}</span>
         <span class="small text-muted ms-auto">estoque ${Object.entries(p.estoque).filter(([t,q])=>q>0).map(([t,q])=>t+':'+q).join(' ') || '0'}</span>
       </button>`).join('');
@@ -362,7 +362,13 @@
         <div class="peca-picker">
           <input type="hidden" name="peca_id" class="picker-value">
           <button type="button" class="form-select text-start picker-toggle">Selecione a peça...</button>
-          <div class="picker-menu">${opcoesMenu()}</div>
+          <div class="picker-menu">
+            <div class="picker-busca" style="position:sticky;top:0;background:#fff;padding:6px;border-bottom:1px solid var(--line);z-index:1">
+              <input type="text" class="form-control form-control-sm picker-filtro" placeholder="Buscar por nome ou SKU..." autocomplete="off">
+            </div>
+            <div class="picker-vazio text-muted small p-2" hidden>Nenhuma peça encontrada.</div>
+            ${opcoesMenu()}
+          </div>
         </div>
       </td>
       <td><select name="tamanho" class="form-select sel-tam"><option value="">—</option></select></td>
@@ -561,9 +567,15 @@
     const r = toggle.getBoundingClientRect();
     const alturaMax = 320;
     const espacoAbaixo = window.innerHeight - r.bottom;
+    // Largura mínima maior que o botão — na tabela (mobile sobretudo) a
+    // coluna da peça é estreita e a combo ficava ilegível. Limitada à tela
+    // menos uma margem, e a posição é ajustada para não vazar pela direita.
+    const largura = Math.min(Math.max(r.width, 300), window.innerWidth - 16);
+    let left = Math.min(r.left, window.innerWidth - largura - 8);
+    left = Math.max(left, 8);
     menu.style.position = 'fixed';
-    menu.style.left = r.left + 'px';
-    menu.style.width = r.width + 'px';
+    menu.style.left = left + 'px';
+    menu.style.width = largura + 'px';
     menu.style.right = 'auto';
     menu.style.margin = '0';
     if (espacoAbaixo < alturaMax && r.top > espacoAbaixo) {
@@ -575,6 +587,18 @@
       menu.style.bottom = 'auto';
     }
     menu.classList.add('aberto');
+    const filtro = menu.querySelector('.picker-filtro');
+    if (filtro) { filtro.value = ''; filtrarPicker(menu, ''); setTimeout(() => filtro.focus(), 0); }
+  }
+  function filtrarPicker(menu, termo) {
+    const q = termo.trim().toLowerCase();
+    let visiveis = 0;
+    menu.querySelectorAll('.picker-option').forEach(opt => {
+      const ok = (opt.dataset.nome || '').toLowerCase().includes(q);
+      opt.hidden = !ok; if (ok) visiveis++;
+    });
+    const vazio = menu.querySelector('.picker-vazio');
+    if (vazio) vazio.hidden = visiveis > 0;
   }
   function fecharPicker(menu) {
     menu.classList.remove('aberto');
@@ -612,6 +636,19 @@
       return;
     }
     if (e.target.classList.contains('rem-item')) { e.target.closest('.item-row').remove(); recalcular(); }
+  });
+  corpo.addEventListener('input', function (e) {
+    if (!e.target.classList.contains('picker-filtro')) return;
+    filtrarPicker(e.target.closest('.picker-menu'), e.target.value);
+  });
+  corpo.addEventListener('keydown', function (e) {
+    // Enter na busca não pode submeter o formulário da venda.
+    if (e.target.classList.contains('picker-filtro') && e.key === 'Enter') e.preventDefault();
+  });
+  // Clique na busca não deve contar como clique "fora" (fecharia o menu) nem
+  // disparar a seleção de item (o corpo.click delegado trata picker-option).
+  corpo.addEventListener('click', function (e) {
+    if (e.target.classList.contains('picker-filtro')) e.stopPropagation();
   });
   // Fecha ao rolar (a página ou a própria tabela) — um menu 'fixed' parado
   // no lugar enquanto a página rola pareceria "descolado" do botão. Mas a

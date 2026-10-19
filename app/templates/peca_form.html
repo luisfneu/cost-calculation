@@ -202,7 +202,8 @@
   <h2 class="h5">Insumos da peça (ficha técnica)</h2>
   <p class="text-muted small">Defina a quantidade de cada insumo <strong>por peça</strong>. A baixa no estoque só acontece ao <strong>Produzir</strong>.</p>
   {% if insumos %}
-  <table class="table align-middle" id="tabela-insumos">
+  <div class="table-responsive">
+  <table class="table align-middle" id="tabela-insumos" style="min-width:480px">
     <thead class="table-light">
       <tr><th style="width:50%">Insumo</th><th>Qtd por peça</th><th>Subtotal/peça</th><th></th></tr>
     </thead>
@@ -214,6 +215,7 @@
       </tr>
     </tfoot>
   </table>
+  </div>
   <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="add-linha"><i class="bi bi-plus-lg"></i> Adicionar insumo</button>
 
   {# Dados dos insumos disponíveis para o JS calcular subtotais #}
