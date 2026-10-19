@@ -111,6 +111,7 @@
     <div class="card bg-white mt-3">
       <div class="card-body">
         <h2 class="h6 text-muted">Estoque da peça</h2>
+        <div class="table-responsive">
         <table class="table table-sm mb-3 text-center">
           <thead class="table-light"><tr>
             <th class="text-start small text-muted"></th>
@@ -146,6 +147,7 @@
           </tr>
           </tbody>
         </table>
+        </div>
         {% if peca.precisa_repor %}
         <div class="alert alert-warning py-2 small">
           Abaixo do mínimo: {% for f in peca.abaixo_minimo %}{{ f.tamanho }} ({{ f.quantidade|int }}/{{ f.minimo|int }}){{ ', ' if not loop.last }}{% endfor %}.
@@ -226,7 +228,8 @@
         {% endif %}
 
         {% if peca.insumos %}
-        <table class="table align-middle">
+        <div class="table-responsive">
+        <table class="table align-middle" style="min-width:520px">
           <thead class="table-light">
             <tr><th>Insumo</th><th>Qtd</th><th>Custo unit.</th><th>Subtotal</th><th></th></tr>
           </thead>
@@ -264,6 +267,7 @@
             <tr class="fw-bold"><td colspan="3" class="text-end">Total insumos</td><td class="text-nowrap">{{ peca.custo_insumos | moeda }}</td><td></td></tr>
           </tfoot>
         </table>
+        </div>
         {% else %}
         <p class="text-muted">Nenhum insumo na ficha ainda.</p>
         {% endif %}
