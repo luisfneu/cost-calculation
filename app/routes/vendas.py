@@ -204,42 +204,7 @@ def confirmar_pedido(venda_id):
     if venda.status != "pre-pedido":
         flash("Este pedido já foi confirmado.", "erro")
         return redirect(url_for("main.visualizar_venda", venda_id=venda.id))
-    # Libera as reservas do pré-pedido primeiro — senão a própria reserva
-    # derrubaria o "disponível" na revalidação abaixo.
-    _liberar_reservas_pre_pedido(venda)
-    # Revalida a disponibilidade AGORA (pode ter vendido no balcão desde o
-    # pré-pedido). Item sem estoque suficiente vira 'produzir' em vez de deixar
-    # o estoque negativo em silêncio.
-    disponiveis = {}
-    movidos = 0
-    for it in venda.itens:
-        if it.produzir:
-            continue   # item de encomenda: baixa/produz depois (tela de Encomendas)
-        chave = (it.peca_id, it.tamanho)
-        if chave not in disponiveis:
-            disponiveis[chave] = it.peca.disponivel_por_tamanho.get(it.tamanho, 0.0)
-        if it.quantidade > disponiveis[chave]:
-            it.produzir = True
-            movidos += 1
-            continue
-        disponiveis[chave] -= it.quantidade
-        linha = _linha_estoque_peca(it.peca, it.tamanho, criar=True)
-        linha.quantidade -= it.quantidade
-        db.session.add(MovimentoPeca(
-            peca=it.peca, tamanho=it.tamanho, tipo="saida", quantidade=it.quantidade,
-            observacao=f"Venda #{venda.id} (vitrine)",
-        ))
-    # Contabilidade de estoque concluída: itens em estoque baixados; itens
-    # 'produzir' seguem via Encomendas e nunca passam pelo estoque da peça.
-    venda.estoque_baixado = True
-    venda.status = "realizado"
-    venda.sincronizar_etapa()
-    # Consome o uso do cupom só agora (pedido efetivado) — pré-pedido descartado
-    # não queima o limite de usos do cupom.
-    if venda.cupom_codigo:
-        cupom = Cupom.query.filter(db.func.upper(Cupom.codigo) == venda.cupom_codigo.upper()).first()
-        if cupom:
-            cupom.usos += 1
+    movidos = _confirmar_pedido(venda)
     db.session.commit()
     _log("pedido_confirmado", f"pré-pedido #{venda.id} confirmado")
     n_prod = len(venda.itens_a_produzir)

@@ -382,7 +382,8 @@ def form_peca(peca_id=None):
         # Fotos novas enviadas (preservando a ordem de seleção).
         novas = []
         for arq in request.files.getlist("fotos"):
-            nome_arq = _salvar_foto(arq)
+            # 2000px: é a foto que o cliente amplia na vitrine para ver o tecido.
+            nome_arq = _salvar_foto(arq, lado_max=2000)
             if nome_arq:
                 novas.append(nome_arq)
 
@@ -1118,6 +1119,12 @@ def pedido_publico():
     if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         return {"ok": False, "erro": "E-mail inválido — corrija ou deixe em branco."}, 400
 
+    # Pagamento: "pix" (padrão, copia-e-cola combinado no WhatsApp) ou "cartao"
+    # (checkout online via Mercado Pago — exige MP_ACCESS_TOKEN configurado).
+    forma_online = str(dados.get("pagamento", "pix")).strip().lower()
+    if forma_online == "cartao" and not _mp_configurado():
+        return {"ok": False, "erro": "Pagamento por cartão indisponível agora. Use o Pix."}, 400
+
     # Recalcula itens e preços a partir do banco.
     linhas, subtotal = [], 0.0
     for it in (dados.get("itens") or []):
@@ -1286,12 +1293,96 @@ def pedido_publico():
     _log("pedido_vitrine", f"{quem}: pré-pedido #{venda.id}, {len(linhas)} itens, total {_brl(total)}")
     _notificar_pedido_novo(venda, resumo)   # e-mail para o ateliê (se configurado)
 
+    mp_checkout_url = ""
+    if forma_online == "cartao":
+        mp_checkout_url = _mp_criar_checkout(venda, total)
+
     return {
         "ok": True, "lead_id": (lead.id if lead else None), "pedido_id": venda.id, "total": total,
         # Mesmo txid do detalhe da venda (PEDIDO<id>) para reconciliar o pagamento.
         "pix": _pix_publico(total, f"PEDIDO{venda.id}"),
         "whatsapp": Parametro.obter("whatsapp", ""), "resumo": resumo,
+        "mp_checkout_url": mp_checkout_url,
     }
+
+
+def _mp_criar_checkout(venda, total):
+    """Cria a preference do Checkout Pro (Mercado Pago) para o total do pedido
+    e devolve a URL de redirecionamento — "" se falhar (cliente cai no Pix)."""
+    try:
+        resp = _mp_request("POST", "/checkout/preferences", {
+            "items": [{
+                "title": f"Pedido #{venda.id} — Sabrina Hansen Atelier",
+                "quantity": 1, "unit_price": float(total), "currency_id": "BRL",
+            }],
+            "external_reference": str(venda.id),
+            "notification_url": url_for("publico.mp_webhook", _external=True),
+            "back_urls": {
+                "success": url_for("publico.vitrine_v2", _external=True) + f"?pedido={venda.id}&pagamento=ok",
+                "pending": url_for("publico.vitrine_v2", _external=True) + f"?pedido={venda.id}&pagamento=pendente",
+                "failure": url_for("publico.vitrine_v2", _external=True) + f"?pedido={venda.id}&pagamento=erro",
+            },
+            "auto_return": "approved",
+        })
+    except Exception as e:  # noqa: BLE001
+        current_app.logger.warning("Falha ao criar preference Mercado Pago (pedido #%s): %s", venda.id, e)
+        return ""
+    venda.mp_preference_id = resp.get("id", "")
+    db.session.commit()
+    return resp.get("init_point", "")
+
+
+@publico_bp.route("/publico/pagamento/mp-webhook", methods=["POST"])
+@csrf.exempt
+def mp_webhook():
+    """Notificação do Mercado Pago (pagamento aprovado/pendente/rejeitado).
+
+    Nunca confia no corpo da notificação: valida a assinatura e busca o
+    pagamento de novo direto na API deles antes de efetivar qualquer coisa.
+    Idempotente (o MP reenvia a notificação) — dedupe por Pagamento.externo_id.
+    """
+    payment_id = request.args.get("data.id", "")
+    if not payment_id:
+        corpo = request.get_json(silent=True) or {}
+        payment_id = str((corpo.get("data") or {}).get("id", ""))
+    topico = request.args.get("type") or request.args.get("topic")
+    if not payment_id or topico not in (None, "payment"):
+        return "", 200   # outros tópicos (merchant_order etc.) — ignora
+
+    if not _mp_verificar_assinatura(request):
+        current_app.logger.warning(
+            "Webhook Mercado Pago: assinatura inválida (payment_id=%s).", payment_id)
+        return "", 401
+
+    info = _mp_consultar_pagamento(payment_id)
+    if not info or info.get("status") != "approved":
+        return "", 200
+    if Pagamento.query.filter_by(externo_id=str(payment_id)).first():
+        return "", 200   # retry do MP — já processado
+
+    try:
+        venda = Venda.query.get(int(info.get("external_reference")))
+    except (TypeError, ValueError):
+        venda = None
+    if not venda or venda.status != "pre-pedido":
+        return "", 200   # venda inexistente ou já tratada
+
+    etapa_antes = venda.etapa_pedido
+    if venda.lead_id and venda.lead and venda.lead.status != "confirmado":
+        _confirmar_lead(venda.lead)
+    _confirmar_pedido(venda)
+    valor_pago = dinheiro(info.get("transaction_amount") or venda.receita)
+    db.session.add(Pagamento(
+        venda=venda, forma="Cartão (Mercado Pago)", valor=valor_pago, externo_id=str(payment_id)))
+    venda.pago = venda.total_pago >= venda.receita - 0.01
+    if venda.pago and venda.status == "realizado":
+        venda.status = "pago"
+    venda.mp_payment_id = str(payment_id)
+    venda.sincronizar_etapa()
+    db.session.commit()
+    _notificar_etapa_cliente(venda, etapa_antes)
+    _log("pagamento_mp", f"pedido #{venda.id}: pagamento {payment_id} aprovado ({_brl(valor_pago)})")
+    return "", 200
 
 
 @bp.route("/kits")

@@ -1051,6 +1051,10 @@ class Venda(db.Model):
     etapa_pedido = db.Column(db.String(20), nullable=False, default="recebido")
     # Código de rastreio do envio (Correios/transportadora) — exibido ao cliente.
     rastreio = db.Column(db.String(60), nullable=False, default="", server_default="")
+    # Checkout com cartão (Mercado Pago): id da preference criada e do pagamento
+    # aprovado (reconciliação do webhook — ver _mp_* em helpers.py).
+    mp_preference_id = db.Column(db.String(80), nullable=False, default="", server_default="")
+    mp_payment_id = db.Column(db.String(40), nullable=False, default="", server_default="")
 
     criado_em = db.Column(db.DateTime, default=_agora)
 
@@ -1363,6 +1367,8 @@ class Pagamento(db.Model):
     valor = db.Column(db.Float, nullable=False, default=0.0)
     parcelas = db.Column(db.Integer, nullable=False, default=1)
     taxa_pct = db.Column(db.Float, nullable=False, default=0.0)  # taxa da maquininha (%)
+    # Id do pagamento no gateway externo (ex.: Mercado Pago) — dedupe de webhook.
+    externo_id = db.Column(db.String(60), nullable=False, default="", server_default="")
     criado_em = db.Column(db.DateTime, default=_agora)
 
     venda = db.relationship("Venda", back_populates="pagamentos")
