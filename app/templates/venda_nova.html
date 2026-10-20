@@ -563,7 +563,7 @@
   // menu para 'fixed' com coordenadas calculadas a partir do botão — assim ele
   // escapa do corte e fica sempre legível, ainda que a linha esteja no fim da
   // tabela ou perto da borda da tela.
-  function abrirPicker(toggle, menu) {
+  function posicionarPicker(toggle, menu) {
     const r = toggle.getBoundingClientRect();
     const alturaMax = 320;
     const espacoAbaixo = window.innerHeight - r.bottom;
@@ -586,9 +586,25 @@
       menu.style.top = (r.bottom + 2) + 'px';
       menu.style.bottom = 'auto';
     }
+  }
+  function abrirPicker(toggle, menu) {
+    posicionarPicker(toggle, menu);
     menu.classList.add('aberto');
     const filtro = menu.querySelector('.picker-filtro');
-    if (filtro) { filtro.value = ''; filtrarPicker(menu, ''); setTimeout(() => filtro.focus(), 0); }
+    // Sem foco automático: no mobile, abrir o teclado nesse instante redimensiona
+    // a viewport e desloca o menu (calculado em px antes do teclado aparecer) —
+    // ele parecia "preso" dentro do painel em vez de flutuar por cima, como no
+    // PC (sem teclado virtual). A busca continua funcionando ao tocar no campo.
+    if (filtro) { filtro.value = ''; filtrarPicker(menu, ''); }
+  }
+  // Se o teclado abrir depois (usuário tocou a busca manualmente), a viewport
+  // muda de tamanho — reposiciona o menu aberto em vez de deixá-lo desalinhado.
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      const menu = document.querySelector('.picker-menu.aberto');
+      const toggle = menu && menu.previousElementSibling;
+      if (toggle && toggle.classList.contains('picker-toggle')) posicionarPicker(toggle, menu);
+    });
   }
   function filtrarPicker(menu, termo) {
     const q = termo.trim().toLowerCase();
