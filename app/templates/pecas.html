@@ -76,6 +76,12 @@
       <td class="text-end text-nowrap">
         <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" title="Abrir"><i class="bi bi-eye"></i></a>
         <a href="{{ url_for('main.form_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="bi bi-pencil"></i></a>
+        {% if session.admin %}
+        <form method="post" action="{{ url_for('main.arquivar_peca', peca_id=peca.id) }}" class="d-inline"
+              data-confirm="Arquivar '{{ peca.nome }}'? Ela some das listas, mas nada é apagado — pode ser restaurada em Sistema → Peças arquivadas.">
+          <button class="btn btn-sm btn-outline-secondary" title="Arquivar (remove da lista, sem apagar)"><i class="bi bi-archive"></i></button>
+        </form>
+        {% endif %}
       </td>
     </tr>
   {% endfor %}

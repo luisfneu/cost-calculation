@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block titulo %}Peças arquivadas{% endblock %}
+{% block conteudo %}
+<a href="{{ url_for('main.listar_pecas') }}" class="btn btn-link px-0 mb-2">← Voltar</a>
+<h1 class="h3 mb-1">Peças arquivadas</h1>
+<p class="text-muted mb-4">Peças removidas das listas do ERP e da vitrine, mas nada foi apagado — vendas, estoque
+  e produção continuam intactos. Restaure para voltar a vê-las normalmente.</p>
+
+<div class="card bg-white">
+  <div class="card-body">
+    {% if pecas %}
+    <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead class="table-light"><tr><th></th><th>Peça</th><th>Coleção</th><th>Estoque</th><th>Arquivada em</th><th></th></tr></thead>
+      <tbody>
+      {% for peca in pecas %}
+        <tr>
+          <td>
+            {% if peca.foto %}
+              <img src="{{ url_for('static', filename='uploads/' ~ peca.foto) }}" class="foto-thumb-vert" alt="" loading="lazy">
+            {% else %}
+              <div class="foto-thumb-vert sem-foto">—</div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="fw-bold">{{ peca.nome }}</span>
+            {% if peca.sku %}<div class="small text-muted">{{ peca.sku }}</div>{% endif %}
+          </td>
+          <td>{{ peca.colecao or '—' }}</td>
+          <td>{{ peca.estoque_total | num }}</td>
+          <td>{{ peca.arquivada_em | dt }}</td>
+          <td class="text-end text-nowrap">
+            <a href="{{ url_for('main.detalhe_peca', peca_id=peca.id) }}" class="btn btn-sm btn-outline-primary" title="Abrir"><i class="bi bi-eye"></i></a>
+            <form method="post" action="{{ url_for('main.desarquivar_peca', peca_id=peca.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-success" title="Restaurar"><i class="bi bi-arrow-counterclockwise"></i> Restaurar</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    {{ ui.vazio('bi-archive', 'Nenhuma peça arquivada', 'Peças arquivadas na tela de Peças aparecem aqui.') }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

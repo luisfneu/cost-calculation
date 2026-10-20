@@ -74,7 +74,7 @@ from .helpers import *  # noqa: F401,F403
 @bp.route("/vitrine")
 def vitrine():
     """Vitrine para mostrar ao cliente: foto + preço de etiqueta, por coleção."""
-    pecas = Peca.query.order_by(Peca.colecao, Peca.nome).all()
+    pecas = Peca.ativas().order_by(Peca.colecao, Peca.nome).all()
     grupos = {}
     for p in pecas:
         grupos.setdefault(p.colecao or "Sem coleção", []).append(p)
@@ -232,7 +232,7 @@ def listar_pecas():
     q = request.args.get("q", "").strip()
     tipo = request.args.get("tipo", "").strip()
     vitrine = request.args.get("vitrine", "").strip()  # "", "sim" (públicas), "nao" (ocultas)
-    query = Peca.query
+    query = Peca.ativas()
     if q:
         like = f"%{q}%"
         query = query.filter(db.or_(Peca.nome.ilike(like), Peca.colecao.ilike(like), Peca.tags.ilike(like)))
@@ -270,7 +270,7 @@ def calculadora():
     são atalhos: insumo do estoque entra com custo/unidade do cadastro e a peça
     existente entra com a ficha técnica inteira."""
     insumos = Insumo.query.filter_by(ativo=True).order_by(Insumo.nome).all()
-    pecas = Peca.query.order_by(Peca.nome).all()
+    pecas = Peca.ativas().order_by(Peca.nome).all()
     return render_template("calculadora.html", insumos=insumos, pecas=pecas)
 
 
@@ -457,7 +457,7 @@ def excluir_peca(peca_id):
     em_producao = OrdemProducaoItem.query.filter_by(peca_id=peca.id).count()
     if em_vendas or em_producao:
         flash("Esta peça tem histórico (vendas/produção) e não pode ser excluída. "
-              "Desmarque 'vitrine pública' para ocultá-la.", "erro")
+              "Arquive-a (menu de ações acima) para tirá-la das listas sem perder o histórico.", "erro")
         return redirect(url_for("main.detalhe_peca", peca_id=peca.id))
     _remover_foto(peca.foto)
     for f in peca.fotos:
@@ -466,6 +466,47 @@ def excluir_peca(peca_id):
     db.session.commit()
     flash("Peça excluída.", "sucesso")
     return redirect(url_for("main.listar_pecas"))
+
+
+@bp.route("/pecas/<int:peca_id>/arquivar", methods=["POST"])
+def arquivar_peca(peca_id):
+    """Soft delete: some das listas/seleções do ERP e da vitrine, mas nada é
+    apagado (vendas, estoque e produção continuam intactos). Reversível em
+    Sistema → Peças arquivadas."""
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    peca = Peca.query.get_or_404(peca_id)
+    peca.arquivada = True
+    peca.arquivada_em = datetime.now()
+    db.session.commit()  # cache da vitrine invalida sozinho (Peca está em _MODELOS_VITRINE)
+    _log("peca_arquivada", f"peça #{peca.id} ({peca.nome}) arquivada")
+    flash(f"Peça '{peca.nome}' arquivada — some das listas, mas nada foi apagado. "
+          f"Restaure em Sistema → Peças arquivadas.", "sucesso")
+    return redirect(url_for("main.listar_pecas"))
+
+
+@bp.route("/pecas/<int:peca_id>/desarquivar", methods=["POST"])
+def desarquivar_peca(peca_id):
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    peca = Peca.query.get_or_404(peca_id)
+    peca.arquivada = False
+    peca.arquivada_em = None
+    db.session.commit()  # cache da vitrine invalida sozinho (Peca está em _MODELOS_VITRINE)
+    _log("peca_restaurada", f"peça #{peca.id} ({peca.nome}) restaurada")
+    flash(f"Peça '{peca.nome}' restaurada.", "sucesso")
+    return redirect(url_for("main.listar_pecas_arquivadas"))
+
+
+@bp.route("/pecas/arquivadas")
+def listar_pecas_arquivadas():
+    bloqueio = _exigir_admin()
+    if bloqueio:
+        return bloqueio
+    pecas = Peca.query.filter_by(arquivada=True).order_by(Peca.arquivada_em.desc()).all()
+    return render_template("pecas_arquivadas.html", pecas=pecas)
 
 
 @bp.route("/fotos/<int:foto_id>/excluir", methods=["POST"])
@@ -706,7 +747,7 @@ def robots_txt():
 def sitemap_xml():
     """Sitemap: vitrine + páginas públicas das peças (para indexação)."""
     urls = [(_link_publico("/"), None)]
-    for p in Peca.query.filter_by(vitrine_publica=True).all():
+    for p in Peca.query.filter_by(vitrine_publica=True, arquivada=False).all():
         urls.append((_link_publico(url_for("publico.peca_publica", peca_id=p.id)), p.criado_em))
     linhas = ['<?xml version="1.0" encoding="UTF-8"?>',
               '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
@@ -725,7 +766,7 @@ def sugestoes_busca():
     out = []
     if len(q) >= 2:
         like = f"%{q}%"
-        pecas = (Peca.query.filter(Peca.vitrine_publica.is_(True))
+        pecas = (Peca.ativas().filter(Peca.vitrine_publica.is_(True))
                  .filter(db.or_(Peca.nome.ilike(like), Peca.colecao.ilike(like),
                                 Peca.tags.ilike(like)))
                  .order_by(Peca.nome).limit(8).all())
@@ -747,7 +788,7 @@ def _cliente_esta_logado():
 def peca_publica(peca_id):
     """Página individual da peça — URL própria e compartilhável (com OG por peça)."""
     peca = Peca.query.get_or_404(peca_id)
-    if not peca.vitrine_publica:
+    if not peca.vitrine_publica or peca.arquivada:
         abort(404)
     # Contador de views via UPDATE direto (não passa pelo ORM) — de propósito:
     # objeto Peca "sujo" no commit derrubaria o cache da vitrine a cada visita.
@@ -807,7 +848,7 @@ def pecas_info():
     ids = [int(x) for x in request.args.get("ids", "").split(",") if x.strip().isdigit()]
     out = []
     if ids:
-        pecas = Peca.query.filter(Peca.id.in_(ids), Peca.vitrine_publica.is_(True)).all()
+        pecas = Peca.ativas().filter(Peca.id.in_(ids), Peca.vitrine_publica.is_(True)).all()
         ordem = {pid: i for i, pid in enumerate(ids)}
         pecas.sort(key=lambda p: ordem.get(p.id, 0))
         for p in pecas:
@@ -840,7 +881,7 @@ def vitrine_v2():
     ordem = request.args.get("ordem", "").strip()
     tam_sel = [t for t in request.args.getlist("tamanho") if t in TAMANHOS]
 
-    publicas = Peca.query.filter_by(vitrine_publica=True).all()
+    publicas = Peca.query.filter_by(vitrine_publica=True, arquivada=False).all()
     pecas = publicas
     if q:
         pecas = [p for p in pecas
@@ -915,7 +956,7 @@ def campanha_publica(slug):
     ordem = request.args.get("ordem", "").strip()
     tam_sel = [t for t in request.args.getlist("tamanho") if t in TAMANHOS]
 
-    publicas = Peca.query.filter_by(vitrine_publica=True).all()
+    publicas = Peca.query.filter_by(vitrine_publica=True, arquivada=False).all()
     base = [p for p in publicas if campanha.inclui(p)]   # conjunto da campanha
 
     # Opções de filtro vêm só do conjunto da campanha.
@@ -1132,8 +1173,8 @@ def pedido_publico():
             peca = Peca.query.get(int(it.get("id")))
         except (TypeError, ValueError):
             peca = None
-        if not peca or peca.esgotado:
-            continue                 # esgotada (sem insumos p/ produzir): não entra no pedido
+        if not peca or peca.esgotado or peca.arquivada:
+            continue                 # esgotada/arquivada: não entra no pedido
         try:
             qtd = max(1, int(float(it.get("qtd", 1))))
         except (TypeError, ValueError):
@@ -1388,7 +1429,14 @@ def mp_webhook():
 @bp.route("/kits")
 def listar_kits():
     kits = Kit.query.order_by(Kit.ativo.desc(), Kit.nome).all()
-    pecas = Peca.query.order_by(Peca.nome).all()
+    # Peças ativas pro picker de "adicionar item", mais as já usadas em algum
+    # kit existente (mesmo arquivadas) — senão editar um kit antigo perderia
+    # silenciosamente o item arquivado ao salvar.
+    pecas = Peca.ativas().order_by(Peca.nome).all()
+    ja_tem = {p.id for p in pecas}
+    ids_extras = {i.peca_id for k in kits for i in k.itens if i.peca_id not in ja_tem}
+    if ids_extras:
+        pecas = pecas + Peca.query.filter(Peca.id.in_(ids_extras)).all()
     return render_template("kits.html", kits=kits, pecas=pecas)
 
 
@@ -1487,7 +1535,7 @@ def listar_colecoes():
     # Quantidade de peças por coleção (casada pelo nome, case-insensitive).
     contagem = {}
     for c in colecoes:
-        contagem[c.id] = Peca.query.filter(
+        contagem[c.id] = Peca.ativas().filter(
             db.func.lower(Peca.colecao) == c.nome.lower()
         ).count()
     return render_template("colecoes.html", colecoes=colecoes, contagem=contagem)
@@ -1548,7 +1596,7 @@ def toggle_colecao(colecao_id):
 @bp.route("/colecoes/<int:colecao_id>/pecas")
 def pecas_colecao(colecao_id):
     colecao = Colecao.query.get_or_404(colecao_id)
-    pecas = Peca.query.filter(
+    pecas = Peca.ativas().filter(
         db.func.lower(Peca.colecao) == colecao.nome.lower()
     ).order_by(Peca.nome).all()
     return render_template("colecao_pecas.html", colecao=colecao, pecas=pecas, tamanhos_glob=TAMANHOS)
@@ -1602,7 +1650,7 @@ def listar_campanhas():
 @bp.route("/campanhas/<int:campanha_id>/editar", methods=["GET", "POST"])
 def form_campanha(campanha_id=None):
     campanha = Campanha.query.get_or_404(campanha_id) if campanha_id else None
-    tipos = sorted({p.tipo for p in Peca.query.all() if p.tipo})
+    tipos = sorted({p.tipo for p in Peca.ativas().all() if p.tipo})
     colecoes = sorted({c.nome for c in Colecao.query.all()})
 
     if request.method == "POST":
@@ -1674,7 +1722,7 @@ def excluir_campanha(campanha_id):
 @bp.route("/campanhas/<int:campanha_id>/pecas")
 def gerir_pecas_campanha(campanha_id):
     campanha = Campanha.query.get_or_404(campanha_id)
-    pecas = Peca.query.order_by(Peca.colecao, Peca.nome).all()
+    pecas = Peca.ativas().order_by(Peca.colecao, Peca.nome).all()
     forcado = {e.peca_id: e.incluir for e in campanha.excecoes}
     linhas = []
     for p in pecas:

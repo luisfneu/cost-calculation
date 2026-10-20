@@ -199,6 +199,11 @@ class Peca(db.Model):
     # Se True, a peça aparece na vitrine PÚBLICA (link do cliente). A vitrine
     # interna mostra todas, independente deste campo.
     vitrine_publica = db.Column(db.Boolean, nullable=False, default=True)
+    # Soft delete: peça "excluída" some das listas/seleções do ERP e da vitrine,
+    # mas nada é apagado — vendas antigas, estoque e produção continuam intactos.
+    # Só admin arquiva/restaura (ver arquivar_peca/desarquivar_peca em catalogo.py).
+    arquivada = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    arquivada_em = db.Column(db.DateTime)
 
     # Custos além dos insumos.
     custo_mao_de_obra = db.Column(db.Float, nullable=False, default=0.0)
@@ -221,6 +226,14 @@ class Peca(db.Model):
     @staticmethod
     def gerar_sku(peca_id) -> str:
         return f"SH-{peca_id:08d}"
+
+    @classmethod
+    def ativas(cls):
+        """Peças não arquivadas — usar em listas/seleções do ERP e da vitrine.
+        Buscas por id específico (get/get_or_404) continuam em `Peca.query`:
+        uma venda ou ordem de produção antiga precisa achar a peça mesmo depois
+        de arquivada."""
+        return cls.query.filter_by(arquivada=False)
 
     # Dados de envio (para cálculo de frete): peso em gramas e dimensões em cm.
     peso_g = db.Column(db.Float, nullable=False, default=0.0)

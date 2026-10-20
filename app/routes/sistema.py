@@ -161,7 +161,7 @@ def buscar():
     pecas, insumos, clientes, vendas = [], [], [], []
     if termo:
         like = f"%{termo}%"
-        pecas = (Peca.query.filter(db.or_(
+        pecas = (Peca.ativas().filter(db.or_(
                     Peca.nome.ilike(like), Peca.sku.ilike(like),
                     Peca.tags.ilike(like), Peca.colecao.ilike(like)))
                  .order_by(Peca.nome).limit(25).all())
@@ -183,7 +183,7 @@ def buscar():
 
 @bp.route("/")
 def index():
-    pecas = Peca.query.order_by(Peca.criado_em.desc()).all()
+    pecas = Peca.ativas().order_by(Peca.criado_em.desc()).all()
     insumos = Insumo.query.order_by(Insumo.nome).all()
     alertas = [i for i in insumos if i.ativo and i.estoque_baixo]
     pecas_repor = [p for p in pecas if p.precisa_repor]

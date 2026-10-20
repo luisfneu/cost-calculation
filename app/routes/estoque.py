@@ -104,7 +104,7 @@ def inventario():
 
     Campos do form por tamanho: cont_<peca_id>_<tam> (contado) e
     min_<peca_id>_<tam> (mínimo). Aplica ajustes só onde o valor mudou."""
-    pecas = Peca.query.order_by(Peca.nome).all()
+    pecas = Peca.ativas().order_by(Peca.nome).all()
     if request.method == "GET":
         return render_template("inventario.html", pecas=pecas, tamanhos=TAMANHOS)
 
@@ -231,7 +231,7 @@ def listar_ordens():
     ordens = OrdemProducao.query.order_by(
         OrdemProducao.status, OrdemProducao.criado_em.desc()
     ).all()
-    pecas = Peca.query.order_by(Peca.nome).all()
+    pecas = Peca.ativas().order_by(Peca.nome).all()
     return render_template("producao.html", ordens=ordens, pecas=pecas, tamanhos=TAMANHOS)
 
 
@@ -251,7 +251,7 @@ def nova_ordem():
 def nova_ordem_from_minimos():
     """Cria uma ordem já preenchida com o que está abaixo do estoque mínimo."""
     ordem = OrdemProducao(descricao="Reposição de estoque mínimo")
-    for peca in Peca.query.order_by(Peca.nome).all():
+    for peca in Peca.ativas().order_by(Peca.nome).all():
         for f in peca.abaixo_minimo:
             ordem.itens.append(OrdemProducaoItem(
                 peca_id=peca.id, tamanho=f["tamanho"],
@@ -268,7 +268,7 @@ def nova_ordem_from_minimos():
 @bp.route("/producao/<int:ordem_id>")
 def detalhe_ordem(ordem_id):
     ordem = OrdemProducao.query.get_or_404(ordem_id)
-    pecas = Peca.query.order_by(Peca.nome).all()
+    pecas = Peca.ativas().order_by(Peca.nome).all()
     return render_template("producao_detalhe.html", ordem=ordem, pecas=pecas, tamanhos=TAMANHOS)
 
 

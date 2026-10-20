@@ -44,7 +44,7 @@
       {% set g_cli = ['main.listar_clientes','main.detalhe_cliente','main.form_cliente','main.crm','main.listar_leads'] %}
       {% set g_fin = ['main.contabilidade','main.contas_a_receber','main.fluxo_caixa','main.listar_despesas','main.relatorio'] %}
       {% set g_loja = ['main.listar_campanhas','main.form_campanha','main.gerir_pecas_campanha','main.listar_newsletter'] %}
-      {% set g_sys = ['main.listar_usuarios','main.auditoria','main.configuracoes'] %}
+      {% set g_sys = ['main.listar_usuarios','main.auditoria','main.configuracoes','main.listar_pecas_arquivadas'] %}
       <div class="collapse navbar-collapse justify-content-end" id="navmenu">
         <button type="button" class="nav-link btn btn-link px-2 me-lg-2 d-none d-lg-inline-flex" data-bs-toggle="modal" data-bs-target="#modal-busca"
                 aria-label="Buscar" title="Buscar peça, cliente ou pedido (Ctrl/⌘+K)">
@@ -122,6 +122,7 @@
             <ul class="dropdown-menu dropdown-menu-end">
               {% if session.admin %}
               <li><a class="dropdown-item" href="{{ url_for('main.listar_usuarios') }}"><i class="bi bi-people"></i> Usuários</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('main.listar_pecas_arquivadas') }}"><i class="bi bi-archive"></i> Peças arquivadas</a></li>
               {% endif %}
               <li><a class="dropdown-item" href="{{ url_for('main.auditoria') }}"><i class="bi bi-shield-check"></i> Auditoria</a></li>
               <li><a class="dropdown-item" href="{{ url_for('main.configuracoes') }}"><i class="bi bi-gear"></i> Configurações</a></li>

@@ -701,13 +701,21 @@ def _render_historico():
 
 
 def _pecas_com_estoque():
-    """Peças com ao menos 1 unidade disponível em algum tamanho (venda com estoque)."""
-    return [p for p in Peca.query.order_by(Peca.nome).all() if p.disponivel_total >= 1]
+    """Peças ativas com ao menos 1 unidade disponível em algum tamanho (venda com estoque)."""
+    return [p for p in Peca.ativas().order_by(Peca.nome).all() if p.disponivel_total >= 1]
 
 
 def _render_form_pedido(modo, prefill_itens=None, prefill_pedido=None, acao=None, venda=None):
-    # Venda: só peças com estoque. Encomenda/edição: todas (mantém itens do pedido).
-    pecas = _pecas_com_estoque() if modo == "venda" else Peca.query.order_by(Peca.nome).all()
+    # Venda: só peças ativas com estoque. Encomenda/edição: todas as ativas, mais
+    # as já usadas no pedido mesmo que tenham sido arquivadas depois — senão o
+    # picker não acha o item existente pra mostrar nome/foto na linha.
+    if modo == "venda":
+        pecas = _pecas_com_estoque()
+    else:
+        pecas = Peca.ativas().order_by(Peca.nome).all()
+        if venda:
+            ja_tem = {p.id for p in pecas}
+            pecas = pecas + [it.peca for it in venda.itens if it.peca_id not in ja_tem]
     kits = Kit.query.filter_by(ativo=True).order_by(Kit.nome).all()
     return render_template(
         "venda_nova.html", modo=modo, pecas=pecas, kits=kits,

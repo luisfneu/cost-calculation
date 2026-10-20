@@ -4,7 +4,7 @@
 <a href="{{ url_for('main.listar_pecas') }}" class="btn btn-link px-0 mb-2">← Voltar</a>
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
-    <h1 class="h3 mb-1">{{ peca.nome }}{% if peca.colecao %} <span class="badge text-bg-light align-middle">{{ peca.colecao }}</span>{% endif %}{% if not peca.vitrine_publica %} <span class="badge text-bg-secondary align-middle" title="Não aparece na vitrine pública"><i class="bi bi-eye-slash"></i> oculta na vitrine</span>{% endif %}</h1>
+    <h1 class="h3 mb-1">{{ peca.nome }}{% if peca.colecao %} <span class="badge text-bg-light align-middle">{{ peca.colecao }}</span>{% endif %}{% if not peca.vitrine_publica %} <span class="badge text-bg-secondary align-middle" title="Não aparece na vitrine pública"><i class="bi bi-eye-slash"></i> oculta na vitrine</span>{% endif %}{% if peca.arquivada %} <span class="badge text-bg-dark align-middle" title="Arquivada em {{ peca.arquivada_em | dt }}"><i class="bi bi-archive"></i> arquivada</span>{% endif %}</h1>
     {% if peca.tags_lista %}
       <div class="mb-1">{% for t in peca.tags_lista %}<span class="badge badge-tag me-1">#{{ t }}</span>{% endfor %}</div>
     {% endif %}
@@ -17,6 +17,18 @@
       <button class="btn btn-sm btn-outline-secondary"
               title="Duplicar: copia dados e ficha técnica, sem as fotos"><i class="bi bi-copy"></i></button>
     </form>
+    {% if session.admin %}
+      {% if peca.arquivada %}
+      <form method="post" action="{{ url_for('main.desarquivar_peca', peca_id=peca.id) }}" class="d-inline">
+        <button class="btn btn-sm btn-outline-success" title="Restaurar: volta a aparecer nas listas"><i class="bi bi-arrow-counterclockwise"></i></button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ url_for('main.arquivar_peca', peca_id=peca.id) }}" class="d-inline"
+            data-confirm="Arquivar '{{ peca.nome }}'? Ela some das listas, mas nada é apagado — pode ser restaurada em Sistema → Peças arquivadas.">
+        <button class="btn btn-sm btn-outline-secondary" title="Arquivar (remove da lista, sem apagar)"><i class="bi bi-archive"></i></button>
+      </form>
+      {% endif %}
+    {% endif %}
     <form method="post" action="{{ url_for('main.excluir_peca', peca_id=peca.id) }}" class="d-inline"
           data-confirm="Excluir esta peça?">
       <button class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
