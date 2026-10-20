@@ -378,6 +378,13 @@
       <td class="subtotal">R$ 0,00</td>
       <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger rem-item" title="Remover"><i class="bi bi-x-lg"></i></button></td>`;
     corpo.appendChild(tr);
+    // Referência cruzada toggle<->menu: o menu é portado pra <body> enquanto
+    // aberto (ver abrirPicker), então não dá mais pra achar um a partir do
+    // outro só por posição no DOM (nextElementSibling/closest).
+    const toggleEl = tr.querySelector('.picker-toggle');
+    const menuEl = tr.querySelector('.picker-menu');
+    toggleEl._menu = menuEl;
+    menuEl._toggle = toggleEl;
     if (inicial && inicial.peca_id) {
       const p = acha(inicial.peca_id) || inicial;
       tr.querySelector('.picker-value').value = inicial.peca_id;
@@ -588,6 +595,17 @@
     }
   }
   function abrirPicker(toggle, menu) {
+    // Porta o menu pra <body>: no PWA do iOS (modo standalone/Safari), um
+    // 'fixed' que ainda mora dentro da tabela (overflow-x:auto) às vezes é
+    // tratado como se não fosse fixed de verdade e fica preso atrás de outro
+    // conteúdo da página. Sem ancestral nenhum no meio, não tem como isso
+    // acontecer — por isso o menu sai da linha e vira filho direto do body
+    // enquanto está aberto (volta pro lugar ao fechar, ver fecharPicker).
+    if (menu.parentElement !== document.body) {
+      menu._homeParent = menu.parentElement;
+      menu._homeNext = menu.nextSibling;
+      document.body.appendChild(menu);
+    }
     posicionarPicker(toggle, menu);
     menu.classList.add('aberto');
     const filtro = menu.querySelector('.picker-filtro');
@@ -602,8 +620,7 @@
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
       const menu = document.querySelector('.picker-menu.aberto');
-      const toggle = menu && menu.previousElementSibling;
-      if (toggle && toggle.classList.contains('picker-toggle')) posicionarPicker(toggle, menu);
+      if (menu && menu._toggle) posicionarPicker(menu._toggle, menu);
     });
   }
   function filtrarPicker(menu, termo) {
@@ -625,6 +642,11 @@
     menu.style.bottom = '';
     menu.style.width = '';
     menu.style.margin = '';
+    if (menu._homeParent) {
+      menu._homeParent.insertBefore(menu, menu._homeNext);
+      menu._homeParent = null;
+      menu._homeNext = null;
+    }
   }
   function fecharTodosPickers(excetoMenu) {
     document.querySelectorAll('.picker-menu.aberto').forEach(m => { if (m !== excetoMenu) fecharPicker(m); });
@@ -633,38 +655,46 @@
   corpo.addEventListener('click', function (e) {
     const toggle = e.target.closest('.picker-toggle');
     if (toggle) {
-      const menu = toggle.nextElementSibling;
+      const menu = toggle._menu;
       const jaAberto = menu.classList.contains('aberto');
       fecharTodosPickers(menu);
       jaAberto ? fecharPicker(menu) : abrirPicker(toggle, menu);
       return;
     }
-    const opt = e.target.closest('.picker-option');
-    if (opt) {
-      const tr = opt.closest('.item-row');
-      const p = acha(opt.dataset.id);
-      tr.querySelector('.picker-value').value = p.id;
-      tr.querySelector('.picker-toggle').innerHTML = `${thumb(p)} ${p.nome}`;
-      fecharPicker(tr.querySelector('.picker-menu'));
-      preencherTamanhos(tr, p.estoque, null);
-      if (tr.querySelector('.in-preco').value === '') tr.querySelector('.in-preco').value = String(p.preco.toFixed(2)).replace('.', ',');
+    if (e.target.classList.contains('rem-item')) {
+      // Fecha (e devolve pro lugar) qualquer picker aberto antes de remover a
+      // linha — senão um menu portado pro <body> nesse momento ficaria órfão.
+      fecharTodosPickers(null);
+      e.target.closest('.item-row').remove();
       recalcular();
-      return;
     }
-    if (e.target.classList.contains('rem-item')) { e.target.closest('.item-row').remove(); recalcular(); }
   });
-  corpo.addEventListener('input', function (e) {
+  // Selecionar uma opção: delegado no document (não no corpo) porque o menu
+  // mora em <body> enquanto está aberto — um clique nele não borbulha até a
+  // tabela.
+  document.addEventListener('click', function (e) {
+    const opt = e.target.closest('.picker-option');
+    if (!opt) return;
+    const menu = opt.closest('.picker-menu');
+    const toggle = menu._toggle;
+    const tr = toggle.closest('.item-row');
+    const p = acha(opt.dataset.id);
+    tr.querySelector('.picker-value').value = p.id;
+    toggle.innerHTML = `${thumb(p)} ${p.nome}`;
+    fecharPicker(menu);
+    preencherTamanhos(tr, p.estoque, null);
+    if (tr.querySelector('.in-preco').value === '') tr.querySelector('.in-preco').value = String(p.preco.toFixed(2)).replace('.', ',');
+    recalcular();
+  });
+  // Busca: delegada no document pelo mesmo motivo da seleção acima (o menu
+  // some de dentro do corpo enquanto está portado pro body).
+  document.addEventListener('input', function (e) {
     if (!e.target.classList.contains('picker-filtro')) return;
     filtrarPicker(e.target.closest('.picker-menu'), e.target.value);
   });
-  corpo.addEventListener('keydown', function (e) {
+  document.addEventListener('keydown', function (e) {
     // Enter na busca não pode submeter o formulário da venda.
     if (e.target.classList.contains('picker-filtro') && e.key === 'Enter') e.preventDefault();
-  });
-  // Clique na busca não deve contar como clique "fora" (fecharia o menu) nem
-  // disparar a seleção de item (o corpo.click delegado trata picker-option).
-  corpo.addEventListener('click', function (e) {
-    if (e.target.classList.contains('picker-filtro')) e.stopPropagation();
   });
   // Fecha ao rolar (a página ou a própria tabela) — um menu 'fixed' parado
   // no lugar enquanto a página rola pareceria "descolado" do botão. Mas a
@@ -719,9 +749,9 @@
     if (inCupom.value.trim()) aplicarCupom();  // prefill
   }
   document.addEventListener('click', function (e) {
-    // O menu agora é 'fixed' fora do fluxo do .peca-picker, mas continua filho
-    // dele no DOM — closest() ainda enxerga o clique dentro do menu como "dentro".
-    if (!e.target.closest('.peca-picker')) fecharTodosPickers(null);
+    // O menu some de dentro do .peca-picker enquanto aberto (portado pro
+    // body — ver abrirPicker), por isso o closest('.picker-menu') à parte.
+    if (!e.target.closest('.peca-picker') && !e.target.closest('.picker-menu')) fecharTodosPickers(null);
   });
 
   // Remove linhas ainda sem peça selecionada (ex.: a linha vazia inicial).
